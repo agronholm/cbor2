@@ -49,7 +49,7 @@ To this end, you can specify a default timezone by passing a ``datetime.tzinfo``
 Decoded datetimes are always timezone aware.
 
 By default, datetimes are serialized in a manner that retains their timezone offsets. You can
-optimize the data stream size by passing ``datetime_as_timestamp=False`` to ``dump()``/``dumps()`,
+optimize the data stream size by passing ``datetime_as_timestamp=False`` to ``dump()``/``dumps()``,
 but this causes the timezone offset information to be lost.
 
 Cyclic (recursive) data structures
@@ -58,7 +58,7 @@ Cyclic (recursive) data structures
 By default, both the encoder and decoder support cyclic data structures (ie. containers that
 contain references to themselves). When serializing, this requires some extra space in the data
 stream. If you know you won't have cyclic structures in your data, you can turn off the value
-sharing feature by passing the ``value_sharing=False`` option to ``dump()``/``dumps()`.
+sharing feature by passing the ``value_sharing=False`` option to ``dump()``/``dumps()``.
 
 Tag support
 -----------
