@@ -42,7 +42,7 @@ class CBORDecoder(object):
 
     def decode_uint(self):
         # Major tag 0
-        subtype = struct.unpack_from('>B', self.payload, self.index)[0] & 31
+        subtype = get_byteval(self.payload, self.index) & 31
         if subtype < 24:
             self.index += 1
             value = subtype
@@ -172,7 +172,7 @@ class CBORDecoder(object):
 
     def decode_special(self):
         # Major tag 7
-        subtype = struct.unpack_from('>B', self.payload, self.index)[0] & 31
+        subtype = get_byteval(self.payload, self.index) & 31
         self.index += 1
         return self.special_decoders[subtype](self)
 
