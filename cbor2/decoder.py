@@ -26,14 +26,13 @@ class CBORDecoder(object):
     :param Dict[int, Callable] semantic_decoders: a mapping of semantic tag -> decoder callable.
         The callable receives two arguments: the CBORDecoder instance and the tagged value.
         The callable's return value should be the transformed value.
-
-    :ivar list shareables: the list of objects marked as shareable, in order of appearance
     """
 
     def __init__(self, payload, semantic_decoders=None):
         self.payload = payload
         self.index = 0
         self.shareables = []
+        self.mark_next_shareable = True
 
         if semantic_decoders:
             self.semantic_decoders = self.default_semantic_decoders.copy()
@@ -108,6 +107,10 @@ class CBORDecoder(object):
     def decode_array(self):
         # Major tag 4
         items = []
+        if self.mark_next_shareable:
+            self.shareables.append(items)
+            self.mark_next_shareable = False
+
         if get_byteval(self.payload, self.index) & 31 == 31:
             # Indefinite length
             self.index += 1
@@ -127,6 +130,10 @@ class CBORDecoder(object):
     def decode_map(self):
         # Major tag 5
         dictionary = {}
+        if self.mark_next_shareable:
+            self.shareables.append(dictionary)
+            self.mark_next_shareable = False
+
         if get_byteval(self.payload, self.index) & 31 == 31:
             # Indefinite length
             self.index += 1
@@ -148,6 +155,12 @@ class CBORDecoder(object):
     def decode_semantic(self):
         # Major tag 6
         tag = self.decode_uint()
+
+        # Special handling for the "shareable" tag
+        if tag == 28:
+            self.mark_next_shareable = True
+            return self.decode()
+
         value = self.decode()
         try:
             decoder = self.semantic_decoders[tag]
@@ -209,11 +222,6 @@ class CBORDecoder(object):
         exp = Decimal(value[0])
         mantissa = Decimal(value[1])
         return mantissa * (2 ** exp)
-
-    def decode_shareable(self, value):
-        # Semantic tag 28
-        self.shareables.append(value)
-        return value
 
     def decode_sharedref(self, value):
         # Semantic tag 29
@@ -293,7 +301,6 @@ class CBORDecoder(object):
         3: decode_negative_bignum,
         4: decode_fraction,
         5: decode_bigfloat,
-        28: decode_shareable,
         29: decode_sharedref,
         30: decode_rational,
         35: decode_regexp,

@@ -226,12 +226,14 @@ def test_bad_shared_reference():
     assert str(exc.value) == 'error decoding value at index 3: shared reference 5 not found'
 
 
-def test_self_referential_array():
-    decoded = loads(unhexlify('83d81c80d81d0080'))
-    assert isinstance(decoded, list)
-    assert decoded == [[], [], []]
-    assert decoded[0] is decoded[1]
-    assert decoded[0] is not decoded[2]
+def test_cyclic_array():
+    decoded = loads(unhexlify('d81c81d81d00'))
+    assert decoded == [decoded]
+
+
+def test_cyclic_map():
+    decoded = loads(unhexlify('d81ca100d81d00'))
+    assert decoded == {0: decoded}
 
 
 def test_unhandled_tag():
