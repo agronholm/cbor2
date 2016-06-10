@@ -13,6 +13,7 @@ import pytest
 
 from cbor2.compat import timezone
 from cbor2.decoder import loads, CBORDecodeError, load
+from cbor2.types import CBORTag
 
 
 @pytest.mark.parametrize('payload, expected', [
@@ -42,8 +43,7 @@ def test_decode_integer(payload, expected):
 
 def test_invalid_integer_subtype():
     exc = pytest.raises(CBORDecodeError, loads, b'\x1c')
-    assert str(exc.value) == ('error decoding value at index 0: unknown unsigned integer subtype '
-                              '0x1c')
+    assert str(exc.value).endswith('unknown unsigned integer subtype 0x1c')
 
 
 @pytest.mark.parametrize('payload, expected', [
@@ -182,8 +182,7 @@ def test_datetime(payload, expected):
 
 def test_bad_datetime():
     exc = pytest.raises(CBORDecodeError, loads, unhexlify('c06b303030302d3132332d3031'))
-    assert str(exc.value) == ("error decoding value at index 13: invalid datetime string: "
-                              "0000-123-01")
+    assert str(exc.value).endswith('invalid datetime string: 0000-123-01')
 
 
 def test_decode_fraction():
@@ -223,7 +222,7 @@ def test_uuid():
 
 def test_bad_shared_reference():
     exc = pytest.raises(CBORDecodeError, loads, unhexlify('d81d05'))
-    assert str(exc.value) == 'error decoding value at index 3: shared reference 5 not found'
+    assert str(exc.value).endswith('shared reference 5 not found')
 
 
 def test_cyclic_array():
@@ -243,7 +242,7 @@ def test_unhandled_tag():
 
     """
     decoded = loads(unhexlify('d917706548656c6c6f'))
-    assert decoded == u'Hello'
+    assert decoded == CBORTag(6000, u'Hello')
 
 
 def test_custom_decoder():

@@ -10,6 +10,7 @@ from math import ldexp
 from uuid import UUID
 
 from cbor2.compat import timezone, xrange, get_byteval, PY2
+from cbor2.types import CBORTag
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')
@@ -165,8 +166,8 @@ class CBORDecoder(object):
         try:
             decoder = self.semantic_decoders[tag]
         except KeyError:
-            # No special handling available; return value as is
-            return value
+            # No special handling available
+            return CBORTag(tag, value)
 
         return decoder(self, value)
 
