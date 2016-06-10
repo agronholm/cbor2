@@ -318,6 +318,8 @@ class CBORDecoder(object):
         decoder = self.major_decoders[major_type]
         try:
             return decoder(self)
+        except CBORDecodeError:
+            raise
         except Exception as e:
             raise CBORDecodeError('error decoding value at index {}: {}'.format(self.index, e))
 
