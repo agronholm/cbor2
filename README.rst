@@ -94,9 +94,11 @@ See the docstrings of ``cbor2.CBOREncoder`` and ``cbor2.CBORDecoder`` for detail
 Project links
 -------------
 
+* `Version history`_
 * `Source code`_
 * `Issue tracker`_
 
 .. _RFC 7049: https://tools.ietf.org/html/rfc7049
+.. _Version history: https://github.com/agronholm/cbor2/blob/master/CHANGES.rst
 .. _Source code: https://github.com/agronholm/cbor2
 .. _Issue tracker: https://github.com/agronholm/cbor2/issues
