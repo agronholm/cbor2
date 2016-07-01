@@ -13,7 +13,7 @@ import pytest
 
 from cbor2.compat import timezone
 from cbor2.decoder import loads, CBORDecodeError, load
-from cbor2.types import CBORTag
+from cbor2.types import CBORTag, undefined
 
 
 @pytest.mark.parametrize('payload, expected', [
@@ -36,7 +36,7 @@ from cbor2.types import CBORTag
     ('3863', -100),
     ('3903e7', -1000)
 ])
-def test_decode_integer(payload, expected):
+def test_integer(payload, expected):
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -67,13 +67,13 @@ def test_invalid_integer_subtype():
     ('fb7ff0000000000000', float('inf')),
     ('fbfff0000000000000', float('-inf'))
 ])
-def test_decode_float(payload, expected):
+def test_float(payload, expected):
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
 @pytest.mark.parametrize('payload', ['f97e00', 'fa7fc00000', 'fb7ff8000000000000'])
-def test_decode_float_nan(payload):
+def test_float_nan(payload):
     decoded = loads(unhexlify(payload))
     assert math.isnan(decoded)
 
@@ -81,22 +81,19 @@ def test_decode_float_nan(payload):
 @pytest.mark.parametrize('payload, expected', [
     ('f4', False),
     ('f5', True),
+    ('f6', None),
+    ('f7', undefined)
 ])
-def test_decode_bool(payload, expected):
+def test_special(payload, expected):
     decoded = loads(unhexlify(payload))
     assert decoded is expected
-
-
-def test_decode_null():
-    decoded = loads(b'\xf6')
-    assert decoded is None
 
 
 @pytest.mark.parametrize('payload, expected', [
     ('40', b''),
     ('4401020304', b'\x01\x02\x03\x04'),
 ])
-def test_decode_binary(payload, expected):
+def test_binary(payload, expected):
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -109,7 +106,7 @@ def test_decode_binary(payload, expected):
     ('62c3bc', u'\u00fc'),
     ('63e6b0b4', u'\u6c34')
 ])
-def test_decode_string(payload, expected):
+def test_string(payload, expected):
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -120,7 +117,7 @@ def test_decode_string(payload, expected):
     ('8301820203820405', [1, [2, 3], [4, 5]]),
     ('98190102030405060708090a0b0c0d0e0f101112131415161718181819', list(range(1, 26)))
 ])
-def test_decode_array(payload, expected):
+def test_array(payload, expected):
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -129,7 +126,7 @@ def test_decode_array(payload, expected):
     ('a0', {}),
     ('a201020304', {1: 2, 3: 4})
 ])
-def test_decode_map(payload, expected):
+def test_map(payload, expected):
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -185,7 +182,7 @@ def test_bad_datetime():
     assert str(exc.value).endswith('invalid datetime string: 0000-123-01')
 
 
-def test_decode_fraction():
+def test_fraction():
     decoded = loads(unhexlify('c48221196ab3'))
     assert decoded == Decimal('273.15')
 

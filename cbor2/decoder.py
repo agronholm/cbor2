@@ -10,7 +10,7 @@ from math import ldexp
 from uuid import UUID
 
 from cbor2.compat import timezone, xrange, get_byteval, PY2
-from cbor2.types import CBORTag
+from cbor2.types import CBORTag, undefined
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')
@@ -289,7 +289,7 @@ class CBORDecoder(object):
         20: lambda self: False,
         21: lambda self: True,
         22: lambda self: None,
-        23: lambda self: None,
+        23: lambda self: undefined,
         25: decode_float16,
         26: decode_float32,
         27: decode_float64,

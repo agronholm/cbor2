@@ -12,7 +12,7 @@ from io import BytesIO
 from uuid import UUID
 
 from cbor2.compat import iteritems, timezone, long, unicode, as_unicode
-from cbor2.types import CBORTag
+from cbor2.types import CBORTag, undefined
 
 
 class CBOREncodeError(Exception):
@@ -247,6 +247,9 @@ class CBOREncoder(object):
     def encode_none(self, value):
         self.fp.write(b'\xf6')
 
+    def encode_undefined(self, value):
+        self.fp.write(b'\xf7')
+
     default_encoders = OrderedDict([
         (unicode, encode_string),
         (bytes, encode_bytestring),
@@ -257,6 +260,7 @@ class CBOREncoder(object):
         (Decimal, encode_decimal),
         (bool, encode_boolean),
         (type(None), encode_none),
+        (type(undefined), encode_undefined),
         (tuple, encode_array),
         (list, encode_array),
         (dict, encode_map),

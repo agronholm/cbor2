@@ -10,7 +10,7 @@ import pytest
 
 from cbor2.compat import timezone
 from cbor2.encoder import dumps, CBOREncodeError, dump
-from cbor2.types import CBORTag
+from cbor2.types import CBORTag, undefined
 
 
 @pytest.mark.parametrize('value, expected', [
@@ -80,8 +80,9 @@ def test_string(value, expected):
 @pytest.mark.parametrize('value, expected', [
     (False, 'f4'),
     (True, 'f5'),
-    (None, 'f6')
-], ids=['false', 'true', 'null'])
+    (None, 'f6'),
+    (undefined, 'f7')
+], ids=['false', 'true', 'null', 'undefined'])
 def test_special(value, expected):
     expected = unhexlify(expected)
     assert dumps(value) == expected

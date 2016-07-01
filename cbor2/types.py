@@ -12,3 +12,10 @@ class CBORTag(object):
 
     def __repr__(self):
         return 'CBORTag({self.tag}, {self.value!r})'.format(self=self)
+
+
+class UndefinedType(object):
+    __slots__ = ()
+
+
+undefined = UndefinedType()
