@@ -29,14 +29,10 @@ Usage
   with open('output.cbor', 'wb') as fp:
       dump(obj, fp)
 
-  # Iteratively decode a datastream
-  for chunk in CBORDecoder().decode(data):
-    ...
-
 String/bytes handling on Python 2
 ---------------------------------
 
-Bytestrings are encoded as binary strings on Python 2. If you want to encode strings as text on
+The ``str`` type is encoded as binary on Python 2. If you want to encode strings as text on
 Python 2, use unicode strings instead.
 
 Date/time handling
@@ -57,8 +53,24 @@ Cyclic (recursive) data structures
 
 By default, both the encoder and decoder support cyclic data structures (ie. containers that
 contain references to themselves). When serializing, this requires some extra space in the data
-stream. If you know you won't have cyclic structures in your data, you can turn off the value
-sharing feature by passing the ``value_sharing=False`` option to ``dump()``/``dumps()``.
+stream. If you know you won't have cyclic structures in your data, you can save a little bit of
+space by turning off the value sharing feature by passing the ``value_sharing=False`` option to
+``dump()``/``dumps()``.
+
+Customizing encoding/decoding
+-----------------------------
+
+The encoder allows you to specify a mapping of types to callables that handle the encoding of some
+otherwise unsupported type. The decoder, on the other hand, allows you to specify a mapping of
+semantic tag numbers to callables that implement custom transformation logic for tagged values.
+
+Custom encoder and decoder hooks can also be made to support value sharing. For encoder hooks,
+wrapping them with ``@cbor2.shareable_encoder`` is enough. Decoder hooks are slightly more complex.
+In order to support cyclic references, the decoder must construct a "raw" instance of the target
+class (usually using ``__new__()``) and then separately decoding and applying the object's state.
+
+See the docstrings of ``cbor2.CBOREncoder``, ``cbor2.CBORDecoder`` and ``@cbor2.shareable_encoder``
+for details.
 
 Tag support
 -----------
@@ -81,15 +93,6 @@ Tag Semantics                                Python type(s)
 36  MIME message                             email.message.Message
 37  Binary UUID                              uuid.UUID
 === ======================================== ====================================================
-
-Customizing encoding/decoding
------------------------------
-
-The encoder allows you to specify a mapping of types to callables that handle the encoding of some
-otherwise unsupported type. The decoder, on the other hand, allows you to specify a mapping of
-semantic tag numbers to callables that implement custom transformation logic for tagged values.
-
-See the docstrings of ``cbor2.CBOREncoder`` and ``cbor2.CBORDecoder`` for details.
 
 Project links
 -------------

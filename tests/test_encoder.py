@@ -201,8 +201,8 @@ def test_custom_encoder():
             self.value_b = value_b
 
         @classmethod
-        def encode(cls, encoder, instance):
-            encoder.encode_semantic(6000, [instance.value_a, instance.value_b], True)
+        def encode(cls, encoder, instance, fp):
+            encoder.encode_semantic(6000, [instance.value_a, instance.value_b], fp, True)
 
     expected = unhexlify('d91770820663616263')
     value = MyOwnType(6, u'abc')

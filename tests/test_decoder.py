@@ -7,12 +7,13 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from email.message import Message
 from fractions import Fraction
+from io import BytesIO
 from uuid import UUID
 
 import pytest
 
 from cbor2.compat import timezone
-from cbor2.decoder import loads, CBORDecodeError, load
+from cbor2.decoder import loads, CBORDecodeError, load, CBORDecoder
 from cbor2.types import CBORTag, undefined
 
 
@@ -222,6 +223,14 @@ def test_bad_shared_reference():
     assert str(exc.value).endswith('shared reference 5 not found')
 
 
+def test_uninitialized_shared_reference():
+    decoder = CBORDecoder()
+    decoder.shareables.append(None)
+    fp = BytesIO(unhexlify('d81d00'))
+    exc = pytest.raises(CBORDecodeError, decoder.decode, fp)
+    assert str(exc.value).endswith('shared value 0 has not been initialized')
+
+
 def test_cyclic_array():
     decoded = loads(unhexlify('d81c81d81d00'))
     assert decoded == [decoded]
@@ -243,7 +252,7 @@ def test_unhandled_tag():
 
 
 def test_custom_decoder():
-    def reverse(decoder, value):
+    def reverse(decoder, value, fp, shareable_index):
         return value[::-1]
 
     decoded = loads(unhexlify('d917706548656c6c6f'), semantic_decoders={6000: reverse})
