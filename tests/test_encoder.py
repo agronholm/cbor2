@@ -181,7 +181,7 @@ def test_cyclic_map():
 
 
 def test_cyclic_map_nosharing():
-    """Test that serializing a cyclic structure w/o value sharing will blow up gracefully."""
+    """Test that serializing a cyclic structure w/o value sharing will fail gracefully."""
     a = {}
     a[0] = a
     exc = pytest.raises(CBOREncodeError, dumps, a, value_sharing=False)
@@ -200,8 +200,8 @@ def test_custom_encoder():
             self.value_b = value_b
 
         @classmethod
-        def encode(cls, decoder, instance):
-            return decoder.encode_semantic(6000, [instance.value_a, instance.value_b], True)
+        def encode(cls, encoder, instance):
+            encoder.encode_semantic(6000, [instance.value_a, instance.value_b], True)
 
     expected = unhexlify('d91770820663616263')
     value = MyOwnType(6, u'abc')

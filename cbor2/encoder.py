@@ -8,6 +8,7 @@ from datetime import datetime, time, date
 from decimal import Decimal
 from email.message import Message
 from fractions import Fraction
+from io import BytesIO
 from uuid import UUID
 
 from cbor2.compat import iteritems, timezone, long, unicode, as_unicode
@@ -35,6 +36,9 @@ class CBOREncoder(object):
     """
     Serializes objects to bytestrings using Concise Binary Object Representation.
 
+    The following parameters are also available as attributes on the encoder:
+
+    :param fp: file-like object to write to
     :param datetime_as_timestamp: set to ``True`` to serialize datetimes as UNIX timestamps
         (this makes datetimes more concise on the wire but loses the time zone information)
     :param datetime.tzinfo timezone: the default timezone to use for serializing naive
@@ -42,15 +46,16 @@ class CBOREncoder(object):
     :param value_sharing: set to ``False`` to disable value sharing (this will cause an error
         when a cyclic data structure is encountered)
     :param encoders: a mapping of type -> encoder callable. The encoder callable receives two
-        arguments: CBOREncoder instance and value. The callable must return an iterable of
-        bytestrings.
+        arguments: CBOREncoder instance and value. The callable must either write output directly
+        using ``encoder.fp.write(...)`` or call another encoding method that does the output.
 
     :ivar Set[int] container_stack: set of container ids (``id(...)``) that are present in the
         current container tree
     """
 
-    def __init__(self, datetime_as_timestamp=False, timezone=None, value_sharing=True,
+    def __init__(self, fp, datetime_as_timestamp=False, timezone=None, value_sharing=True,
                  encoders=None):
+        self.fp = fp
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone
         self.value_sharing = value_sharing
@@ -85,28 +90,23 @@ class CBOREncoder(object):
                 values.insert(0, remainder)
 
             bytestring = struct.pack('>%dB' % len(values), *values)
-            for chunk in self.encode_semantic(major_type, bytestring):
-                yield chunk
-
-            return
-
-        if value >= 0:
-            major_tag = 0
+            self.encode_semantic(major_type, bytestring)
+        elif value >= 0:
+            self.fp.write(encode_length(0, value))
         else:
-            major_tag = 0x20
-            value = -value - 1
-
-        yield encode_length(major_tag, value)
+            self.fp.write(encode_length(0x20, abs(value) - 1))
 
     def encode_bytestring(self, value):
-        return encode_length(0x40, len(value)), value
+        self.fp.write(encode_length(0x40, len(value)))
+        self.fp.write(value)
 
     def encode_bytearray(self, value):
-        return self.encode_bytestring(bytes(value))
+        self.encode_bytestring(bytes(value))
 
     def encode_string(self, value):
         value = value.encode('utf-8')
-        return encode_length(0x60, len(value)), value
+        self.fp.write(encode_length(0x60, len(value)))
+        self.fp.write(value)
 
     def encode_array(self, value):
         value_id = id(value)
@@ -115,23 +115,20 @@ class CBOREncoder(object):
             if container_index is None:
                 # Mark the container as shareable
                 self.container_indexes[value_id] = len(self.container_stack)
-                yield encode_length(0xd8, 0x1c)
+                self.fp.write(encode_length(0xd8, 0x1c))
             else:
                 # Generate a reference to the previous index instead of encoding this again
-                yield encode_length(0xd8, 0x1d)
-                for chunk in self.encode_int(container_index):
-                    yield chunk
-
+                self.fp.write(encode_length(0xd8, 0x1d))
+                self.encode_int(container_index)
                 return
         elif value_id in self.container_stack:
             raise CBOREncodeError('cyclic data structure detected but value sharing is '
                                   'disabled')
 
-        yield encode_length(0x80, len(value))
+        self.fp.write(encode_length(0x80, len(value)))
         with self._in_stack(value_id):
             for item in value:
-                for chunk in self.encode(item):
-                    yield chunk
+                self.encode(item)
 
     def encode_map(self, value):
         value_id = id(value)
@@ -140,25 +137,21 @@ class CBOREncoder(object):
             if container_index is None:
                 # Mark the container as shareable
                 self.container_indexes[value_id] = len(self.container_stack)
-                yield encode_length(0xd8, 0x1c)
+                self.fp.write(encode_length(0xd8, 0x1c))
             else:
                 # Generate a reference to the previous index instead of encoding this again
-                yield encode_length(0xd8, 0x1d)
-                for chunk in self.encode_int(container_index):
-                    yield chunk
-
+                self.fp.write(encode_length(0xd8, 0x1d))
+                self.encode_int(container_index)
                 return
         elif value_id in self.container_stack:
             raise CBOREncodeError('cyclic data structure detected but value sharing is '
                                   'disabled')
 
-        yield encode_length(0xa0, len(value))
+        self.fp.write(encode_length(0xa0, len(value)))
         with self._in_stack(value_id):
             for key, value in iteritems(value):
-                for chunk in self.encode(key):
-                    yield chunk
-                for chunk in self.encode(value):
-                    yield chunk
+                self.encode(key)
+                self.encode(value)
 
     def encode_semantic(self, tag, value, disable_value_sharing=False):
         """
@@ -174,9 +167,8 @@ class CBOREncoder(object):
         if disable_value_sharing:
             self.value_sharing = False
 
-        yield encode_length(0xc0, tag)
-        for chunk in self.encode(value):
-            yield chunk
+        self.fp.write(encode_length(0xc0, tag))
+        self.encode(value)
 
         if disable_value_sharing:
             self.value_sharing = value_sharing
@@ -196,45 +188,45 @@ class CBOREncoder(object):
 
         if self.datetime_as_timestamp:
             timestamp = timegm(value.utctimetuple()) + value.microsecond // 1000000
-            return self.encode_semantic(1, timestamp)
+            self.encode_semantic(1, timestamp)
         else:
             datestring = as_unicode(value.isoformat().replace('+00:00', 'Z'))
-            return self.encode_semantic(0, datestring)
+            self.encode_semantic(0, datestring)
 
     def encode_date(self, value):
         value = datetime.combine(value, time()).replace(tzinfo=timezone.utc)
-        return self.encode_datetime(value)
+        self.encode_datetime(value)
 
     def encode_decimal(self, value):
         # Semantic tag 4
         if value.is_nan():
-            return b'\xf9\x7e\x00',
+            self.fp.write(b'\xf9\x7e\x00')
         elif value.is_infinite():
-            return (b'\xf9\x7c\x00',) if value > 0 else (b'\xf9\xfc\x00',)
-
-        dt = value.as_tuple()
-        mantissa = sum(d * 10 ** i for i, d in enumerate(reversed(dt.digits)))
-        return self.encode_semantic(4, [dt.exponent, mantissa], True)
+            self.fp.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+        else:
+            dt = value.as_tuple()
+            mantissa = sum(d * 10 ** i for i, d in enumerate(reversed(dt.digits)))
+            self.encode_semantic(4, [dt.exponent, mantissa], True)
 
     def encode_rational(self, value):
         # Semantic tag 30
-        return self.encode_semantic(30, [value.numerator, value.denominator], True)
+        self.encode_semantic(30, [value.numerator, value.denominator], True)
 
     def encode_regexp(self, value):
         # Semantic tag 35
-        return self.encode_semantic(35, as_unicode(value.pattern))
+        self.encode_semantic(35, as_unicode(value.pattern))
 
     def encode_mime(self, value):
         # Semantic tag 36
-        return self.encode_semantic(36, as_unicode(value.as_string()))
+        self.encode_semantic(36, as_unicode(value.as_string()))
 
     def encode_uuid(self, value):
         # Semantic tag 37
-        return self.encode_semantic(37, value.bytes)
+        self.encode_semantic(37, value.bytes)
 
     def encode_custom_tag(self, value):
         # CBORTag (for arbitrary unsupported tags)
-        return self.encode_semantic(value.tag, value.value)
+        self.encode_semantic(value.tag, value.value)
 
     #
     # Special encoders (major tag 7)
@@ -243,17 +235,17 @@ class CBOREncoder(object):
     def encode_float(self, value):
         # Handle special values efficiently
         if math.isnan(value):
-            return b'\xf9\x7e\x00',
+            self.fp.write(b'\xf9\x7e\x00')
         elif math.isinf(value):
-            return (b'\xf9\x7c\x00',) if value > 0 else (b'\xf9\xfc\x00',)
-
-        return b'\xfb' + struct.pack('>d', value),
+            self.fp.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+        else:
+            self.fp.write(struct.pack('>Bd', 0xfb, value))
 
     def encode_boolean(self, value):
-        return (b'\xf5',) if value else (b'\xf4',)
+        self.fp.write(b'\xf5' if value else b'\xf4')
 
     def encode_none(self, value):
-        return b'\xf6',
+        self.fp.write(b'\xf6')
 
     default_encoders = OrderedDict([
         (unicode, encode_string),
@@ -291,8 +283,7 @@ class CBOREncoder(object):
             else:
                 raise CBOREncodeError('cannot serialize type %s' % obj_type.__name__)
 
-        for chunk in encoder(self, obj):
-            yield chunk
+        encoder(self, obj)
 
 
 def dumps(obj, **kwargs):
@@ -305,8 +296,9 @@ def dumps(obj, **kwargs):
     :rtype: bytes
 
     """
-    encoder = CBOREncoder(**kwargs)
-    return b''.join(encoder.encode(obj))
+    buf = BytesIO()
+    CBOREncoder(buf, **kwargs).encode(obj)
+    return buf.getvalue()
 
 
 def dump(obj, fp, **kwargs):
@@ -318,6 +310,4 @@ def dump(obj, fp, **kwargs):
     :param kwargs: keyword arguments passed to ``CBOREncoder()``
 
     """
-    encoder = CBOREncoder(**kwargs)
-    for chunk in encoder.encode(obj):
-        fp.write(chunk)
+    CBOREncoder(fp, **kwargs).encode(obj)
