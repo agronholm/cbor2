@@ -1,16 +1,15 @@
-import mmap
 import re
 import struct
-from contextlib import closing
 from datetime import datetime, timedelta
 from decimal import Decimal
 from email.parser import Parser
 from fractions import Fraction
+from io import BytesIO
 from math import ldexp
 from uuid import UUID
 
-from cbor2.compat import timezone, xrange, get_byteval, PY2
-from cbor2.types import CBORTag, undefined
+from cbor2.compat import timezone, xrange, PY2, byte_as_integer
+from cbor2.types import CBORTag, undefined, break_marker
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')
@@ -24,14 +23,14 @@ class CBORDecoder(object):
     """
     Deserializes objects from a bytestring.
 
+    :param fp: the input file (any file-like object)
     :param Dict[int, Callable] semantic_decoders: a mapping of semantic tag -> decoder callable.
         The callable receives two arguments: the CBORDecoder instance and the tagged value.
         The callable's return value should be the transformed value.
     """
 
-    def __init__(self, payload, semantic_decoders=None):
-        self.payload = payload
-        self.index = 0
+    def __init__(self, fp, semantic_decoders=None):
+        self.fp = fp
         self.shareables = []
         self.mark_next_shareable = True
 
@@ -41,111 +40,90 @@ class CBORDecoder(object):
         else:
             self.semantic_decoders = self.default_semantic_decoders
 
-    def decode_uint(self):
+    def decode_uint(self, subtype, allow_infinite=False):
         # Major tag 0
-        subtype = get_byteval(self.payload, self.index) & 31
         if subtype < 24:
-            self.index += 1
-            value = subtype
+            return subtype
         elif subtype == 24:
-            value = struct.unpack_from('>B', self.payload, self.index + 1)[0]
-            self.index += 2
+            return struct.unpack('>B', self.fp.read(1))[0]
         elif subtype == 25:
-            value = struct.unpack_from('>H', self.payload, self.index + 1)[0]
-            self.index += 3
+            return struct.unpack('>H', self.fp.read(2))[0]
         elif subtype == 26:
-            value = struct.unpack_from('>L', self.payload, self.index + 1)[0]
-            self.index += 5
+            return struct.unpack('>L', self.fp.read(4))[0]
         elif subtype == 27:
-            value = struct.unpack_from('>Q', self.payload, self.index + 1)[0]
-            self.index += 9
+            return struct.unpack('>Q', self.fp.read(8))[0]
+        elif subtype == 31 and allow_infinite:
+            return None
         else:
             raise CBORDecodeError('unknown unsigned integer subtype 0x%x' % subtype)
 
-        return value
-
-    def decode_negint(self):
+    def decode_negint(self, subtype):
         # Major tag 1
-        uint = self.decode_uint()
+        uint = self.decode_uint(subtype)
         return -uint - 1
 
-    def decode_bytestring(self):
+    def decode_bytestring(self, subtype):
         # Major tag 2
-        if get_byteval(self.payload, self.index) & 31 == 31:
+        length = self.decode_uint(subtype, True)
+        if length is None:
             # Indefinite length
-            self.index += 1
             buf = bytearray()
-            while get_byteval(self.payload, self.index) != 0xff:
-                value = self.decode_bytestring()
-                buf.extend(value)
-
-            self.index += 1
-            return buf
+            while True:
+                initial_byte = byte_as_integer(self.fp.read(1))
+                if initial_byte == 255:
+                    return buf
+                else:
+                    length = self.decode_uint(initial_byte & 31)
+                    value = self.fp.read(length)
+                    buf.extend(value)
         else:
-            length = self.decode_uint()
-            value = self.payload[self.index:self.index + length]
-            self.index += length
-            return value
+            return self.fp.read(length)
 
-    def decode_string(self):
+    def decode_string(self, subtype):
         # Major tag 3
-        if get_byteval(self.payload, self.index) & 31 == 31:
-            # Indefinite length
-            self.index += 1
-            buf = bytearray()
-            while get_byteval(self.payload, self.index) != 0xff:
-                value = self.decode_bytestring()
-                buf.extend(value)
+        return self.decode_bytestring(subtype).decode('utf-8')
 
-            self.index += 1
-            return buf.decode('utf-8')
-        else:
-            length = self.decode_uint()
-            value = self.payload[self.index:self.index + length].decode('utf-8')
-            self.index += length
-            return value
-
-    def decode_array(self):
+    def decode_array(self, subtype):
         # Major tag 4
         items = []
         if self.mark_next_shareable:
             self.shareables.append(items)
             self.mark_next_shareable = False
 
-        if get_byteval(self.payload, self.index) & 31 == 31:
+        length = self.decode_uint(subtype, True)
+        if length is None:
             # Indefinite length
-            self.index += 1
-            while get_byteval(self.payload, self.index) != 0xff:
+            while True:
                 value = self.decode()
-                items.append(value)
-
-            self.index += 1
+                if value is break_marker:
+                    break
+                else:
+                    items.append(value)
         else:
-            length = self.decode_uint()
             for _ in xrange(length):
                 item = self.decode()
                 items.append(item)
 
         return items
 
-    def decode_map(self):
+    def decode_map(self, subtype):
         # Major tag 5
         dictionary = {}
         if self.mark_next_shareable:
             self.shareables.append(dictionary)
             self.mark_next_shareable = False
 
-        if get_byteval(self.payload, self.index) & 31 == 31:
+        length = self.decode_uint(subtype, True)
+        if length is None:
             # Indefinite length
-            self.index += 1
-            while get_byteval(self.payload, self.index) != 0xff:
+            while True:
                 key = self.decode()
-                value = self.decode()
-                dictionary[key] = value
-
-            self.index += 1
+                if key is break_marker:
+                    break
+                else:
+                    value = self.decode()
+                    dictionary[key] = value
         else:
-            length = self.decode_uint()
             for _ in xrange(length):
                 key = self.decode()
                 value = self.decode()
@@ -153,9 +131,9 @@ class CBORDecoder(object):
 
         return dictionary
 
-    def decode_semantic(self):
+    def decode_semantic(self, subtype):
         # Major tag 6
-        tag = self.decode_uint()
+        tag = self.decode_uint(subtype)
 
         # Special handling for the "shareable" tag
         if tag == 28:
@@ -171,10 +149,8 @@ class CBORDecoder(object):
 
         return decoder(self, value)
 
-    def decode_special(self):
+    def decode_special(self, subtype):
         # Major tag 7
-        subtype = get_byteval(self.payload, self.index) & 31
-        self.index += 1
         return self.special_decoders[subtype](self)
 
     #
@@ -256,23 +232,18 @@ class CBORDecoder(object):
         def decode_single(single):
             return struct.unpack("!f", struct.pack("!I", single))[0]
 
-        payload = struct.unpack_from('>H', self.payload, self.index)[0]
+        payload = struct.unpack('>H', self.fp.read(2))[0]
         value = (payload & 0x7fff) << 13 | (payload & 0x8000) << 16
-        self.index += 2
         if payload & 0x7c00 != 0x7c00:
             return ldexp(decode_single(value), 112)
 
         return decode_single(value | 0x7f800000)
 
     def decode_float32(self):
-        value = struct.unpack_from('>f', self.payload, self.index)[0]
-        self.index += 2
-        return value
+        return struct.unpack('>f', self.fp.read(4))[0]
 
     def decode_float64(self):
-        value = struct.unpack_from('>d', self.payload, self.index)[0]
-        self.index += 8
-        return value
+        return struct.unpack('>d', self.fp.read(8))[0]
 
     major_decoders = {
         0: decode_uint,
@@ -293,6 +264,7 @@ class CBORDecoder(object):
         25: decode_float16,
         26: decode_float32,
         27: decode_float64,
+        31: lambda self: break_marker
     }
 
     default_semantic_decoders = {
@@ -311,18 +283,20 @@ class CBORDecoder(object):
 
     def decode(self):
         try:
-            major_type = (get_byteval(self.payload, self.index) & 224) >> 5
+            initial_byte = byte_as_integer(self.fp.read(1))
+            major_type = initial_byte >> 5
+            subtype = initial_byte & 31
         except Exception as e:
             raise CBORDecodeError('error reading major type at index {}: {}'
-                                  .format(self.index, e))
+                                  .format(self.fp.tell(), e))
 
         decoder = self.major_decoders[major_type]
         try:
-            return decoder(self)
+            return decoder(self, subtype)
         except CBORDecodeError:
             raise
         except Exception as e:
-            raise CBORDecodeError('error decoding value at index {}: {}'.format(self.index, e))
+            raise CBORDecodeError('error decoding value at index {}: {}'.format(self.fp.tell(), e))
 
 
 def loads(payload, **kwargs):
@@ -334,7 +308,8 @@ def loads(payload, **kwargs):
     :return: the deserialized object
 
     """
-    decoder = CBORDecoder(payload, **kwargs)
+    buf = BytesIO(payload)
+    decoder = CBORDecoder(buf, **kwargs)
     return decoder.decode()
 
 
@@ -344,10 +319,10 @@ def load(fp, **kwargs):
 
     The file object must support memory mapping.
 
-    :param BinaryIO fp: the file object
+    :param fp: the input file (any file-like object)
     :param kwargs: keyword arguments passed to ``CBORDecoder()``
     :return: the deserialized object
 
     """
-    with closing(mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ)) as payload:
-        return loads(payload, **kwargs)
+    decoder = CBORDecoder(fp, **kwargs)
+    return decoder.decode()

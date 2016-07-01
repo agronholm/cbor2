@@ -19,3 +19,4 @@ class UndefinedType(object):
 
 
 undefined = UndefinedType()
+break_marker = object()
