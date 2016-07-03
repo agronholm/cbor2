@@ -3,7 +3,7 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**3.0.0**
+**3.0.0** (2016-07-03)
 
 - **BACKWARD INCOMPATIBLE** Encoder callbacks now receive three arguments: the encoder instance,
   the value to encode and a file-like object. The callback must must now either write directly to
