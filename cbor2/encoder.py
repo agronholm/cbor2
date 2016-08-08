@@ -46,25 +46,25 @@ def shareable_encoder(func):
     @wraps(func)
     def wrapper(encoder, value, fp, *args, **kwargs):
         value_id = id(value)
+        container, container_index = encoder.shared_containers.get(value_id, (None, None))
         if encoder.value_sharing:
-            container_index = encoder.container_indexes.get(value_id)
-            if container_index is None:
-                # Mark the container as shareable
-                encoder.container_indexes[value_id] = len(encoder.container_indexes)
-                fp.write(encode_length(0xd8, 0x1c))
-                func(encoder, value, fp, *args, **kwargs)
-            else:
+            if container is value:
                 # Generate a reference to the previous index instead of encoding this again
                 fp.write(encode_length(0xd8, 0x1d))
                 encoder.encode_int(container_index, fp)
+            else:
+                # Mark the container as shareable
+                encoder.shared_containers[value_id] = (value, len(encoder.shared_containers))
+                fp.write(encode_length(0xd8, 0x1c))
+                func(encoder, value, fp, *args, **kwargs)
         else:
-            if value_id in encoder.container_indexes:
+            if container is value:
                 raise CBOREncodeError('cyclic data structure detected but value sharing is '
                                       'disabled')
             else:
-                encoder.container_indexes[value_id] = None
+                encoder.shared_containers[value_id] = (value, None)
                 func(encoder, value, fp, *args, **kwargs)
-                del encoder.container_indexes[value_id]
+                del encoder.shared_containers[value_id]
 
     return wrapper
 
@@ -96,7 +96,7 @@ class CBOREncoder(object):
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone
         self.value_sharing = value_sharing
-        self.container_indexes = {}
+        self.shared_containers = {}
 
         # Apply custom encoders
         if encoders:

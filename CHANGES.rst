@@ -3,6 +3,11 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**3.0.1** (2016-08-08)
+
+- Fixed error in the cyclic structure detection code that could mistake one container for
+  another, sometimes causing a bogus error about cyclic data structures where there was none
+
 **3.0.0** (2016-07-03)
 
 - **BACKWARD INCOMPATIBLE** Encoder callbacks now receive three arguments: the encoder instance,
