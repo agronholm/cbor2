@@ -1,12 +1,7 @@
 import re
 import struct
 from datetime import datetime, timedelta
-from decimal import Decimal
-from email.parser import Parser
-from fractions import Fraction
 from io import BytesIO
-from math import ldexp
-from uuid import UUID
 
 from cbor2.compat import timezone, xrange, PY2, byte_as_integer
 from cbor2.types import CBORTag, undefined, break_marker
@@ -193,12 +188,14 @@ class CBORDecoder(object):
 
     def decode_fraction(self, value, fp, shareable_index=None):
         # Semantic tag 4
+        from decimal import Decimal
         exp = Decimal(value[0])
         mantissa = Decimal(value[1])
         return mantissa * (10 ** exp)
 
     def decode_bigfloat(self, value, fp, shareable_index=None):
         # Semantic tag 5
+        from decimal import Decimal
         exp = Decimal(value[0])
         mantissa = Decimal(value[1])
         return mantissa * (2 ** exp)
@@ -217,6 +214,7 @@ class CBORDecoder(object):
 
     def decode_rational(self, value, fp, shareable_index=None):
         # Semantic tag 30
+        from fractions import Fraction
         return Fraction(*value)
 
     def decode_regexp(self, value, fp, shareable_index=None):
@@ -225,10 +223,12 @@ class CBORDecoder(object):
 
     def decode_mime(self, value, fp, shareable_index=None):
         # Semantic tag 36
+        from email.parser import Parser
         return Parser().parsestr(value)
 
     def decode_uuid(self, value, fp, shareable_index=None):
         # Semantic tag 37
+        from uuid import UUID
         return UUID(bytes=value)
 
     #
@@ -237,6 +237,8 @@ class CBORDecoder(object):
 
     def decode_float16(self, fp, shareable_index=None):
         # Code adapted from RFC 7049, appendix D
+        from math import ldexp
+
         def decode_single(single):
             return struct.unpack("!f", struct.pack("!I", single))[0]
 

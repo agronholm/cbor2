@@ -1,15 +1,8 @@
-import math
 import re
 import struct
-from calendar import timegm
 from collections import OrderedDict, Sequence, Mapping
-from datetime import datetime, time, date
-from decimal import Decimal
-from email.message import Message
-from fractions import Fraction
 from functools import wraps
 from io import BytesIO
-from uuid import UUID
 
 from cbor2.compat import iteritems, timezone, long, unicode, as_unicode
 from cbor2.types import CBORTag, undefined
@@ -185,6 +178,7 @@ class CBOREncoder(object):
                     'naive datetime encountered and no default timezone has been set')
 
         if self.datetime_as_timestamp:
+            from calendar import timegm
             timestamp = timegm(value.utctimetuple()) + value.microsecond // 1000000
             self.encode_semantic(1, timestamp, fp)
         else:
@@ -192,6 +186,7 @@ class CBOREncoder(object):
             self.encode_semantic(0, datestring, fp)
 
     def encode_date(self, value, fp):
+        from datetime import datetime, time
         value = datetime.combine(value, time()).replace(tzinfo=timezone.utc)
         self.encode_datetime(value, fp)
 
@@ -232,6 +227,7 @@ class CBOREncoder(object):
 
     def encode_float(self, value, fp):
         # Handle special values efficiently
+        import math
         if math.isnan(value):
             fp.write(b'\xf9\x7e\x00')
         elif math.isinf(value):
@@ -255,7 +251,7 @@ class CBOREncoder(object):
         (int, encode_int),
         (long, encode_int),
         (float, encode_float),
-        (Decimal, encode_decimal),
+        (('decimal', 'Decimal'), encode_decimal),
         (bool, encode_boolean),
         (type(None), encode_none),
         (type(undefined), encode_undefined),
@@ -264,12 +260,12 @@ class CBOREncoder(object):
         (dict, encode_map),
         (Mapping, encode_map),
         (Sequence, encode_array),
-        (datetime, encode_datetime),
-        (date, encode_date),
+        (('datetime', 'datetime'), encode_datetime),
+        (('datetime', 'date'), encode_date),
         (type(re.compile('')), encode_regexp),
-        (Fraction, encode_rational),
-        (Message, encode_mime),
-        (UUID, encode_uuid),
+        (('fractions', 'Fraction'), encode_rational),
+        (('email.message', 'Message'), encode_mime),
+        (('uuid', 'UUID'), encode_uuid),
         (CBORTag, encode_custom_tag)
     ])
 
@@ -283,12 +279,17 @@ class CBOREncoder(object):
 
         """
         obj_type = obj.__class__
-        encoder = self.encoders.get(obj_type)
-        if encoder is None:
+        try:
+            encoder = self.encoders[obj_type]
+        except KeyError:
+            from sys import modules
             # No direct hit -- do a slower subclass check
-            for type_, enc in iteritems(self.encoders):
+            for type_, enc in self.encoders.items():
+                if type(type_) is tuple:
+                    modname, typename = type_
+                    type_ = getattr(modules.get(modname), typename, None)
                 if issubclass(obj_type, type_):
-                    encoder = enc
+                    encoder = self.encoders[obj_type] = enc
                     break
             else:
                 raise CBOREncodeError('cannot serialize type %s' % obj_type.__name__)
