@@ -3,7 +3,7 @@ import struct
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from cbor2.compat import timezone, xrange, PY2, byte_as_integer
+from cbor2.compat import timezone, xrange, byte_as_integer
 from cbor2.types import CBORTag, undefined, break_marker
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
@@ -177,10 +177,9 @@ class CBORDecoder(object):
 
     def decode_positive_bignum(self, value, fp, shareable_index=None):
         # Semantic tag 2
-        if PY2:
-            return sum(ord(b) * (2 ** (exp * 8)) for exp, b in enumerate(reversed(value)))
-        else:
-            return sum(b * (2 ** (exp * 8)) for exp, b in enumerate(reversed(value)))
+        from binascii import hexlify
+        result = int(hexlify(value), 16)
+        return result
 
     def decode_negative_bignum(self, value, fp, shareable_index=None):
         # Semantic tag 3
