@@ -3,6 +3,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**3.0.2** (2016-09-23)
+
+- Fixed decoding failure for datetimes with microseconds (tag 0)
+
 **3.0.1** (2016-08-08)
 
 - Fixed error in the cyclic structure detection code that could mistake one container for

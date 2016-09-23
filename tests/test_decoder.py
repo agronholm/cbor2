@@ -168,11 +168,13 @@ def test_streaming(payload, expected):
 @pytest.mark.parametrize('payload, expected', [
     ('c074323031332d30332d32315432303a30343a30305a',
      datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)),
+    ('c0781b323031332d30332d32315432303a30343a30302e3338303834315a',
+     datetime(2013, 3, 21, 20, 4, 0, 380841, tzinfo=timezone.utc)),
     ('c07819323031332d30332d32315432323a30343a30302b30323a3030',
      datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2)))),
     ('c11a514b67b0', datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)),
     ('c11a514b67b0', datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))))
-], ids=['datetime/utc', 'datetime/eet', 'timestamp/utc', 'timestamp/eet'])
+], ids=['datetime/utc', 'datetime+micro/utc', 'datetime/eet', 'timestamp/utc', 'timestamp/eet'])
 def test_datetime(payload, expected):
     decoded = loads(unhexlify(payload))
     assert decoded == expected

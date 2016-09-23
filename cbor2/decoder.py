@@ -159,15 +159,14 @@ class CBORDecoder(object):
         # Semantic tag 0
         match = timestamp_re.match(value)
         if match:
-            year, month, day, hour, minute, second, fraction, offset_h, offset_m = match.groups()
-            microsecond = int(fraction) * 100000 if fraction else 0
+            year, month, day, hour, minute, second, micro, offset_h, offset_m = match.groups()
             if offset_h:
                 tz = timezone(timedelta(hours=int(offset_h), minutes=int(offset_m)))
             else:
                 tz = timezone.utc
 
             return datetime(int(year), int(month), int(day), int(hour), int(minute), int(second),
-                            microsecond, tz)
+                            int(micro or 0), tz)
         else:
             raise CBORDecodeError('invalid datetime string: {}'.format(value))
 
