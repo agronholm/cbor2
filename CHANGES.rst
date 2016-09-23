@@ -3,6 +3,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**3.0.3** (2016-09-23)
+
+- No changes, just re-releasing due to git tagging screw-up
+
 **3.0.2** (2016-09-23)
 
 - Fixed decoding failure for datetimes with microseconds (tag 0)
