@@ -1,5 +1,6 @@
 import re
 from binascii import unhexlify
+from collections import OrderedDict
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 from email.mime.text import MIMEText
@@ -8,7 +9,7 @@ from uuid import UUID
 
 import pytest
 
-from cbor2.compat import timezone
+from cbor2.compat import timezone, unicode
 from cbor2.encoder import dumps, CBOREncodeError, dump
 from cbor2.types import CBORTag, undefined
 
@@ -195,6 +196,17 @@ def test_cyclic_map_nosharing():
 def test_unsupported_type():
     exc = pytest.raises(CBOREncodeError, dumps, lambda: None)
     assert str(exc.value) == 'cannot serialize type function'
+
+
+def test_unimported_type():
+    """Test that the encoder doesn't break when an extension type is not found in sys.modules."""
+    encoders = OrderedDict([
+        (('dummy', 'type'), lambda encoder, obj, fp: None),
+        (('cbor2.encoder', 'CBOREncodeError'),
+         lambda encoder, obj, fp: encoder.encode_string(unicode(obj), fp))
+    ])
+    obj = CBOREncodeError(u'foo')
+    assert dumps(obj, encoders=encoders) == b'\x63foo'
 
 
 def test_custom_encoder():

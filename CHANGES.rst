@@ -3,6 +3,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**3.0.4** (2016-09-24)
+
+- Fixed TypeError when trying to encode extension types (regression introduced in 3.0.3)
+
 **3.0.3** (2016-09-23)
 
 - No changes, just re-releasing due to git tagging screw-up

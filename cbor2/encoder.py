@@ -282,12 +282,16 @@ class CBOREncoder(object):
         try:
             encoder = self.encoders[obj_type]
         except KeyError:
-            from sys import modules
             # No direct hit -- do a slower subclass check
+            from sys import modules
+
             for type_, enc in self.encoders.items():
                 if type(type_) is tuple:
                     modname, typename = type_
                     type_ = getattr(modules.get(modname), typename, None)
+                    if type_ is None:
+                        continue
+
                 if issubclass(obj_type, type_):
                     encoder = self.encoders[obj_type] = enc
                     break
