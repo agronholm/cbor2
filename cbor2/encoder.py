@@ -226,17 +226,10 @@ class CBOREncoder(object):
     #
 
     def encode_simple_value(self, value, fp):
-        if isinstance(value, CBORSimpleValue):
-            simple_value = value.value
+        if value.value < 20:
+            fp.write(struct.pack('>B', 0xe0 | value.value))
         else:
-            simple_value = value
-
-        if simple_value > 255:
-            raise CBOREncodeError('simple value too big')
-        if simple_value < 20:
-            fp.write(struct.pack('>B', 0xe0 | simple_value))
-        else:
-            fp.write(struct.pack('>BB', 0xf8, simple_value))
+            fp.write(struct.pack('>BB', 0xf8, value.value))
 
     def encode_float(self, value, fp):
         # Handle special values efficiently

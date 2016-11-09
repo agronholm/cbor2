@@ -1,3 +1,5 @@
+import pytest
+
 from cbor2.types import CBORTag, CBORSimpleValue
 
 
@@ -27,3 +29,8 @@ def test_simple_value_equals():
     assert not tag1 == tag3
     assert not tag1 == 21
     assert not tag2 == "21"
+
+
+def test_simple_value_too_big():
+    exc = pytest.raises(TypeError, CBORSimpleValue, 256)
+    assert str(exc.value) == 'simple value too big'

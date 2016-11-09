@@ -18,6 +18,8 @@ class CBORSimpleValue(object):
     __slots__ = 'value'
 
     def __init__(self, value):
+        if value < 0 or value > 255:
+            raise TypeError('simple value too big')
         self.value = value
 
     def __eq__(self, other):
