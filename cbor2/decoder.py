@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from io import BytesIO
 
 from cbor2.compat import timezone, xrange, PY2, byte_as_integer
-from cbor2.types import CBORTag, undefined, break_marker
+from cbor2.types import CBORTag, undefined, break_marker, CBORSimpleValue
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')
@@ -148,6 +148,9 @@ class CBORDecoder(object):
         return decoder(self, value, fp, shareable_index)
 
     def decode_special(self, subtype, fp, shareable_index=None):
+        # Simple value
+        if subtype < 20:
+            return CBORSimpleValue(subtype)
         # Major tag 7
         return self.special_decoders[subtype](self, fp, shareable_index=None)
 
@@ -234,6 +237,9 @@ class CBORDecoder(object):
     # Special decoders (major tag 7)
     #
 
+    def decode_simple_value(self, fp, shareable_index=None):
+        return CBORSimpleValue(struct.unpack('>B', fp.read(1))[0])
+
     def decode_float16(self, fp, shareable_index=None):
         # Code adapted from RFC 7049, appendix D
         from math import ldexp
@@ -270,6 +276,7 @@ class CBORDecoder(object):
         21: lambda self, fp, shareable_index=None: True,
         22: lambda self, fp, shareable_index=None: None,
         23: lambda self, fp, shareable_index=None: undefined,
+        24: decode_simple_value,
         25: decode_float16,
         26: decode_float32,
         27: decode_float64,

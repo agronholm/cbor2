@@ -11,7 +11,7 @@ import pytest
 
 from cbor2.compat import timezone, unicode
 from cbor2.encoder import dumps, CBOREncodeError, dump
-from cbor2.types import CBORTag, undefined
+from cbor2.types import CBORTag, undefined, CBORSimpleValue
 
 
 @pytest.mark.parametrize('value, expected', [
@@ -85,6 +85,17 @@ def test_string(value, expected):
     (undefined, 'f7')
 ], ids=['false', 'true', 'null', 'undefined'])
 def test_special(value, expected):
+    expected = unhexlify(expected)
+    assert dumps(value) == expected
+
+
+@pytest.mark.parametrize('value, expected', [
+    (CBORSimpleValue(0), 'e0'),
+    (CBORSimpleValue(2), 'e2'),
+    (CBORSimpleValue(19), 'f3'),
+    (CBORSimpleValue(32), 'f820')
+])
+def test_simple_value(value, expected):
     expected = unhexlify(expected)
     assert dumps(value) == expected
 

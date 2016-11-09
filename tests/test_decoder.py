@@ -14,7 +14,7 @@ import pytest
 
 from cbor2.compat import timezone
 from cbor2.decoder import loads, CBORDecodeError, load, CBORDecoder
-from cbor2.types import CBORTag, undefined
+from cbor2.types import CBORTag, undefined, CBORSimpleValue
 
 
 @pytest.mark.parametrize('payload, expected', [
@@ -161,9 +161,25 @@ def test_streaming(payload, expected):
     assert decoded == expected
 
 
+@pytest.mark.parametrize('payload, expected', [
+    ('e0', 0),
+    ('e2', 2),
+    ('f3', 19),
+    ('f820', 32),
+    ('e0', CBORSimpleValue(0)),
+    ('e2', CBORSimpleValue(2)),
+    ('f3', CBORSimpleValue(19)),
+    ('f820', CBORSimpleValue(32))
+])
+def test_simple_value(payload, expected):
+    decoded = loads(unhexlify(payload))
+    assert decoded == expected
+
+
 #
 # Tests for extension tags
 #
+
 
 @pytest.mark.parametrize('payload, expected', [
     ('c074323031332d30332d32315432303a30343a30305a',
