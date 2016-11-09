@@ -14,6 +14,23 @@ class CBORTag(object):
         return 'CBORTag({self.tag}, {self.value!r})'.format(self=self)
 
 
+class CBORSimpleValue(object):
+    __slots__ = 'value'
+
+    def __init__(self, value):
+        self.value = value
+
+    def __eq__(self, other):
+        if isinstance(other, CBORSimpleValue):
+            return self.value == other.value
+        elif isinstance(other, int):
+            return self.value == other
+        return NotImplemented
+
+    def __repr__(self):
+        return 'CBORSimpleValue({self.value})'.format(self=self)
+
+
 class UndefinedType(object):
     __slots__ = ()
 

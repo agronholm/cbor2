@@ -1,4 +1,4 @@
-from cbor2.types import CBORTag
+from cbor2.types import CBORTag, CBORSimpleValue
 
 
 def test_tag_repr():
@@ -12,3 +12,18 @@ def test_tag_equals():
     assert tag1 == tag2
     assert not tag1 == tag3
     assert not tag1 == 500
+
+
+def test_simple_value_repr():
+    assert repr(CBORSimpleValue(1)) == "CBORSimpleValue(1)"
+
+
+def test_simple_value_equals():
+    tag1 = CBORSimpleValue(1)
+    tag2 = CBORSimpleValue(1)
+    tag3 = CBORSimpleValue(21)
+    assert tag1 == tag2
+    assert tag1 == 1
+    assert not tag1 == tag3
+    assert not tag1 == 21
+    assert not tag2 == "21"

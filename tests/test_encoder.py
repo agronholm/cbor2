@@ -6,12 +6,13 @@ from decimal import Decimal
 from email.mime.text import MIMEText
 from fractions import Fraction
 from uuid import UUID
+from io import BytesIO
 
 import pytest
 
 from cbor2.compat import timezone, unicode
-from cbor2.encoder import dumps, CBOREncodeError, dump
-from cbor2.types import CBORTag, undefined
+from cbor2.encoder import dumps, CBOREncodeError, dump, CBOREncoder
+from cbor2.types import CBORTag, undefined, CBORSimpleValue
 
 
 @pytest.mark.parametrize('value, expected', [
@@ -87,6 +88,30 @@ def test_string(value, expected):
 def test_special(value, expected):
     expected = unhexlify(expected)
     assert dumps(value) == expected
+
+
+@pytest.mark.parametrize('value, expected', [
+    (0, 'e0'),
+    (2, 'e2'),
+    (19, 'f3'),
+    (32, 'f820'),
+    (CBORSimpleValue(0), 'e0'),
+    (CBORSimpleValue(2), 'e2'),
+    (CBORSimpleValue(19), 'f3'),
+    (CBORSimpleValue(32), 'f820')
+])
+def test_simple_value(value, expected):
+    buf = BytesIO()
+    CBOREncoder().encode_simple_value(value, buf)
+    expected = unhexlify(expected)
+    assert buf.getvalue() == expected
+
+
+def test_simple_value_too_big():
+    buf = BytesIO()
+    """Test that serializing a simple value over 255 are gracefully rejected."""
+    exc = pytest.raises(CBOREncodeError, CBOREncoder().encode_simple_value, 256, buf)
+    assert str(exc.value) == 'simple value too big'
 
 
 #
