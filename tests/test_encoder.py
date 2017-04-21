@@ -1,6 +1,5 @@
 import re
 from binascii import unhexlify
-from collections import OrderedDict
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 from email.mime.text import MIMEText
@@ -9,8 +8,8 @@ from uuid import UUID
 
 import pytest
 
-from cbor2.compat import timezone, unicode
-from cbor2.encoder import dumps, CBOREncodeError, dump
+from cbor2.compat import timezone
+from cbor2.encoder import dumps, CBOREncodeError, dump, shareable_encoder
 from cbor2.types import CBORTag, undefined, CBORSimpleValue
 
 
@@ -129,7 +128,7 @@ def test_date():
 def test_naive_datetime():
     """Test that naive datetimes are gracefully rejected when no timezone has been set."""
     exc = pytest.raises(CBOREncodeError, dumps, datetime(2013, 3, 21))
-    assert str(exc.value) == 'naive datetime encountered and no default timezone has been set'
+    exc.match('naive datetime encountered and no default timezone has been set')
 
 
 @pytest.mark.parametrize('value, expected', [
@@ -177,15 +176,15 @@ def test_cyclic_array():
     expected = unhexlify('d81c81d81c81d81d00')
     a = [[]]
     a[0].append(a)
-    assert dumps(a) == expected
+    assert dumps(a, value_sharing=True) == expected
 
 
 def test_cyclic_array_nosharing():
     """Test that serializing a cyclic structure w/o value sharing will blow up gracefully."""
     a = []
     a.append(a)
-    exc = pytest.raises(CBOREncodeError, dumps, a, value_sharing=False)
-    assert str(exc.value) == 'cyclic data structure detected but value sharing is disabled'
+    exc = pytest.raises(CBOREncodeError, dumps, a)
+    exc.match('cyclic data structure detected but value sharing is disabled')
 
 
 def test_cyclic_map():
@@ -193,46 +192,62 @@ def test_cyclic_map():
     expected = unhexlify('d81ca100d81d00')
     a = {}
     a[0] = a
-    assert dumps(a) == expected
+    assert dumps(a, value_sharing=True) == expected
 
 
 def test_cyclic_map_nosharing():
     """Test that serializing a cyclic structure w/o value sharing will fail gracefully."""
     a = {}
     a[0] = a
-    exc = pytest.raises(CBOREncodeError, dumps, a, value_sharing=False)
-    assert str(exc.value) == 'cyclic data structure detected but value sharing is disabled'
+    exc = pytest.raises(CBOREncodeError, dumps, a)
+    exc.match('cyclic data structure detected but value sharing is disabled')
+
+
+@pytest.mark.parametrize('value_sharing, expected', [
+    (False, '828080'),
+    (True, 'd81c82d81c80d81d01')
+], ids=['nosharing', 'sharing'])
+def test_not_cyclic_same_object(value_sharing, expected):
+    """Test that the same shareable object can be included twice if not in a cyclic structure."""
+    expected = unhexlify(expected)
+    a = []
+    b = [a, a]
+    assert dumps(b, value_sharing=value_sharing) == expected
 
 
 def test_unsupported_type():
     exc = pytest.raises(CBOREncodeError, dumps, lambda: None)
-    assert str(exc.value) == 'cannot serialize type function'
+    exc.match('cannot serialize type function')
 
 
-def test_unimported_type():
-    """Test that the encoder doesn't break when an extension type is not found in sys.modules."""
-    encoders = OrderedDict([
-        (('dummy', 'type'), lambda encoder, obj, fp: None),
-        (('cbor2.encoder', 'CBOREncodeError'),
-         lambda encoder, obj, fp: encoder.encode_string(unicode(obj), fp))
-    ])
-    obj = CBOREncodeError(u'foo')
-    assert dumps(obj, encoders=encoders) == b'\x63foo'
+def test_default():
+    class DummyType(object):
+        def __init__(self, state):
+            self.state = state
+
+    def default_encoder(encoder, value, fp):
+        encoder.encode(value.state, fp)
+
+    expected = unhexlify('820305')
+    obj = DummyType([3, 5])
+    serialized = dumps(obj, default=default_encoder)
+    assert serialized == expected
 
 
-def test_custom_encoder():
-    class MyOwnType(object):
-        def __init__(self, value_a, value_b):
-            self.value_a = value_a
-            self.value_b = value_b
+def test_default_cyclic():
+    class DummyType(object):
+        def __init__(self, value=None):
+            self.value = value
 
-        @classmethod
-        def encode(cls, encoder, instance, fp):
-            encoder.encode_semantic(6000, [instance.value_a, instance.value_b], fp, True)
+    @shareable_encoder
+    def default_encoder(encoder, value, fp):
+        encoder.encode(CBORTag(3000, value.value), fp)
 
-    expected = unhexlify('d91770820663616263')
-    value = MyOwnType(6, u'abc')
-    assert dumps(value, encoders={MyOwnType: MyOwnType.encode}) == expected
+    expected = unhexlify('D81CD90BB8D81D00')
+    obj = DummyType()
+    obj.value = obj
+    serialized = dumps(obj, value_sharing=True, default=default_encoder)
+    assert serialized == expected
 
 
 def test_dump_to_file(tmpdir):
@@ -240,4 +255,4 @@ def test_dump_to_file(tmpdir):
     with path.open('wb') as fp:
         dump([1, 10], fp)
 
-    assert path.read_binary() == b'\xd8\x1c\x82\x01\x0a'
+    assert path.read_binary() == b'\x82\x01\x0a'

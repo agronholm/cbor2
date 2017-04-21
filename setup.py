@@ -36,5 +36,8 @@ setup(
     packages=find_packages(exclude=['tests']),
     setup_requires=[
         'setuptools_scm'
-    ]
+    ],
+    extras_require={
+        'testing': ['pytest', 'pytest-cov']
+    }
 )

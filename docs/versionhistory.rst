@@ -3,6 +3,20 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**4.0.0**
+
+- **BACKWARD INCOMPATIBLE** Value sharing has been disabled by default, for better compatibility
+  with other implementations and better performance (since it is rarely needed)
+- **BACKWARD INCOMPATIBLE** Replaced the ``semantic_decoders`` decoder option with the ``tag_hook``
+  option
+- **BACKWARD INCOMPATIBLE** Replaced the ``encoders`` encoder option with the ``default`` option
+- Added the ``object_hook`` option for decoding dicts into complex objects
+  (intended for situations where JSON compatibility is required and semantic tags cannot be used)
+- Added encoding and decoding of simple values (``CBORSimpleValue``)
+  (contributed by Jerry Lundström)
+- Made all relevant classes and functions available directly in the ``cbor2`` namespace
+- Added proper documentation
+
 **3.0.4** (2016-09-24)
 
 - Fixed TypeError when trying to encode extension types (regression introduced in 3.0.3)

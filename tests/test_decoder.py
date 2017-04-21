@@ -243,7 +243,7 @@ def test_bad_shared_reference():
 
 def test_uninitialized_shared_reference():
     decoder = CBORDecoder()
-    decoder.shareables.append(None)
+    decoder._shareables.append(None)
     fp = BytesIO(unhexlify('d81d00'))
     exc = pytest.raises(CBORDecodeError, decoder.decode, fp)
     assert str(exc.value).endswith('shared value 0 has not been initialized')
@@ -269,12 +269,23 @@ def test_unhandled_tag():
     assert decoded == CBORTag(6000, u'Hello')
 
 
-def test_custom_decoder():
-    def reverse(decoder, value, fp, shareable_index):
-        return value[::-1]
+def test_tag_hook():
+    def reverse(decoder, tag, fp, shareable_index=None):
+        return tag.value[::-1]
 
-    decoded = loads(unhexlify('d917706548656c6c6f'), semantic_decoders={6000: reverse})
+    decoded = loads(unhexlify('d917706548656c6c6f'), tag_hook=reverse)
     assert decoded == u'olleH'
+
+
+def test_object_hook():
+    class DummyType(object):
+        def __init__(self, state):
+            self.state = state
+
+    payload = unhexlify('A2616103616205')
+    decoded = loads(payload, object_hook=lambda decoder, value, fp: DummyType(value))
+    assert isinstance(decoded, DummyType)
+    assert decoded.state == {'a': 3, 'b': 5}
 
 
 def test_error_major_type():

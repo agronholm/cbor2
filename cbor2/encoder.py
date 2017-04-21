@@ -1,28 +1,17 @@
 import re
 import struct
-from collections import OrderedDict, Sequence, Mapping
+from collections import OrderedDict, Sequence, Mapping, defaultdict
+from contextlib import contextmanager
 from functools import wraps
+from datetime import datetime, date, time
 from io import BytesIO
 
-from cbor2.compat import iteritems, timezone, long, unicode, as_unicode
+from cbor2.compat import iteritems, timezone, long, unicode, as_unicode, bytes_from_list
 from cbor2.types import CBORTag, undefined, CBORSimpleValue
 
 
 class CBOREncodeError(Exception):
     """Raised when an error occurs while serializing an object into a CBOR datastream."""
-
-
-def encode_length(major_tag, length):
-    if length < 24:
-        return struct.pack('>B', major_tag | length)
-    elif length < 256:
-        return struct.pack('>BB', major_tag | 24, length)
-    elif length < 65536:
-        return struct.pack('>BH', major_tag | 25, length)
-    elif length < 4294967296:
-        return struct.pack('>BL', major_tag | 26, length)
-    else:
-        return struct.pack('>BQ', major_tag | 27, length)
 
 
 def shareable_encoder(func):
@@ -39,15 +28,15 @@ def shareable_encoder(func):
     @wraps(func)
     def wrapper(encoder, value, fp, *args, **kwargs):
         value_id = id(value)
-        container, container_index = encoder.shared_containers.get(value_id, (None, None))
+        container, container_index = encoder._shared_containers.get(value_id, (None, None))
         if encoder.value_sharing:
             if container is value:
                 # Generate a reference to the previous index instead of encoding this again
                 fp.write(encode_length(0xd8, 0x1d))
-                encoder.encode_int(container_index, fp)
+                encode_int(encoder, container_index, fp)
             else:
                 # Mark the container as shareable
-                encoder.shared_containers[value_id] = (value, len(encoder.shared_containers))
+                encoder._shared_containers[value_id] = (value, len(encoder._shared_containers))
                 fp.write(encode_length(0xd8, 0x1c))
                 func(encoder, value, fp, *args, **kwargs)
         else:
@@ -55,257 +44,286 @@ def shareable_encoder(func):
                 raise CBOREncodeError('cyclic data structure detected but value sharing is '
                                       'disabled')
             else:
-                encoder.shared_containers[value_id] = (value, None)
+                encoder._shared_containers[value_id] = (value, None)
                 func(encoder, value, fp, *args, **kwargs)
-                del encoder.shared_containers[value_id]
+                del encoder._shared_containers[value_id]
 
     return wrapper
 
 
+def encode_length(major_tag, length):
+    if length < 24:
+        return struct.pack('>B', major_tag | length)
+    elif length < 256:
+        return struct.pack('>BB', major_tag | 24, length)
+    elif length < 65536:
+        return struct.pack('>BH', major_tag | 25, length)
+    elif length < 4294967296:
+        return struct.pack('>BL', major_tag | 26, length)
+    else:
+        return struct.pack('>BQ', major_tag | 27, length)
+
+
+def encode_int(encoder, value, fp):
+    # Big integers (2 ** 64 and over)
+    if value >= 18446744073709551616 or value < -18446744073709551616:
+        if value >= 0:
+            major_type = 0x02
+        else:
+            major_type = 0x03
+            value = -value - 1
+
+        values = []
+        while value > 0:
+            value, remainder = divmod(value, 256)
+            values.insert(0, remainder)
+
+        payload = bytes_from_list(values)
+        encode_semantic(encoder, CBORTag(major_type, payload), fp)
+    elif value >= 0:
+        fp.write(encode_length(0, value))
+    else:
+        fp.write(encode_length(0x20, abs(value) - 1))
+
+
+def encode_bytestring(encoder, value, fp):
+    fp.write(encode_length(0x40, len(value)) + value)
+
+
+def encode_bytearray(encoder, value, fp):
+    encode_bytestring(encoder, bytes(value), fp)
+
+
+def encode_string(encoder, value, fp):
+    encoded = value.encode('utf-8')
+    fp.write(encode_length(0x60, len(encoded)) + encoded)
+
+
+@shareable_encoder
+def encode_array(encoder, value, fp):
+    fp.write(encode_length(0x80, len(value)))
+    for item in value:
+        encoder.encode(item, fp)
+
+
+@shareable_encoder
+def encode_map(encoder, value, fp):
+    fp.write(encode_length(0xa0, len(value)))
+    for key, val in iteritems(value):
+        encoder.encode(key, fp)
+        encoder.encode(val, fp)
+
+
+def encode_semantic(encoder, value, fp):
+    fp.write(encode_length(0xc0, value.tag))
+    encoder.encode(value.value, fp)
+
+
+#
+# Semantic decoders (major tag 6)
+#
+
+def encode_datetime(encoder, value, fp):
+    # Semantic tag 0
+    if not value.tzinfo:
+        if encoder.timezone:
+            value = value.replace(tzinfo=encoder.timezone)
+        else:
+            raise CBOREncodeError(
+                'naive datetime encountered and no default timezone has been set')
+
+    if encoder.datetime_as_timestamp:
+        from calendar import timegm
+        timestamp = timegm(value.utctimetuple()) + value.microsecond // 1000000
+        encode_semantic(encoder, CBORTag(1, timestamp), fp)
+    else:
+        datestring = as_unicode(value.isoformat().replace('+00:00', 'Z'))
+        encode_semantic(encoder, CBORTag(0, datestring), fp)
+
+
+def encode_date(encoder, value, fp):
+    value = datetime.combine(value, time()).replace(tzinfo=timezone.utc)
+    encode_datetime(encoder, value, fp)
+
+
+def encode_decimal(encoder, value, fp):
+    # Semantic tag 4
+    if value.is_nan():
+        fp.write(b'\xf9\x7e\x00')
+    elif value.is_infinite():
+        fp.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+    else:
+        dt = value.as_tuple()
+        mantissa = sum(d * 10 ** i for i, d in enumerate(reversed(dt.digits)))
+        with encoder.disable_value_sharing():
+            encode_semantic(encoder, CBORTag(4, [dt.exponent, mantissa]), fp)
+
+
+def encode_rational(encoder, value, fp):
+    # Semantic tag 30
+    with encoder.disable_value_sharing():
+        encode_semantic(encoder, CBORTag(30, [value.numerator, value.denominator]), fp)
+
+
+def encode_regexp(encoder, value, fp):
+    # Semantic tag 35
+    encode_semantic(encoder, CBORTag(35, as_unicode(value.pattern)), fp)
+
+
+def encode_mime(encoder, value, fp):
+    # Semantic tag 36
+    encode_semantic(encoder, CBORTag(36, as_unicode(value.as_string())), fp)
+
+
+def encode_uuid(encoder, value, fp):
+    # Semantic tag 37
+    encode_semantic(encoder, CBORTag(37, value.bytes), fp)
+
+
+#
+# Special encoders (major tag 7)
+#
+
+def encode_simple_value(encoder, value, fp):
+    if value.value < 20:
+        fp.write(struct.pack('>B', 0xe0 | value.value))
+    else:
+        fp.write(struct.pack('>BB', 0xf8, value.value))
+
+
+def encode_float(encoder, value, fp):
+    # Handle special values efficiently
+    import math
+    if math.isnan(value):
+        fp.write(b'\xf9\x7e\x00')
+    elif math.isinf(value):
+        fp.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+    else:
+        fp.write(struct.pack('>Bd', 0xfb, value))
+
+
+def encode_boolean(encoder, value, fp):
+    fp.write(b'\xf5' if value else b'\xf4')
+
+
+def encode_none(encoder, value, fp):
+    fp.write(b'\xf6')
+
+
+def encode_undefined(encoder, value, fp):
+    fp.write(b'\xf7')
+
+
+default_encoders = OrderedDict([
+    (bytes, encode_bytestring),
+    (bytearray, encode_bytearray),
+    (unicode, encode_string),
+    (int, encode_int),
+    (long, encode_int),
+    (float, encode_float),
+    (('decimal', 'Decimal'), encode_decimal),
+    (bool, encode_boolean),
+    (type(None), encode_none),
+    (tuple, encode_array),
+    (list, encode_array),
+    (dict, encode_map),
+    (defaultdict, encode_map),
+    (OrderedDict, encode_map),
+    (Mapping, encode_map),
+    (Sequence, encode_array),
+    (type(undefined), encode_undefined),
+    (datetime, encode_datetime),
+    (date, encode_date),
+    (type(re.compile('')), encode_regexp),
+    (('fractions', 'Fraction'), encode_rational),
+    (('email.message', 'Message'), encode_mime),
+    (('uuid', 'UUID'), encode_uuid),
+    (CBORSimpleValue, encode_simple_value),
+    (CBORTag, encode_semantic)
+])
+
+
 class CBOREncoder(object):
     """
-    Serializes objects to bytestrings using Concise Binary Object Representation.
-
-    The following parameters are also available as attributes on the encoder:
+    Serializes objects to a byte stream using Concise Binary Object Representation.
 
     :param datetime_as_timestamp: set to ``True`` to serialize datetimes as UNIX timestamps
         (this makes datetimes more concise on the wire but loses the time zone information)
-    :param datetime.tzinfo timezone: the default timezone to use for serializing naive
-        datetimes
+    :param datetime.tzinfo timezone: the default timezone to use for serializing naive datetimes
     :param value_sharing: set to ``False`` to disable value sharing (this will cause an error
         when a cyclic data structure is encountered)
-    :param encoders: a mapping of type -> encoder callable. The encoder callable receives three
-        arguments: the CBOREncoder instance, the value to be encoded and the output file object.
-        The callable must either write directly to the file object or call another encoding method
-        that does the output.
-
-        To support cyclic references, you can wrap the encoder callback with
-        ``@shareable_encoder``. A useful strategy is to encode the state of the object separately
-        and returning the resulting bytestring to the encoder.
+    :param default: a callable that is called by the encoder with three arguments
+        (encoder, value, file object) when no suitable encoder has been found, and should use the
+        methods on the encoder to encode any objects it wants to add to the data stream
     """
 
-    def __init__(self, datetime_as_timestamp=False, timezone=None, value_sharing=True,
-                 encoders=None):
+    __slots__ = ('datetime_as_timestamp', 'timezone', 'default', 'value_sharing',
+                 'json_compatible', '_shared_containers', '_encoders')
+
+    def __init__(self, datetime_as_timestamp=False, timezone=None, value_sharing=False,
+                 default=None):
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone
         self.value_sharing = value_sharing
-        self.shared_containers = {}
+        self.default = default
+        self._shared_containers = {}  # indexes used for value sharing
+        self._encoders = default_encoders.copy()
 
-        # Apply custom encoders
-        if encoders:
-            self.encoders = self.default_encoders.copy()
-            self.encoders.update(encoders)
-        else:
-            self.encoders = self.default_encoders
+    def _find_encoder(self, obj_type):
+        from sys import modules
 
-    def encode_int(self, value, fp):
-        # Big integers (2 ** 64 and over)
-        if value >= 18446744073709551616 or value < -18446744073709551616:
-            if value >= 0:
-                major_type = 0x02
-            else:
-                major_type = 0x03
-                value = -value - 1
+        for type_, enc in list(iteritems(self._encoders)):
+            if type(type_) is tuple:
+                modname, typename = type_
+                imported_type = getattr(modules.get(modname), typename, None)
+                if imported_type is not None:
+                    del self._encoders[type_]
+                    self._encoders[imported_type] = enc
+                    type_ = imported_type
+                else:  # pragma: nocover
+                    continue
 
-            values = []
-            while value > 0:
-                value, remainder = divmod(value, 256)
-                values.insert(0, remainder)
+            if issubclass(obj_type, type_):
+                self._encoders[obj_type] = enc
+                return enc
 
-            bytestring = struct.pack('>%dB' % len(values), *values)
-            self.encode_semantic(major_type, bytestring, fp)
-        elif value >= 0:
-            fp.write(encode_length(0, value))
-        else:
-            fp.write(encode_length(0x20, abs(value) - 1))
+        return None
 
-    def encode_bytestring(self, value, fp):
-        fp.write(encode_length(0x40, len(value)))
-        fp.write(value)
-
-    def encode_bytearray(self, value, fp):
-        self.encode_bytestring(bytes(value), fp)
-
-    def encode_string(self, value, fp):
-        value = value.encode('utf-8')
-        fp.write(encode_length(0x60, len(value)))
-        fp.write(value)
-
-    @shareable_encoder
-    def encode_array(self, value, fp):
-        fp.write(encode_length(0x80, len(value)))
-        for item in value:
-            self.encode(item, fp)
-
-    @shareable_encoder
-    def encode_map(self, value, fp):
-        fp.write(encode_length(0xa0, len(value)))
-        for key, value in iteritems(value):
-            self.encode(key, fp)
-            self.encode(value, fp)
-
-    def encode_semantic(self, tag, value, fp, disable_value_sharing=False):
-        """
-        Encode the given object as a tagged value.
-
-        :param int tag: the semantic tag to use
-        :param value: the value to associate with the tag
-        :param bool disable_value_sharing: when ``True``, temporarily disable value sharing. Use
-            when you know there will be no recursion involved in ``value``.
-
-        """
-        value_sharing = self.value_sharing
-        if disable_value_sharing:
-            self.value_sharing = False
-
-        fp.write(encode_length(0xc0, tag))
-        self.encode(value, fp)
-
-        if disable_value_sharing:
-            self.value_sharing = value_sharing
-
-    #
-    # Semantic decoders (major tag 6)
-    #
-
-    def encode_datetime(self, value, fp):
-        # Semantic tag 0
-        if not value.tzinfo:
-            if self.timezone:
-                value = value.replace(tzinfo=self.timezone)
-            else:
-                raise CBOREncodeError(
-                    'naive datetime encountered and no default timezone has been set')
-
-        if self.datetime_as_timestamp:
-            from calendar import timegm
-            timestamp = timegm(value.utctimetuple()) + value.microsecond // 1000000
-            self.encode_semantic(1, timestamp, fp)
-        else:
-            datestring = as_unicode(value.isoformat().replace('+00:00', 'Z'))
-            self.encode_semantic(0, datestring, fp)
-
-    def encode_date(self, value, fp):
-        from datetime import datetime, time
-        value = datetime.combine(value, time()).replace(tzinfo=timezone.utc)
-        self.encode_datetime(value, fp)
-
-    def encode_decimal(self, value, fp):
-        # Semantic tag 4
-        if value.is_nan():
-            fp.write(b'\xf9\x7e\x00')
-        elif value.is_infinite():
-            fp.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
-        else:
-            dt = value.as_tuple()
-            mantissa = sum(d * 10 ** i for i, d in enumerate(reversed(dt.digits)))
-            self.encode_semantic(4, [dt.exponent, mantissa], fp, True)
-
-    def encode_rational(self, value, fp):
-        # Semantic tag 30
-        self.encode_semantic(30, [value.numerator, value.denominator], fp, True)
-
-    def encode_regexp(self, value, fp):
-        # Semantic tag 35
-        self.encode_semantic(35, as_unicode(value.pattern), fp)
-
-    def encode_mime(self, value, fp):
-        # Semantic tag 36
-        self.encode_semantic(36, as_unicode(value.as_string()), fp)
-
-    def encode_uuid(self, value, fp):
-        # Semantic tag 37
-        self.encode_semantic(37, value.bytes, fp)
-
-    def encode_custom_tag(self, value, fp):
-        # CBORTag (for arbitrary unsupported tags)
-        self.encode_semantic(value.tag, value.value, fp)
-
-    #
-    # Special encoders (major tag 7)
-    #
-
-    def encode_simple_value(self, value, fp):
-        if value.value < 20:
-            fp.write(struct.pack('>B', 0xe0 | value.value))
-        else:
-            fp.write(struct.pack('>BB', 0xf8, value.value))
-
-    def encode_float(self, value, fp):
-        # Handle special values efficiently
-        import math
-        if math.isnan(value):
-            fp.write(b'\xf9\x7e\x00')
-        elif math.isinf(value):
-            fp.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
-        else:
-            fp.write(struct.pack('>Bd', 0xfb, value))
-
-    def encode_boolean(self, value, fp):
-        fp.write(b'\xf5' if value else b'\xf4')
-
-    def encode_none(self, value, fp):
-        fp.write(b'\xf6')
-
-    def encode_undefined(self, value, fp):
-        fp.write(b'\xf7')
-
-    default_encoders = OrderedDict([
-        (unicode, encode_string),
-        (bytes, encode_bytestring),
-        (bytearray, encode_bytearray),
-        (int, encode_int),
-        (long, encode_int),
-        (float, encode_float),
-        (('decimal', 'Decimal'), encode_decimal),
-        (bool, encode_boolean),
-        (type(None), encode_none),
-        (type(undefined), encode_undefined),
-        (tuple, encode_array),
-        (list, encode_array),
-        (dict, encode_map),
-        (Mapping, encode_map),
-        (Sequence, encode_array),
-        (('datetime', 'datetime'), encode_datetime),
-        (('datetime', 'date'), encode_date),
-        (type(re.compile('')), encode_regexp),
-        (('fractions', 'Fraction'), encode_rational),
-        (('email.message', 'Message'), encode_mime),
-        (('uuid', 'UUID'), encode_uuid),
-        (CBORTag, encode_custom_tag),
-        (CBORSimpleValue, encode_simple_value)
-    ])
+    @contextmanager
+    def disable_value_sharing(self):
+        """Disable value sharing in the encoder for the duration of the context block."""
+        old_value_sharing = self.value_sharing
+        self.value_sharing = False
+        yield
+        self.value_sharing = old_value_sharing
 
     def encode(self, obj, fp):
         """
         Encode the given object using CBOR.
 
-        This method looks up the proper encoding callback and then calls it with this encoder
-        instance and the object as arguments. The callback is expected to either write the results
-        directly to the encoder's output stream (``fp``) or call another function that does so.
+        :param obj: the object to encode
+        :param fp: a file-like object to write to
 
         """
         obj_type = obj.__class__
-        try:
-            encoder = self.encoders[obj_type]
-        except KeyError:
-            # No direct hit -- do a slower subclass check
-            from sys import modules
-
-            for type_, enc in self.encoders.items():
-                if type(type_) is tuple:
-                    modname, typename = type_
-                    type_ = getattr(modules.get(modname), typename, None)
-                    if type_ is None:
-                        continue
-
-                if issubclass(obj_type, type_):
-                    encoder = self.encoders[obj_type] = enc
-                    break
-            else:
-                raise CBOREncodeError('cannot serialize type %s' % obj_type.__name__)
+        encoder = self._encoders.get(obj_type) or self._find_encoder(obj_type) or self.default
+        if not encoder:
+            raise CBOREncodeError('cannot serialize type %s' % obj_type.__name__)
 
         encoder(self, obj, fp)
+
+    def encode_to_bytes(self, obj):
+        """
+        Encode the given object to a byte buffer and return its value as bytes.
+
+        This method was intended to be used from the ``default`` hook when an object needs to be
+        encoded separately from the rest but while still taking advantage of the shared value
+        registry.
+
+        """
+        fp = BytesIO()
+        self.encode(obj, fp)
+        return fp.getvalue()
 
 
 def dumps(obj, **kwargs):
@@ -313,14 +331,12 @@ def dumps(obj, **kwargs):
     Serialize an object to a bytestring.
 
     :param obj: the object to serialize
-    :param kwargs: keyword arguments passed to ``CBOREncoder()``
+    :param kwargs: keyword arguments passed to :class:`~.CBOREncoder`
     :return: the serialized output
     :rtype: bytes
 
     """
-    buf = BytesIO()
-    CBOREncoder(**kwargs).encode(obj, buf)
-    return buf.getvalue()
+    return CBOREncoder(**kwargs).encode_to_bytes(obj)
 
 
 def dump(obj, fp, **kwargs):
@@ -328,8 +344,8 @@ def dump(obj, fp, **kwargs):
     Serialize an object to a file.
 
     :param obj: the object to serialize
-    :param BinaryIO fp: a file-like object
-    :param kwargs: keyword arguments passed to ``CBOREncoder()``
+    :param fp: a file-like object
+    :param kwargs: keyword arguments passed to :class:`~.CBOREncoder`
 
     """
     CBOREncoder(**kwargs).encode(obj, fp)

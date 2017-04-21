@@ -20,13 +20,18 @@ if sys.version_info.major < 3:
     def as_unicode(string):
         return string.decode('utf-8')
 
+    def iteritems(self):
+        return self.iteritems()
+
+    def bytes_from_list(values):
+        return bytes(bytearray(values))
+
     PY2 = True
     byte_as_integer = ord
     timezone.utc = timezone(timedelta(0))
     xrange = xrange  # noqa
     long = long  # noqa
     unicode = unicode  # noqa
-    iteritems = dict.iteritems
 else:
     from datetime import timezone
 
@@ -36,8 +41,11 @@ else:
     def as_unicode(string):
         return string
 
+    def iteritems(self):
+        return self.items()
+
     PY2 = False
     xrange = range  # noqa
     long = int  # noqa
     unicode = str  # noqa
-    iteritems = dict.items
+    bytes_from_list = bytes
