@@ -36,13 +36,13 @@ to add a custom tag in the data stream, with the payload as the value::
             self.x = x
             self.y = y
 
-    def default_encoder(encoder, value, fp):
+    def default_encoder(encoder, value):
         # Tag number 4000 was chosen arbitrarily
-        encoder.encode(CBORTag(4000, [value.x, value.y]), fp)
+        encoder.encode(CBORTag(4000, [value.x, value.y]))
 
 The corresponding ``tag_hook`` would be::
 
-    def tag_hook(decoder, tag, fp, shareable_index=None):
+    def tag_hook(decoder, tag, shareable_index=None):
         if tag.tag != 4000:
             return tag
 
@@ -54,10 +54,10 @@ Using dicts to carry custom types
 
 The same could be done with ``object_hook``, except less efficiently::
 
-    def default_encoder(encoder, value, fp):
-        encoder.encode(dict(typename='Point', x=value.x, y=value.y), fp)
+    def default_encoder(encoder, value):
+        encoder.encode(dict(typename='Point', x=value.x, y=value.y))
 
-    def object_hook(decoder, value, fp):
+    def object_hook(decoder, value):
         if value.get('typename') != 'Point':
             return value
 
@@ -94,17 +94,17 @@ automatically automatically add the object to the shared values registry on the 
 it from being serialized twice (instead writing a reference to the data stream)::
 
     @shareable_encoder
-    def default_encoder(encoder, value, fp):
+    def default_encoder(encoder, value):
         # The state has to be serialized separately so that the decoder would have a chance to
         # create an empty instance before the shared value references are decoded
         serialized_state = encoder.encode_to_bytes(value.__dict__)
-        encoder.encode(CBORTag(3000, serialized_state), fp)
+        encoder.encode(CBORTag(3000, serialized_state))
 
 On the decoder side, you will need to initialize an empty instance for shared value lookup before
 the object's state (which may contain references to it) is decoded.
 This is done with the :meth:`~cbor2.encoder.CBORDecoder.set_shareable` method::
 
-    def tag_hook(decoder, tag, fp, shareable_index=None):
+    def tag_hook(decoder, tag, shareable_index=None):
         # Return all other tags as-is
         if tag.tag != 3000:
             return tag

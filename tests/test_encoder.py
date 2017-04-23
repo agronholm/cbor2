@@ -225,8 +225,8 @@ def test_default():
         def __init__(self, state):
             self.state = state
 
-    def default_encoder(encoder, value, fp):
-        encoder.encode(value.state, fp)
+    def default_encoder(encoder, value):
+        encoder.encode(value.state)
 
     expected = unhexlify('820305')
     obj = DummyType([3, 5])
@@ -240,8 +240,8 @@ def test_default_cyclic():
             self.value = value
 
     @shareable_encoder
-    def default_encoder(encoder, value, fp):
-        encoder.encode(CBORTag(3000, value.value), fp)
+    def default_encoder(encoder, value):
+        encoder.encode(CBORTag(3000, value.value))
 
     expected = unhexlify('D81CD90BB8D81D00')
     obj = DummyType()

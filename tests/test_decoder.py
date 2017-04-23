@@ -242,10 +242,10 @@ def test_bad_shared_reference():
 
 
 def test_uninitialized_shared_reference():
-    decoder = CBORDecoder()
-    decoder._shareables.append(None)
     fp = BytesIO(unhexlify('d81d00'))
-    exc = pytest.raises(CBORDecodeError, decoder.decode, fp)
+    decoder = CBORDecoder(fp)
+    decoder._shareables.append(None)
+    exc = pytest.raises(CBORDecodeError, decoder.decode)
     assert str(exc.value).endswith('shared value 0 has not been initialized')
 
 
@@ -283,7 +283,7 @@ def test_object_hook():
             self.state = state
 
     payload = unhexlify('A2616103616205')
-    decoded = loads(payload, object_hook=lambda decoder, value, fp: DummyType(value))
+    decoded = loads(payload, object_hook=lambda decoder, value: DummyType(value))
     assert isinstance(decoded, DummyType)
     assert decoded.state == {'a': 3, 'b': 5}
 

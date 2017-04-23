@@ -10,6 +10,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 - **BACKWARD INCOMPATIBLE** Replaced the ``semantic_decoders`` decoder option with the ``tag_hook``
   option
 - **BACKWARD INCOMPATIBLE** Replaced the ``encoders`` encoder option with the ``default`` option
+- **BACKWARD INCOMPATIBLE** Factored out the file object argument (``fp``) from all callbacks
 - Added the ``object_hook`` option for decoding dicts into complex objects
   (intended for situations where JSON compatibility is required and semantic tags cannot be used)
 - Added encoding and decoding of simple values (``CBORSimpleValue``)

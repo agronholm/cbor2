@@ -14,135 +14,135 @@ class CBORDecodeError(Exception):
     """Raised when an error occurs deserializing a CBOR datastream."""
 
 
-def decode_uint(decoder, subtype, fp, shareable_index=None, allow_infinite=False):
+def decode_uint(decoder, subtype, shareable_index=None, allow_infinite=False):
     # Major tag 0
     if subtype < 24:
         return subtype
     elif subtype == 24:
-        return struct.unpack('>B', fp.read(1))[0]
+        return struct.unpack('>B', decoder.read(1))[0]
     elif subtype == 25:
-        return struct.unpack('>H', fp.read(2))[0]
+        return struct.unpack('>H', decoder.read(2))[0]
     elif subtype == 26:
-        return struct.unpack('>L', fp.read(4))[0]
+        return struct.unpack('>L', decoder.read(4))[0]
     elif subtype == 27:
-        return struct.unpack('>Q', fp.read(8))[0]
+        return struct.unpack('>Q', decoder.read(8))[0]
     elif subtype == 31 and allow_infinite:
         return None
     else:
         raise CBORDecodeError('unknown unsigned integer subtype 0x%x' % subtype)
 
 
-def decode_negint(decoder, subtype, fp, shareable_index=None):
+def decode_negint(decoder, subtype, shareable_index=None):
     # Major tag 1
-    uint = decode_uint(decoder, subtype, fp)
+    uint = decode_uint(decoder, subtype)
     return -uint - 1
 
 
-def decode_bytestring(decoder, subtype, fp, shareable_index=None):
+def decode_bytestring(decoder, subtype, shareable_index=None):
     # Major tag 2
-    length = decode_uint(decoder, subtype, fp, allow_infinite=True)
+    length = decode_uint(decoder, subtype, allow_infinite=True)
     if length is None:
         # Indefinite length
         buf = bytearray()
         while True:
-            initial_byte = byte_as_integer(fp.read(1))
+            initial_byte = byte_as_integer(decoder.read(1))
             if initial_byte == 255:
                 return buf
             else:
-                length = decode_uint(decoder, initial_byte & 31, fp)
-                value = fp.read(length)
+                length = decode_uint(decoder, initial_byte & 31)
+                value = decoder.read(length)
                 buf.extend(value)
     else:
-        return fp.read(length)
+        return decoder.read(length)
 
 
-def decode_string(decoder, subtype, fp, shareable_index=None):
+def decode_string(decoder, subtype, shareable_index=None):
     # Major tag 3
-    return decode_bytestring(decoder, subtype, fp).decode('utf-8')
+    return decode_bytestring(decoder, subtype).decode('utf-8')
 
 
-def decode_array(decoder, subtype, fp, shareable_index=None):
+def decode_array(decoder, subtype, shareable_index=None):
     # Major tag 4
     items = []
     decoder.set_shareable(shareable_index, items)
-    length = decode_uint(decoder, subtype, fp, allow_infinite=True)
+    length = decode_uint(decoder, subtype, allow_infinite=True)
     if length is None:
         # Indefinite length
         while True:
-            value = decoder.decode(fp)
+            value = decoder.decode()
             if value is break_marker:
                 break
             else:
                 items.append(value)
     else:
         for _ in xrange(length):
-            item = decoder.decode(fp)
+            item = decoder.decode()
             items.append(item)
 
     return items
 
 
-def decode_map(decoder, subtype, fp, shareable_index=None):
+def decode_map(decoder, subtype, shareable_index=None):
     # Major tag 5
     dictionary = {}
     decoder.set_shareable(shareable_index, dictionary)
-    length = decode_uint(decoder, subtype, fp, allow_infinite=True)
+    length = decode_uint(decoder, subtype, allow_infinite=True)
     if length is None:
         # Indefinite length
         while True:
-            key = decoder.decode(fp)
+            key = decoder.decode()
             if key is break_marker:
                 break
             else:
-                value = decoder.decode(fp)
+                value = decoder.decode()
                 dictionary[key] = value
     else:
         for _ in xrange(length):
-            key = decoder.decode(fp)
-            value = decoder.decode(fp)
+            key = decoder.decode()
+            value = decoder.decode()
             dictionary[key] = value
 
     if decoder.object_hook:
-        return decoder.object_hook(decoder, dictionary, fp)
+        return decoder.object_hook(decoder, dictionary)
     else:
         return dictionary
 
 
-def decode_semantic(decoder, subtype, fp, shareable_index=None):
+def decode_semantic(decoder, subtype, shareable_index=None):
     # Major tag 6
-    tagnum = decode_uint(decoder, subtype, fp)
+    tagnum = decode_uint(decoder, subtype)
 
     # Special handling for the "shareable" tag
     if tagnum == 28:
         shareable_index = decoder._allocate_shareable()
-        return decoder.decode(fp, shareable_index)
+        return decoder.decode(shareable_index)
 
-    value = decoder.decode(fp)
+    value = decoder.decode()
     semantic_decoder = semantic_decoders.get(tagnum)
     if semantic_decoder:
-        return semantic_decoder(decoder, value, fp, shareable_index)
+        return semantic_decoder(decoder, value, shareable_index)
 
     tag = CBORTag(tagnum, value)
     if decoder.tag_hook:
-        return decoder.tag_hook(decoder, tag, fp, shareable_index)
+        return decoder.tag_hook(decoder, tag, shareable_index)
     else:
         return tag
 
 
-def decode_special(decoder, subtype, fp, shareable_index=None):
+def decode_special(decoder, subtype, shareable_index=None):
     # Simple value
     if subtype < 20:
         return CBORSimpleValue(subtype)
 
     # Major tag 7
-    return special_decoders[subtype](decoder, fp)
+    return special_decoders[subtype](decoder)
 
 
 #
 # Semantic decoders (major tag 6)
 #
 
-def decode_datetime_string(decoder, value, fp, shareable_index=None):
+def decode_datetime_string(decoder, value, shareable_index=None):
     # Semantic tag 0
     match = timestamp_re.match(value)
     if match:
@@ -158,12 +158,12 @@ def decode_datetime_string(decoder, value, fp, shareable_index=None):
         raise CBORDecodeError('invalid datetime string: {}'.format(value))
 
 
-def decode_epoch_datetime(decoder, value, fp, shareable_index=None):
+def decode_epoch_datetime(decoder, value, shareable_index=None):
     # Semantic tag 1
     return datetime.fromtimestamp(value, timezone.utc)
 
 
-def decode_positive_bignum(decoder, value, fp, shareable_index=None):
+def decode_positive_bignum(decoder, value, shareable_index=None):
     # Semantic tag 2
     if PY2:
         return sum(ord(b) * (2 ** (exp * 8)) for exp, b in enumerate(reversed(value)))
@@ -171,12 +171,12 @@ def decode_positive_bignum(decoder, value, fp, shareable_index=None):
         return sum(b * (2 ** (exp * 8)) for exp, b in enumerate(reversed(value)))
 
 
-def decode_negative_bignum(decoder, value, fp, shareable_index=None):
+def decode_negative_bignum(decoder, value, shareable_index=None):
     # Semantic tag 3
-    return -decode_positive_bignum(decoder, value, fp) - 1
+    return -decode_positive_bignum(decoder, value) - 1
 
 
-def decode_fraction(decoder, value, fp, shareable_index=None):
+def decode_fraction(decoder, value, shareable_index=None):
     # Semantic tag 4
     from decimal import Decimal
     exp = Decimal(value[0])
@@ -184,7 +184,7 @@ def decode_fraction(decoder, value, fp, shareable_index=None):
     return mantissa * (10 ** exp)
 
 
-def decode_bigfloat(decoder, value, fp, shareable_index=None):
+def decode_bigfloat(decoder, value, shareable_index=None):
     # Semantic tag 5
     from decimal import Decimal
     exp = Decimal(value[0])
@@ -192,7 +192,7 @@ def decode_bigfloat(decoder, value, fp, shareable_index=None):
     return mantissa * (2 ** exp)
 
 
-def decode_sharedref(decoder, value, fp, shareable_index=None):
+def decode_sharedref(decoder, value, shareable_index=None):
     # Semantic tag 29
     try:
         shared = decoder._shareables[value]
@@ -205,24 +205,24 @@ def decode_sharedref(decoder, value, fp, shareable_index=None):
         return shared
 
 
-def decode_rational(decoder, value, fp, shareable_index=None):
+def decode_rational(decoder, value, shareable_index=None):
     # Semantic tag 30
     from fractions import Fraction
     return Fraction(*value)
 
 
-def decode_regexp(decoder, value, fp, shareable_index=None):
+def decode_regexp(decoder, value, shareable_index=None):
     # Semantic tag 35
     return re.compile(value)
 
 
-def decode_mime(decoder, value, fp, shareable_index=None):
+def decode_mime(decoder, value, shareable_index=None):
     # Semantic tag 36
     from email.parser import Parser
     return Parser().parsestr(value)
 
 
-def decode_uuid(decoder, value, fp, shareable_index=None):
+def decode_uuid(decoder, value, shareable_index=None):
     # Semantic tag 37
     from uuid import UUID
     return UUID(bytes=value)
@@ -232,18 +232,18 @@ def decode_uuid(decoder, value, fp, shareable_index=None):
 # Special decoders (major tag 7)
 #
 
-def decode_simple_value(decoder, fp, shareable_index=None):
-    return CBORSimpleValue(struct.unpack('>B', fp.read(1))[0])
+def decode_simple_value(decoder, shareable_index=None):
+    return CBORSimpleValue(struct.unpack('>B', decoder.read(1))[0])
 
 
-def decode_float16(decoder, fp, shareable_index=None):
+def decode_float16(decoder, shareable_index=None):
     # Code adapted from RFC 7049, appendix D
     from math import ldexp
 
     def decode_single(single):
         return struct.unpack("!f", struct.pack("!I", single))[0]
 
-    payload = struct.unpack('>H', fp.read(2))[0]
+    payload = struct.unpack('>H', decoder.read(2))[0]
     value = (payload & 0x7fff) << 13 | (payload & 0x8000) << 16
     if payload & 0x7c00 != 0x7c00:
         return ldexp(decode_single(value), 112)
@@ -251,12 +251,12 @@ def decode_float16(decoder, fp, shareable_index=None):
     return decode_single(value | 0x7f800000)
 
 
-def decode_float32(decoder, fp, shareable_index=None):
-    return struct.unpack('>f', fp.read(4))[0]
+def decode_float32(decoder, shareable_index=None):
+    return struct.unpack('>f', decoder.read(4))[0]
 
 
-def decode_float64(decoder, fp, shareable_index=None):
-    return struct.unpack('>d', fp.read(8))[0]
+def decode_float64(decoder, shareable_index=None):
+    return struct.unpack('>d', decoder.read(8))[0]
 
 
 major_decoders = {
@@ -271,15 +271,15 @@ major_decoders = {
 }
 
 special_decoders = {
-    20: lambda self, fp: False,
-    21: lambda self, fp: True,
-    22: lambda self, fp: None,
-    23: lambda self, fp: undefined,
+    20: lambda self: False,
+    21: lambda self: True,
+    22: lambda self: None,
+    23: lambda self: undefined,
     24: decode_simple_value,
     25: decode_float16,
     26: decode_float32,
     27: decode_float64,
-    31: lambda self, fp: break_marker
+    31: lambda self: break_marker
 }
 
 semantic_decoders = {
@@ -310,9 +310,10 @@ class CBORDecoder(object):
         The return value is substituted for the dict in the deserialized output.
     """
 
-    __slots__ = ('tag_hook', 'object_hook', '_shareables')
+    __slots__ = ('fp', 'tag_hook', 'object_hook', '_shareables')
 
-    def __init__(self, tag_hook=None, object_hook=None):
+    def __init__(self, fp, tag_hook=None, object_hook=None):
+        self.fp = fp
         self.tag_hook = tag_hook
         self.object_hook = object_hook
         self._shareables = []
@@ -334,29 +335,37 @@ class CBORDecoder(object):
         if index is not None:
             self._shareables[index] = value
 
-    def decode(self, fp, shareable_index=None):
+    def read(self, amount):
+        """
+        Read bytes from the data stream.
+        
+        :param int amount: the number of bytes to read
+
+        """
+        return self.fp.read(amount)
+
+    def decode(self, shareable_index=None):
         """
         Decode the next value from the stream.
 
-        :param fp: a file-like object
         :raises CBORDecodeError: if there is any problem decoding the stream
 
         """
         try:
-            initial_byte = byte_as_integer(fp.read(1))
+            initial_byte = byte_as_integer(self.fp.read(1))
             major_type = initial_byte >> 5
             subtype = initial_byte & 31
         except Exception as e:
             raise CBORDecodeError('error reading major type at index {}: {}'
-                                  .format(fp.tell(), e))
+                                  .format(self.fp.tell(), e))
 
         decoder = major_decoders[major_type]
         try:
-            return decoder(self, subtype, fp, shareable_index)
+            return decoder(self, subtype, shareable_index)
         except CBORDecodeError:
             raise
         except Exception as e:
-            raise CBORDecodeError('error decoding value at index {}: {}'.format(fp.tell(), e))
+            raise CBORDecodeError('error decoding value at index {}: {}'.format(self.fp.tell(), e))
 
     def decode_from_bytes(self, buf):
         """
@@ -367,8 +376,11 @@ class CBORDecoder(object):
         registry.
 
         """
-        fp = BytesIO(buf)
-        return self.decode(fp)
+        old_fp = self.fp
+        self.fp = BytesIO(buf)
+        retval = self.decode()
+        self.fp = old_fp
+        return retval
 
 
 def loads(payload, **kwargs):
@@ -380,7 +392,8 @@ def loads(payload, **kwargs):
     :return: the deserialized object
 
     """
-    return CBORDecoder(**kwargs).decode_from_bytes(payload)
+    fp = BytesIO(payload)
+    return CBORDecoder(fp, **kwargs).decode()
 
 
 def load(fp, **kwargs):
@@ -394,4 +407,4 @@ def load(fp, **kwargs):
     :return: the deserialized object
 
     """
-    return CBORDecoder(**kwargs).decode(fp)
+    return CBORDecoder(fp, **kwargs).decode()
