@@ -15,6 +15,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   (intended for situations where JSON compatibility is required and semantic tags cannot be used)
 - Added encoding and decoding of simple values (``CBORSimpleValue``)
   (contributed by Jerry Lundström)
+- Replaced the decoder for bignums with a simpler and faster version (contributed by orent)
 - Made all relevant classes and functions available directly in the ``cbor2`` namespace
 - Added proper documentation
 

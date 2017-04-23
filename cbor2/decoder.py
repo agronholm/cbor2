@@ -3,7 +3,7 @@ import struct
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from cbor2.compat import timezone, xrange, PY2, byte_as_integer
+from cbor2.compat import timezone, xrange, byte_as_integer
 from cbor2.types import CBORTag, undefined, break_marker, CBORSimpleValue
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
@@ -165,10 +165,8 @@ def decode_epoch_datetime(decoder, value, shareable_index=None):
 
 def decode_positive_bignum(decoder, value, shareable_index=None):
     # Semantic tag 2
-    if PY2:
-        return sum(ord(b) * (2 ** (exp * 8)) for exp, b in enumerate(reversed(value)))
-    else:
-        return sum(b * (2 ** (exp * 8)) for exp, b in enumerate(reversed(value)))
+    from binascii import hexlify
+    return int(hexlify(value), 16)
 
 
 def decode_negative_bignum(decoder, value, shareable_index=None):
@@ -338,7 +336,7 @@ class CBORDecoder(object):
     def read(self, amount):
         """
         Read bytes from the data stream.
-        
+
         :param int amount: the number of bytes to read
 
         """

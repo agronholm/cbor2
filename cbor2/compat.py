@@ -26,7 +26,6 @@ if sys.version_info.major < 3:
     def bytes_from_list(values):
         return bytes(bytearray(values))
 
-    PY2 = True
     byte_as_integer = ord
     timezone.utc = timezone(timedelta(0))
     xrange = xrange  # noqa
@@ -44,7 +43,6 @@ else:
     def iteritems(self):
         return self.items()
 
-    PY2 = False
     xrange = range  # noqa
     long = int  # noqa
     unicode = str  # noqa
