@@ -11,6 +11,8 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   option
 - **BACKWARD INCOMPATIBLE** Replaced the ``encoders`` encoder option with the ``default`` option
 - **BACKWARD INCOMPATIBLE** Factored out the file object argument (``fp``) from all callbacks
+- **BACKWARD INCOMPATIBLE** The encoder no longer supports every imaginable type implementing the
+  ``Sequence`` or ``Map`` interface, as they turned out to be too broad
 - Added the ``object_hook`` option for decoding dicts into complex objects
   (intended for situations where JSON compatibility is required and semantic tags cannot be used)
 - Added encoding and decoding of simple values (``CBORSimpleValue``)

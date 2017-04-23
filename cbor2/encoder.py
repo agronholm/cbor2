@@ -1,6 +1,6 @@
 import re
 import struct
-from collections import OrderedDict, Sequence, Mapping, defaultdict
+from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from functools import wraps
 from datetime import datetime, date, time
@@ -229,8 +229,6 @@ default_encoders = OrderedDict([
     (dict, encode_map),
     (defaultdict, encode_map),
     (OrderedDict, encode_map),
-    (Mapping, encode_map),
-    (Sequence, encode_array),
     (type(undefined), encode_undefined),
     (datetime, encode_datetime),
     (date, encode_date),
