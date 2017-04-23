@@ -3,7 +3,7 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**4.0.0**
+**4.0.0** (2017-04-24)
 
 - **BACKWARD INCOMPATIBLE** Value sharing has been disabled by default, for better compatibility
   with other implementations and better performance (since it is rarely needed)
