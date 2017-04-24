@@ -1,4 +1,11 @@
 class CBORTag(object):
+    """
+    Represents a CBOR semantic tag.
+
+    :param int tag: tag number
+    :param value: encapsulated value (any object)
+    """
+
     __slots__ = 'tag', 'value'
 
     def __init__(self, tag, value):
@@ -15,6 +22,12 @@ class CBORTag(object):
 
 
 class CBORSimpleValue(object):
+    """
+    Represents a CBOR "simple value".
+
+    :param int value: the value (0-255)
+    """
+
     __slots__ = 'value'
 
     def __init__(self, value):
@@ -37,5 +50,6 @@ class UndefinedType(object):
     __slots__ = ()
 
 
+#: Represents the "undefined" value.
 undefined = UndefinedType()
 break_marker = object()

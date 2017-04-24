@@ -299,12 +299,12 @@ class CBORDecoder(object):
     """
     Deserializes a CBOR encoded byte stream.
 
-    :param tag_hook: Callable that takes 4 arguments: the decoder instance, the
-        :class:`~cbor2.types.CBORTag`, the file object and the shareable index for the resulting
-        object, if any. This callback is called for any tags for which there is no built-in
-        decoder. The return value is substituted for the CBORTag object in the deserialized output.
-    :param object_hook: Callable that takes 3 arguments: the decoder instance, the dictionary and
-        the input file object. This callback is called for each deserialized :class:`dict` object.
+    :param tag_hook: Callable that takes 3 arguments: the decoder instance, the
+        :class:`~cbor2.types.CBORTag` and the shareable index for the resulting object, if any.
+        This callback is called for any tags for which there is no built-in decoder.
+        The return value is substituted for the CBORTag object in the deserialized output.
+    :param object_hook: Callable that takes 2 arguments: the decoder instance and the dictionary.
+        This callback is called for each deserialized :class:`dict` object.
         The return value is substituted for the dict in the deserialized output.
     """
 
@@ -397,8 +397,6 @@ def loads(payload, **kwargs):
 def load(fp, **kwargs):
     """
     Deserialize an object from an open file.
-
-    The file object must support memory mapping.
 
     :param fp: the input file (any file-like object)
     :param kwargs: keyword arguments passed to :class:`~.CBORDecoder`

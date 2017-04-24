@@ -32,24 +32,24 @@ Date/time handling
 
 The CBOR specification does not support naïve datetimes (that is, datetimes where ``tzinfo`` is
 missing). When the encoder encounters such a datetime, it needs to know which timezone it belongs
-to. To this end, you can specify a default timezone by passing a ``datetime.tzinfo`` instance to
-``dump()``/``dumps()`` call as the ``timezone`` argument. Decoded datetimes are always timezone
-aware.
+to. To this end, you can specify a default timezone by passing a :class:`~datetime.tzinfo` instance
+to :func:`~cbor2.encoder.dump`/:func:`~cbor2.encoder.dumps` call as the ``timezone`` argument.
+Decoded datetimes are always timezone aware.
 
 By default, datetimes are serialized in a manner that retains their timezone offsets. You can
 optimize the data stream size by passing ``datetime_as_timestamp=False`` to
-:func:`~cbor2.dump`/:func:`~cbor2.dumps`, but this causes the timezone offset information to be
-lost.
+:func:`~cbor2.encoder.dump`/:func:`~cbor2.encoder.dumps`, but this causes the timezone offset
+information to be lost.
 
 Cyclic (recursive) data structures
 ----------------------------------
 
 If the encoder encounters a shareable object (ie. list or dict) that it has been before, it will
-by default raise :exc:`~cbor2.CBOREncodeError` indicating that a cyclic reference has been
+by default raise :exc:`~cbor2.encoder.CBOREncodeError` indicating that a cyclic reference has been
 detected and value sharing was not enabled. CBOR has, however, an extension specification that
 allows the encoder to reference a previously encoded value without processing it again. This makes
 it possible to serialize such cyclic references, but value sharing has to be enabled by passing
-``value_sharing=True`` to :func:`~cbor2.dump`/:func:`~cbor2.dumps`.
+``value_sharing=True`` to :func:`~cbor2.encoder.dump`/:func:`~cbor2.encoder.dumps`.
 
 .. warning:: Support for value sharing is rare in other CBOR implementations, so think carefully
     whether you want to enable it. It also causes some line overhead, as all potentially shareable
@@ -77,4 +77,4 @@ Tag Semantics                                Python type(s)
 37  Binary UUID                              uuid.UUID
 === ======================================== ====================================================
 
-Arbitary tags can be represented with the ``cbor2.CBORTag`` class.
+Arbitary tags can be represented with the :class:`~cbor2.types.CBORTag` class.

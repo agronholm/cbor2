@@ -248,8 +248,8 @@ class CBOREncoder(object):
     :param datetime_as_timestamp: set to ``True`` to serialize datetimes as UNIX timestamps
         (this makes datetimes more concise on the wire but loses the time zone information)
     :param datetime.tzinfo timezone: the default timezone to use for serializing naive datetimes
-    :param value_sharing: set to ``False`` to disable value sharing (this will cause an error
-        when a cyclic data structure is encountered)
+    :param value_sharing: if ``True``, allows more efficient serializing of repeated values and,
+        more importantly, cyclic data structures, at the cost of extra line overhead
     :param default: a callable that is called by the encoder with three arguments
         (encoder, value, file object) when no suitable encoder has been found, and should use the
         methods on the encoder to encode any objects it wants to add to the data stream
