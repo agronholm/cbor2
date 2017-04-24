@@ -241,11 +241,13 @@ def test_default_cyclic():
 
     @shareable_encoder
     def default_encoder(encoder, value):
-        encoder.encode(CBORTag(3000, value.value))
+        state = encoder.encode_to_bytes(value.value)
+        encoder.encode(CBORTag(3000, state))
 
-    expected = unhexlify('D81CD90BB8D81D00')
+    expected = unhexlify('D81CD90BB849D81CD90BB843D81D00')
     obj = DummyType()
-    obj.value = obj
+    obj2 = DummyType(obj)
+    obj.value = obj2
     serialized = dumps(obj, value_sharing=True, default=default_encoder)
     assert serialized == expected
 

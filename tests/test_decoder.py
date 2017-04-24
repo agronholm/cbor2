@@ -269,12 +269,33 @@ def test_unhandled_tag():
     assert decoded == CBORTag(6000, u'Hello')
 
 
+def test_decode_error():
+    exc = pytest.raises(CBORDecodeError, loads, b'\xd9')
+    exc.match('error decoding value at index 1')
+
+
 def test_tag_hook():
     def reverse(decoder, tag, fp, shareable_index=None):
         return tag.value[::-1]
 
     decoded = loads(unhexlify('d917706548656c6c6f'), tag_hook=reverse)
     assert decoded == u'olleH'
+
+
+def test_tag_hook_cyclic():
+    class DummyType(object):
+        def __init__(self, value):
+            self.value = value
+
+    def unmarshal_dummy(decoder, tag, shareable_index=None):
+        instance = DummyType.__new__(DummyType)
+        decoder.set_shareable(shareable_index, instance)
+        instance.value = decoder.decode_from_bytes(tag.value)
+        return instance
+
+    decoded = loads(unhexlify('D81CD90BB849D81CD90BB843D81D00'), tag_hook=unmarshal_dummy)
+    assert isinstance(decoded, DummyType)
+    assert decoded.value.value is decoded
 
 
 def test_object_hook():
