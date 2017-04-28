@@ -14,7 +14,7 @@ class CBORDecodeError(Exception):
     """Raised when an error occurs deserializing a CBOR datastream."""
 
 
-def decode_uint(decoder, subtype, shareable_index=None, allow_infinite=False):
+def decode_uint(decoder, subtype, shareable_index=None, allow_indefinite=False):
     # Major tag 0
     if subtype < 24:
         return subtype
@@ -26,7 +26,7 @@ def decode_uint(decoder, subtype, shareable_index=None, allow_infinite=False):
         return struct.unpack('>L', decoder.read(4))[0]
     elif subtype == 27:
         return struct.unpack('>Q', decoder.read(8))[0]
-    elif subtype == 31 and allow_infinite:
+    elif subtype == 31 and allow_indefinite:
         return None
     else:
         raise CBORDecodeError('unknown unsigned integer subtype 0x%x' % subtype)
@@ -40,7 +40,7 @@ def decode_negint(decoder, subtype, shareable_index=None):
 
 def decode_bytestring(decoder, subtype, shareable_index=None):
     # Major tag 2
-    length = decode_uint(decoder, subtype, allow_infinite=True)
+    length = decode_uint(decoder, subtype, allow_indefinite=True)
     if length is None:
         # Indefinite length
         buf = bytearray()
@@ -65,7 +65,7 @@ def decode_array(decoder, subtype, shareable_index=None):
     # Major tag 4
     items = []
     decoder.set_shareable(shareable_index, items)
-    length = decode_uint(decoder, subtype, allow_infinite=True)
+    length = decode_uint(decoder, subtype, allow_indefinite=True)
     if length is None:
         # Indefinite length
         while True:
@@ -86,7 +86,7 @@ def decode_map(decoder, subtype, shareable_index=None):
     # Major tag 5
     dictionary = {}
     decoder.set_shareable(shareable_index, dictionary)
-    length = decode_uint(decoder, subtype, allow_infinite=True)
+    length = decode_uint(decoder, subtype, allow_indefinite=True)
     if length is None:
         # Indefinite length
         while True:
