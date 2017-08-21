@@ -340,7 +340,12 @@ class CBORDecoder(object):
         :param int amount: the number of bytes to read
 
         """
-        return self.fp.read(amount)
+        data = self.fp.read(amount)
+        if len(data) < amount:
+            raise CBORDecodeError('premature end of stream (expected to read {} bytes, got {} '
+                                  'instead)'.format(amount, len(data)))
+
+        return data
 
     def decode(self, shareable_index=None):
         """

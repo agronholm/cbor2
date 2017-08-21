@@ -3,6 +3,11 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**4.0.1.** (2017-08-21)
+
+- Fixed silent truncation of decoded data if there are not enough bytes in the stream for an exact
+  read (``CBORDecodeError`` is now raised instead)
+
 **4.0.0** (2017-04-24)
 
 - **BACKWARD INCOMPATIBLE** Value sharing has been disabled by default, for better compatibility

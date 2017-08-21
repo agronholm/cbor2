@@ -269,9 +269,13 @@ def test_unhandled_tag():
     assert decoded == CBORTag(6000, u'Hello')
 
 
-def test_decode_error():
-    exc = pytest.raises(CBORDecodeError, loads, b'\xd9')
-    exc.match('error decoding value at index 1')
+def test_premature_end_of_stream():
+    """
+    Test that the decoder detects a situation where read() returned fewer than expected bytes.
+
+    """
+    exc = pytest.raises(CBORDecodeError, loads, unhexlify('437879'))
+    exc.match('premature end of stream \(expected to read 3 bytes, got 2 instead\)')
 
 
 def test_tag_hook():
