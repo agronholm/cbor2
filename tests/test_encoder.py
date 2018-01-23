@@ -1,11 +1,11 @@
 import re
 from binascii import unhexlify
+from collections import OrderedDict
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 from email.mime.text import MIMEText
 from fractions import Fraction
 from uuid import UUID
-from collections import OrderedDict
 
 import pytest
 
@@ -268,20 +268,13 @@ def test_dump_to_file(tmpdir):
     (OrderedDict([(u'b', u''), (u'a', u'')]), 'a2616160616260'),
     (OrderedDict([(b'00001', u''), (b'002', u'')]), 'A2433030326045303030303160'),
     (OrderedDict([(255, 0), (2, 0)]), 'a2020018ff00')
-], ids=[
-    'bytes in order',
-    'bytes out of order',
-    'text in order',
-    'text out of order',
-    'byte length',
-    'integer keys'])
+], ids=['bytes in order', 'bytes out of order', 'text in order',
+        'text out of order', 'byte length', 'integer keys'])
 def test_ordered_map(value, expected):
     expected = unhexlify(expected)
     assert dumps(value, canonical=True) == expected
 
 
 def test_map_exception():
-    with pytest.raises(CBOREncodeError) as e_info:
-        dumps({Decimal(33.3): u''}, canonical=True)
-    s = 'Canonical serialization requires string, bytes or integer keys in a mapping'
-    assert e_info.value.args[0] == s
+    exc = pytest.raises(CBOREncodeError, dumps, {Decimal('33.3'): u''}, canonical=True)
+    exc.match('Canonical serialization requires string, bytes or integer keys in a mapping')
