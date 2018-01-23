@@ -114,6 +114,31 @@ def encode_map(encoder, value):
         encoder.encode(val)
 
 
+def encode_sortable_key(val):
+    '''Takes a key and calculates the length of it's optimal byte representation'''
+    if val.__class__ == bytes:
+        return len(val), val
+    if val.__class__ == unicode:
+        x = val.encode('utf-8')
+        return len(x), x
+    if val.__class__ == int:
+        bytelen = len(hex(abs(val))[1:]) // 2
+        return bytelen, val
+    else:
+        s = 'Canonical serialization requires string, bytes or integer keys in a mapping'
+        raise CBOREncodeError(s)
+
+
+@shareable_encoder
+def encode_canonical_map(encoder, value):
+    '''Reorder keys according to Canonical CBOR specification'''
+    keyed_keys = ((encode_sortable_key(key), key) for key in value.keys())
+    encoder.write(encode_length(0xa0, len(value)))
+    for _, realkey in sorted(keyed_keys):
+        encoder.encode(realkey)
+        encoder.encode(value[realkey])
+
+
 def encode_semantic(encoder, value):
     encoder.write(encode_length(0xc0, value.tag))
     encoder.encode(value.value)
@@ -240,6 +265,12 @@ default_encoders = OrderedDict([
     (CBORTag, encode_semantic)
 ])
 
+canonical_encoders = OrderedDict([
+    (dict, encode_canonical_map),
+    (defaultdict, encode_canonical_map),
+    (OrderedDict, encode_canonical_map)
+])
+
 
 class CBOREncoder(object):
     """
@@ -253,13 +284,17 @@ class CBOREncoder(object):
     :param default: a callable that is called by the encoder with three arguments
         (encoder, value, file object) when no suitable encoder has been found, and should use the
         methods on the encoder to encode any objects it wants to add to the data stream
+    :param canonical: Forces mapping types to be output in a stable order to guarantee that the
+        output will always produce the same hash given the same input. This adds an additional
+        restriction on the datatypes that can be used as keys. In this case only strings, bytes
+        or integers.
     """
 
     __slots__ = ('fp', 'datetime_as_timestamp', 'timezone', 'default', 'value_sharing',
                  'json_compatible', '_shared_containers', '_encoders')
 
     def __init__(self, fp, datetime_as_timestamp=False, timezone=None, value_sharing=False,
-                 default=None):
+                 default=None, canonical=False):
         self.fp = fp
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone
@@ -267,6 +302,8 @@ class CBOREncoder(object):
         self.default = default
         self._shared_containers = {}  # indexes used for value sharing
         self._encoders = default_encoders.copy()
+        if canonical:
+            self._encoders.update(canonical_encoders)
 
     def _find_encoder(self, obj_type):
         from sys import modules

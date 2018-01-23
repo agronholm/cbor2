@@ -5,6 +5,7 @@ from decimal import Decimal
 from email.mime.text import MIMEText
 from fractions import Fraction
 from uuid import UUID
+from collections import OrderedDict
 
 import pytest
 
@@ -258,3 +259,29 @@ def test_dump_to_file(tmpdir):
         dump([1, 10], fp)
 
     assert path.read_binary() == b'\x82\x01\x0a'
+
+
+@pytest.mark.parametrize('value, expected', [
+    (OrderedDict([(b'a', b''), (b'b', b'')]), 'A2416140416240'),
+    (OrderedDict([(b'b', b''), (b'a', b'')]), 'A2416140416240'),
+    (OrderedDict([(u'a', u''), (u'b', u'')]), 'a2616160616260'),
+    (OrderedDict([(u'b', u''), (u'a', u'')]), 'a2616160616260'),
+    (OrderedDict([(b'00001', u''), (b'002', u'')]), 'A2433030326045303030303160'),
+    (OrderedDict([(255, 0), (2, 0)]), 'a2020018ff00')
+], ids=[
+    'bytes in order',
+    'bytes out of order',
+    'text in order',
+    'text out of order',
+    'byte length',
+    'integer keys'])
+def test_ordered_map(value, expected):
+    expected = unhexlify(expected)
+    assert dumps(value, canonical=True) == expected
+
+
+def test_map_exception():
+    with pytest.raises(CBOREncodeError) as e_info:
+        dumps({Decimal(33.3): u''}, canonical=True)
+    s = 'Canonical serialization requires string, bytes or integer keys in a mapping'
+    assert e_info.value.args[0] == s
