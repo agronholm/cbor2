@@ -114,28 +114,19 @@ def encode_map(encoder, value):
         encoder.encode(val)
 
 
-def encode_sortable_key(val):
-    '''Takes a key and calculates the length of it's optimal byte representation'''
-    if val.__class__ == bytes:
-        return len(val), val
-    if val.__class__ == unicode:
-        x = val.encode('utf-8')
-        return len(x), x
-    if val.__class__ == int:
-        bytelen = len(hex(abs(val))[1:]) // 2
-        return bytelen, val
-    else:
-        s = 'Canonical serialization requires string, bytes or integer keys in a mapping'
-        raise CBOREncodeError(s)
+def encode_sortable_key(value):
+    """Takes a key and calculates the length of its optimal byte representation"""
+    encoded = dumps(value, canonical=True)
+    return len(encoded), encoded
 
 
 @shareable_encoder
 def encode_canonical_map(encoder, value):
-    '''Reorder keys according to Canonical CBOR specification'''
+    """Reorder keys according to Canonical CBOR specification"""
     keyed_keys = ((encode_sortable_key(key), key) for key in value.keys())
     encoder.write(encode_length(0xa0, len(value)))
-    for _, realkey in sorted(keyed_keys):
-        encoder.encode(realkey)
+    for sortkey, realkey in sorted(keyed_keys):
+        encoder.write(sortkey[1])
         encoder.encode(value[realkey])
 
 
@@ -227,6 +218,23 @@ def encode_float(encoder, value):
         encoder.write(struct.pack('>Bd', 0xfb, value))
 
 
+def encode_minimal_float(encoder, value):
+    # Handle special values efficiently
+    import math
+    if math.isnan(value):
+        encoder.write(b'\xf9\x7e\x00')
+    elif math.isinf(value):
+        encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+    else:
+        # Note, Python versions before 3.6 do not support IEEE half-precision
+        # floats. May affect interoperability with other implementations.
+        for fmt, tag in [('>Bf', 0xfa), ('>Bd', 0xfb)]:
+            encoded = struct.pack(fmt, tag, value)
+            if struct.unpack(fmt, encoded)[1] == value:
+                encoder.write(encoded)
+                break
+
+
 def encode_boolean(encoder, value):
     encoder.write(b'\xf5' if value else b'\xf4')
 
@@ -266,6 +274,7 @@ default_encoders = OrderedDict([
 ])
 
 canonical_encoders = OrderedDict([
+    (float, encode_minimal_float),
     (dict, encode_canonical_map),
     (defaultdict, encode_canonical_map),
     (OrderedDict, encode_canonical_map)
@@ -285,9 +294,7 @@ class CBOREncoder(object):
         (encoder, value, file object) when no suitable encoder has been found, and should use the
         methods on the encoder to encode any objects it wants to add to the data stream
     :param canonical: Forces mapping types to be output in a stable order to guarantee that the
-        output will always produce the same hash given the same input. This adds an additional
-        restriction on the datatypes that can be used as keys. In this case only strings, bytes
-        or integers.
+        output will always produce the same hash given the same input.
     """
 
     __slots__ = ('fp', 'datetime_as_timestamp', 'timezone', 'default', 'value_sharing',

@@ -273,8 +273,3 @@ def test_dump_to_file(tmpdir):
 def test_ordered_map(value, expected):
     expected = unhexlify(expected)
     assert dumps(value, canonical=True) == expected
-
-
-def test_map_exception():
-    exc = pytest.raises(CBOREncodeError, dumps, {Decimal('33.3'): u''}, canonical=True)
-    exc.match('Canonical serialization requires string, bytes or integer keys in a mapping')
