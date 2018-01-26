@@ -53,7 +53,11 @@ if sys.version_info.major >= 3 and sys.version_info.minor >= 6:
     import struct
 
     def pack_float16(value):
-        return struct.pack('>Be', 0xf9, value)
+        try:
+            packed = struct.pack('>Be', 0xf9, value)
+        except OverflowError:
+            packed = False
+        return packed
 
     def unpack_float16(payload):
         return struct.unpack('>e', payload)[0]
