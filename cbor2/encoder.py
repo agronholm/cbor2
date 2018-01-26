@@ -7,6 +7,7 @@ from datetime import datetime, date, time
 from io import BytesIO
 
 from cbor2.compat import iteritems, timezone, long, unicode, as_unicode, bytes_from_list
+from cbor2.compat import pack_float16, unpack_float16
 from cbor2.types import CBORTag, undefined, CBORSimpleValue
 
 
@@ -114,16 +115,16 @@ def encode_map(encoder, value):
         encoder.encode(val)
 
 
-def encode_sortable_key(value):
+def encode_sortable_key(encoder, value):
     """Takes a key and calculates the length of its optimal byte representation"""
-    encoded = dumps(value, canonical=True)
+    encoded = encoder.encode_to_bytes(value)
     return len(encoded), encoded
 
 
 @shareable_encoder
 def encode_canonical_map(encoder, value):
     """Reorder keys according to Canonical CBOR specification"""
-    keyed_keys = ((encode_sortable_key(key), key) for key in value.keys())
+    keyed_keys = ((encode_sortable_key(encoder, key), key) for key in value.keys())
     encoder.write(encode_length(0xa0, len(value)))
     for sortkey, realkey in sorted(keyed_keys):
         encoder.write(sortkey[1])
@@ -226,13 +227,15 @@ def encode_minimal_float(encoder, value):
     elif math.isinf(value):
         encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
     else:
-        # Note, Python versions before 3.6 do not support IEEE half-precision
-        # floats. May affect interoperability with other implementations.
+        f16 = pack_float16(value)
+        if f16 and unpack_float16(f16[1:]) == value:
+            encoder.write(f16)
+            return
         for fmt, tag in [('>Bf', 0xfa), ('>Bd', 0xfb)]:
             encoded = struct.pack(fmt, tag, value)
             if struct.unpack(fmt, encoded)[1] == value:
                 encoder.write(encoded)
-                break
+                return
 
 
 def encode_boolean(encoder, value):

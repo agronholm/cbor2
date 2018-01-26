@@ -3,7 +3,7 @@ import struct
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from cbor2.compat import timezone, xrange, byte_as_integer
+from cbor2.compat import timezone, xrange, byte_as_integer, unpack_float16
 from cbor2.types import CBORTag, undefined, break_marker, CBORSimpleValue
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
@@ -235,18 +235,8 @@ def decode_simple_value(decoder, shareable_index=None):
 
 
 def decode_float16(decoder, shareable_index=None):
-    # Code adapted from RFC 7049, appendix D
-    from math import ldexp
-
-    def decode_single(single):
-        return struct.unpack("!f", struct.pack("!I", single))[0]
-
-    payload = struct.unpack('>H', decoder.read(2))[0]
-    value = (payload & 0x7fff) << 13 | (payload & 0x8000) << 16
-    if payload & 0x7c00 != 0x7c00:
-        return ldexp(decode_single(value), 112)
-
-    return decode_single(value | 0x7f800000)
+    payload = decoder.read(2)
+    return unpack_float16(payload)
 
 
 def decode_float32(decoder, shareable_index=None):

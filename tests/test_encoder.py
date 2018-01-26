@@ -273,3 +273,16 @@ def test_dump_to_file(tmpdir):
 def test_ordered_map(value, expected):
     expected = unhexlify(expected)
     assert dumps(value, canonical=True) == expected
+
+
+@pytest.mark.parametrize('value, expected', [
+    (3.5, 'F94300'),
+    (100000.0, 'FA47C35000'),
+    (3.8, 'FB400E666666666666'),
+    (float('inf'), 'f97c00'),
+    (float('nan'), 'f97e00'),
+    (float('-inf'), 'f9fc00')
+], ids=['float 16', 'float 32', 'float 64', 'inf', 'nan', '-inf'])
+def test_floats(value, expected):
+    expected = unhexlify(expected)
+    assert dumps(value, canonical=True) == expected
