@@ -64,53 +64,41 @@ if sys.version_info.major >= 3 and sys.version_info.minor >= 6:
 
 
 else:
-    try:
-        from numpy import float16, dtype, frombuffer
+    from math import ldexp
+    import struct
 
-        big_e_float16 = dtype(float16).newbyteorder('>')
+    def pack_float16(value):
+        # Based on node-cbor by hildjj
+        # which was based in turn on Carsten Borman's cn-cbor
+        u32 = struct.pack('>f', value)
+        u = struct.unpack('>I', u32)[0]
 
-        def pack_float16(value):
-            return b'\xf9' + float16(value).byteswap().tobytes()
+        if u & 0x1FFF != 0:
+            return False
 
-        def unpack_float16(payload):
-            return frombuffer(payload, dtype=big_e_float16)[0]
+        s16 = (u >> 16) & 0x8000
+        exponent = (u >> 23) & 0xff
+        mantissa = u & 0x7fffff
 
-    except ImportError:
-        from math import ldexp
-        import struct
-
-        def pack_float16(value):
-            # Based on node-cbor by hildjj
-            # which was based in turn on Carsten Borman's cn-cbor
-            u32 = struct.pack('>f', value)
-            u = struct.unpack('>I', u32)[0]
-
-            if u & 0x1FFF != 0:
+        if exponent >= 113 and exponent <= 142:
+            s16 += ((exponent - 112) << 10) + (mantissa >> 13)
+        elif exponent >= 103 and exponent < 113:
+            if mantissa & ((1 << (126 - exponent)) - 1):
                 return False
 
-            s16 = (u >> 16) & 0x8000
-            exponent = (u >> 23) & 0xff
-            mantissa = u & 0x7fffff
+            s16 += ((mantissa + 0x800000) >> (126 - exponent))
+        else:
+            return False
+        return struct.pack('>BH', 0xf9, s16)
 
-            if exponent >= 113 and exponent <= 142:
-                s16 += ((exponent - 112) << 10) + (mantissa >> 13)
-            elif exponent >= 103 and exponent < 113:
-                if mantissa & ((1 << (126 - exponent)) - 1):
-                    return False
+    def unpack_float16(payload):
+        # Code adapted from RFC 7049, appendix D
+        def decode_single(single):
+            return struct.unpack("!f", struct.pack("!I", single))[0]
 
-                s16 += ((mantissa + 0x800000) >> (126 - exponent))
-            else:
-                return False
-            return struct.pack('>BH', 0xf9, s16)
+        payload = struct.unpack('>H', payload)[0]
+        value = (payload & 0x7fff) << 13 | (payload & 0x8000) << 16
+        if payload & 0x7c00 != 0x7c00:
+            return ldexp(decode_single(value), 112)
 
-        def unpack_float16(payload):
-            # Code adapted from RFC 7049, appendix D
-            def decode_single(single):
-                return struct.unpack("!f", struct.pack("!I", single))[0]
-
-            payload = struct.unpack('>H', payload)[0]
-            value = (payload & 0x7fff) << 13 | (payload & 0x8000) << 16
-            if payload & 0x7c00 != 0x7c00:
-                return ldexp(decode_single(value), 112)
-
-            return decode_single(value | 0x7f800000)
+        return decode_single(value | 0x7f800000)
