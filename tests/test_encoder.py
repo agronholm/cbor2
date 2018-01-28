@@ -281,8 +281,17 @@ def test_ordered_map(value, expected):
     (3.8, 'FB400E666666666666'),
     (float('inf'), 'f97c00'),
     (float('nan'), 'f97e00'),
-    (float('-inf'), 'f9fc00')
-], ids=['float 16', 'float 32', 'float 64', 'inf', 'nan', '-inf'])
-def test_floats(value, expected):
+    (float('-inf'), 'f9fc00'),
+    (float.fromhex('0x1.0p-24'), 'f90001'),
+    (float.fromhex('0x1.4p-24'), 'fa33a00000'),
+    (float.fromhex('0x1.ff8p-63'), 'fa207fc000')
+], ids=['float 16', 'float 32', 'float 64', 'inf', 'nan', '-inf',
+        'float 16 large exponent', 'mantissa o/f to 32',
+        'exponent o/f to 32'])
+def test_minimal_floats(value, expected):
     expected = unhexlify(expected)
     assert dumps(value, canonical=True) == expected
+
+
+def test_tuple_key():
+    assert dumps({(2, 1): u''}) == unhexlify('a182020160')

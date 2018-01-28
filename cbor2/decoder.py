@@ -357,7 +357,7 @@ class CBORDecoder(object):
             return decoder(self, subtype, shareable_index)
         except CBORDecodeError:
             raise
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             raise CBORDecodeError('error decoding value at index {}: {}'.format(self.fp.tell(), e))
 
     def decode_from_bytes(self, buf):
