@@ -325,3 +325,10 @@ def test_load_from_file(tmpdir):
         obj = load(fp)
 
     assert obj == [1, 10]
+
+
+def test_set():
+    payload = unhexlify('d9010283616361626161')
+    value = loads(payload)
+    assert type(value) is set
+    assert value == set([u'a', u'b', u'c'])

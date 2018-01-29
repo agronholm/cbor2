@@ -258,3 +258,9 @@ def test_dump_to_file(tmpdir):
         dump([1, 10], fp)
 
     assert path.read_binary() == b'\x82\x01\x0a'
+
+
+def test_set():
+    value = set([u'a', u'b', u'c'])
+    serialized = dumps(value)
+    assert len(serialized) == 10 and serialized.startswith(unhexlify('d9010283'))
