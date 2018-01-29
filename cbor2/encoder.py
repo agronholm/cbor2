@@ -197,6 +197,11 @@ def encode_uuid(encoder, value):
     encode_semantic(encoder, CBORTag(37, value.bytes))
 
 
+def encode_set(encoder, value):
+    # Semantic tag 258
+    encode_semantic(encoder, CBORTag(258, tuple(value)))
+
+
 #
 # Special encoders (major tag 7)
 #
@@ -274,7 +279,8 @@ default_encoders = OrderedDict([
     (('email.message', 'Message'), encode_mime),
     (('uuid', 'UUID'), encode_uuid),
     (CBORSimpleValue, encode_simple_value),
-    (CBORTag, encode_semantic)
+    (CBORTag, encode_semantic),
+    (set, encode_set)
 ])
 
 canonical_encoders = OrderedDict([

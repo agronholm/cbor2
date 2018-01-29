@@ -226,6 +226,11 @@ def decode_uuid(decoder, value, shareable_index=None):
     return UUID(bytes=value)
 
 
+def decode_set(decoder, value, shareable_index=None):
+    # Semantic tag 258
+    return set(value)
+
+
 #
 # Special decoders (major tag 7)
 #
@@ -281,7 +286,8 @@ semantic_decoders = {
     30: decode_rational,
     35: decode_regexp,
     36: decode_mime,
-    37: decode_uuid
+    37: decode_uuid,
+    258: decode_set
 }
 
 
