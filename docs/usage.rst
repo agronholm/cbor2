@@ -75,6 +75,7 @@ Tag Semantics                                Python type(s)
 35  Regular expression                       ``_sre.SRE_Pattern`` (result of ``re.compile(...)``)
 36  MIME message                             email.message.Message
 37  Binary UUID                              uuid.UUID
+258 Set of unique items                      set
 === ======================================== ====================================================
 
 Arbitary tags can be represented with the :class:`~cbor2.types.CBORTag` class.
