@@ -87,10 +87,20 @@ def decode_map(decoder, subtype, shareable_index=None):
     dictionary = {}
     decoder.set_shareable(shareable_index, dictionary)
     length = decode_uint(decoder, subtype, allow_indefinite=True)
+
+    def make_hashable(key):
+        # Handle arrays and indefinite-length bytestrings used as
+        # keys
+        if type(key) is list:
+            return tuple(key)
+        elif type(key) is bytearray:
+            return bytes(key)
+        else:
+            return key
     if length is None:
         # Indefinite length
         while True:
-            key = decoder.decode()
+            key = make_hashable(decoder.decode())
             if key is break_marker:
                 break
             else:
@@ -98,7 +108,7 @@ def decode_map(decoder, subtype, shareable_index=None):
                 dictionary[key] = value
     else:
         for _ in xrange(length):
-            key = decoder.decode()
+            key = make_hashable(decoder.decode())
             value = decoder.decode()
             dictionary[key] = value
 
