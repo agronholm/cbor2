@@ -258,3 +258,7 @@ def test_dump_to_file(tmpdir):
         dump([1, 10], fp)
 
     assert path.read_binary() == b'\x82\x01\x0a'
+
+
+def test_tuple_key():
+    assert dumps({(2, 1): u''}) == unhexlify('a182020160')

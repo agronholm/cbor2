@@ -125,7 +125,8 @@ def test_array(payload, expected):
 
 @pytest.mark.parametrize('payload, expected', [
     ('a0', {}),
-    ('a201020304', {1: 2, 3: 4})
+    ('a201020304', {1: 2, 3: 4}),
+    ('A18201026178', {(1, 2): 'x'})
 ])
 def test_map(payload, expected):
     decoded = loads(unhexlify(payload))
