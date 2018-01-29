@@ -286,7 +286,7 @@ def test_ordered_map(value, expected):
     (float.fromhex('0x1.4p-24'), 'fa33a00000'),
     (float.fromhex('0x1.ff8p-63'), 'fa207fc000')
 ], ids=['float 16', 'float 32', 'float 64', 'inf', 'nan', '-inf',
-        'float 16 large exponent', 'mantissa o/f to 32',
+        'float 16 minimum positive subnormal', 'mantissa o/f to 32',
         'exponent o/f to 32'])
 def test_minimal_floats(value, expected):
     expected = unhexlify(expected)

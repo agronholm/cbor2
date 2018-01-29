@@ -51,58 +51,52 @@ else:  # pragma no cover
     bytes_from_list = bytes
 
 
-def pack_float16(value):
-    if sys.version_info.major >= 3 and sys.version_info.minor >= 6:
-        # Python 3.6 added 16 bit floating point to struct
+if sys.version_info.major >= 3 and sys.version_info.minor >= 6:
+    # Python 3.6 added 16 bit floating point to struct
 
-        def pack_float16_inner(value):
-            try:
-                packed = struct.pack('>Be', 0xf9, value)
-            except OverflowError:
-                packed = False
-            return packed
-    else:
-        def pack_float16_inner(value):
-            # Based on node-cbor by hildjj
-            # which was based in turn on Carsten Borman's cn-cbor
-            u32 = struct.pack('>f', value)
-            u = struct.unpack('>I', u32)[0]
+    def pack_float16(value):
+        try:
+            packed = struct.pack('>Be', 0xf9, value)
+        except OverflowError:
+            packed = False
+        return packed
 
-            if u & 0x1FFF != 0:
+    def unpack_float16(payload):
+        return struct.unpack('>e', payload)[0]
+
+else:
+    def pack_float16(value):
+        # Based on node-cbor by hildjj
+        # which was based in turn on Carsten Borman's cn-cbor
+        u32 = struct.pack('>f', value)
+        u = struct.unpack('>I', u32)[0]
+
+        if u & 0x1FFF != 0:
+            return False
+
+        s16 = (u >> 16) & 0x8000
+        exponent = (u >> 23) & 0xff
+        mantissa = u & 0x7fffff
+
+        if exponent >= 113 and exponent <= 142:
+            s16 += ((exponent - 112) << 10) + (mantissa >> 13)
+        elif exponent >= 103 and exponent < 113:
+            if mantissa & ((1 << (126 - exponent)) - 1):
                 return False
 
-            s16 = (u >> 16) & 0x8000
-            exponent = (u >> 23) & 0xff
-            mantissa = u & 0x7fffff
+            s16 += ((mantissa + 0x800000) >> (126 - exponent))
+        else:
+            return False
+        return struct.pack('>BH', 0xf9, s16)
 
-            if exponent >= 113 and exponent <= 142:
-                s16 += ((exponent - 112) << 10) + (mantissa >> 13)
-            elif exponent >= 103 and exponent < 113:
-                if mantissa & ((1 << (126 - exponent)) - 1):
-                    return False
+    def unpack_float16(payload):
+        # Code adapted from RFC 7049, appendix D
+        def decode_single(single):
+            return struct.unpack("!f", struct.pack("!I", single))[0]
 
-                s16 += ((mantissa + 0x800000) >> (126 - exponent))
-            else:
-                return False
-            return struct.pack('>BH', 0xf9, s16)
-    return pack_float16_inner(value)
+        payload = struct.unpack('>H', payload)[0]
+        value = (payload & 0x7fff) << 13 | (payload & 0x8000) << 16
+        if payload & 0x7c00 != 0x7c00:
+            return ldexp(decode_single(value), 112)
 
-
-def unpack_float16(payload):
-    if sys.version_info.major >= 3 and sys.version_info.minor >= 6:
-
-        def unpack_float16_inner(payload):
-            return struct.unpack('>e', payload)[0]
-    else:
-        def unpack_float16_inner(payload):
-            # Code adapted from RFC 7049, appendix D
-            def decode_single(single):
-                return struct.unpack("!f", struct.pack("!I", single))[0]
-
-            payload = struct.unpack('>H', payload)[0]
-            value = (payload & 0x7fff) << 13 | (payload & 0x8000) << 16
-            if payload & 0x7c00 != 0x7c00:
-                return ldexp(decode_single(value), 112)
-
-            return decode_single(value | 0x7f800000)
-    return unpack_float16_inner(payload)
+        return decode_single(value | 0x7f800000)

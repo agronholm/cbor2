@@ -325,3 +325,12 @@ def test_load_from_file(tmpdir):
         obj = load(fp)
 
     assert obj == [1, 10]
+
+
+def test_nested_exception():
+    import sys
+    if sys.version_info.major >= 3:
+        exc = pytest.raises((CBORDecodeError, TypeError), loads, unhexlify('A1D9177082010201'))
+        exc.match("error decoding value at index 8: unhashable type: 'CBORTag'")
+    else:
+        assert True
