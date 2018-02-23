@@ -351,11 +351,16 @@ class CBORDecoder(object):
         """
         Decode the next value from the stream.
 
+        :raises EOFError: if EOF is encountered while reading
         :raises CBORDecodeError: if there is any problem decoding the stream
 
         """
+        byte = self.fp.read(1)
+        if not byte:
+            raise EOFError()
+
         try:
-            initial_byte = byte_as_integer(self.fp.read(1))
+            initial_byte = byte_as_integer(byte)
             major_type = initial_byte >> 5
             subtype = initial_byte & 31
         except Exception as e:
