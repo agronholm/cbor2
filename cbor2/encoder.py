@@ -227,15 +227,16 @@ def encode_minimal_float(encoder, value):
     elif math.isinf(value):
         encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
     else:
-        f16 = pack_float16(value)
-        if f16 and unpack_float16(f16[1:]) == value:
-            encoder.write(f16)
-            return
-        for fmt, tag in [('>Bf', 0xfa), ('>Bd', 0xfb)]:
-            encoded = struct.pack(fmt, tag, value)
-            if struct.unpack(fmt, encoded)[1] == value:
+        encoded = struct.pack('>Bf', 0xfa, value)
+        if struct.unpack('>Bf', encoded)[1] != value:
+            encoded = struct.pack('>Bd', 0xfb, value)
+            encoder.write(encoded)
+        else:
+            f16 = pack_float16(value)
+            if f16 and unpack_float16(f16[1:]) == value:
+                encoder.write(f16)
+            else:
                 encoder.write(encoded)
-                return
 
 
 def encode_boolean(encoder, value):
