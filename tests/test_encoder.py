@@ -1,5 +1,6 @@
 import re
 from binascii import unhexlify
+from collections import OrderedDict
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 from email.mime.text import MIMEText
@@ -258,3 +259,39 @@ def test_dump_to_file(tmpdir):
         dump([1, 10], fp)
 
     assert path.read_binary() == b'\x82\x01\x0a'
+
+
+@pytest.mark.parametrize('value, expected', [
+    (OrderedDict([(b'a', b''), (b'b', b'')]), 'A2416140416240'),
+    (OrderedDict([(b'b', b''), (b'a', b'')]), 'A2416140416240'),
+    (OrderedDict([(u'a', u''), (u'b', u'')]), 'a2616160616260'),
+    (OrderedDict([(u'b', u''), (u'a', u'')]), 'a2616160616260'),
+    (OrderedDict([(b'00001', u''), (b'002', u'')]), 'A2433030326045303030303160'),
+    (OrderedDict([(255, 0), (2, 0)]), 'a2020018ff00')
+], ids=['bytes in order', 'bytes out of order', 'text in order',
+        'text out of order', 'byte length', 'integer keys'])
+def test_ordered_map(value, expected):
+    expected = unhexlify(expected)
+    assert dumps(value, canonical=True) == expected
+
+
+@pytest.mark.parametrize('value, expected', [
+    (3.5, 'F94300'),
+    (100000.0, 'FA47C35000'),
+    (3.8, 'FB400E666666666666'),
+    (float('inf'), 'f97c00'),
+    (float('nan'), 'f97e00'),
+    (float('-inf'), 'f9fc00'),
+    (float.fromhex('0x1.0p-24'), 'f90001'),
+    (float.fromhex('0x1.4p-24'), 'fa33a00000'),
+    (float.fromhex('0x1.ff8p-63'), 'fa207fc000')
+], ids=['float 16', 'float 32', 'float 64', 'inf', 'nan', '-inf',
+        'float 16 minimum positive subnormal', 'mantissa o/f to 32',
+        'exponent o/f to 32'])
+def test_minimal_floats(value, expected):
+    expected = unhexlify(expected)
+    assert dumps(value, canonical=True) == expected
+
+
+def test_tuple_key():
+    assert dumps({(2, 1): u''}) == unhexlify('a182020160')

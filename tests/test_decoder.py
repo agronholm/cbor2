@@ -2,6 +2,7 @@ from __future__ import division
 
 import math
 import re
+import sys
 from binascii import unhexlify
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -325,3 +326,10 @@ def test_load_from_file(tmpdir):
         obj = load(fp)
 
     assert obj == [1, 10]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="No exception with python 2.7")
+def test_nested_exception():
+    exc = pytest.raises((CBORDecodeError, TypeError), loads, unhexlify('A1D9177082010201'))
+    exc.match(r"error decoding value at index 8: "
+              r"(unhashable type: 'CBORTag'|'CBORTag' objects are unhashable)")

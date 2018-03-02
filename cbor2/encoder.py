@@ -7,6 +7,7 @@ from datetime import datetime, date, time
 from io import BytesIO
 
 from cbor2.compat import iteritems, timezone, long, unicode, as_unicode, bytes_from_list
+from cbor2.compat import pack_float16, unpack_float16
 from cbor2.types import CBORTag, undefined, CBORSimpleValue
 
 
@@ -114,6 +115,22 @@ def encode_map(encoder, value):
         encoder.encode(val)
 
 
+def encode_sortable_key(encoder, value):
+    """Takes a key and calculates the length of its optimal byte representation"""
+    encoded = encoder.encode_to_bytes(value)
+    return len(encoded), encoded
+
+
+@shareable_encoder
+def encode_canonical_map(encoder, value):
+    """Reorder keys according to Canonical CBOR specification"""
+    keyed_keys = ((encode_sortable_key(encoder, key), key) for key in value.keys())
+    encoder.write(encode_length(0xa0, len(value)))
+    for sortkey, realkey in sorted(keyed_keys):
+        encoder.write(sortkey[1])
+        encoder.encode(value[realkey])
+
+
 def encode_semantic(encoder, value):
     encoder.write(encode_length(0xc0, value.tag))
     encoder.encode(value.value)
@@ -202,6 +219,26 @@ def encode_float(encoder, value):
         encoder.write(struct.pack('>Bd', 0xfb, value))
 
 
+def encode_minimal_float(encoder, value):
+    # Handle special values efficiently
+    import math
+    if math.isnan(value):
+        encoder.write(b'\xf9\x7e\x00')
+    elif math.isinf(value):
+        encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+    else:
+        encoded = struct.pack('>Bf', 0xfa, value)
+        if struct.unpack('>Bf', encoded)[1] != value:
+            encoded = struct.pack('>Bd', 0xfb, value)
+            encoder.write(encoded)
+        else:
+            f16 = pack_float16(value)
+            if f16 and unpack_float16(f16[1:]) == value:
+                encoder.write(f16)
+            else:
+                encoder.write(encoded)
+
+
 def encode_boolean(encoder, value):
     encoder.write(b'\xf5' if value else b'\xf4')
 
@@ -240,6 +277,13 @@ default_encoders = OrderedDict([
     (CBORTag, encode_semantic)
 ])
 
+canonical_encoders = OrderedDict([
+    (float, encode_minimal_float),
+    (dict, encode_canonical_map),
+    (defaultdict, encode_canonical_map),
+    (OrderedDict, encode_canonical_map)
+])
+
 
 class CBOREncoder(object):
     """
@@ -253,13 +297,15 @@ class CBOREncoder(object):
     :param default: a callable that is called by the encoder with three arguments
         (encoder, value, file object) when no suitable encoder has been found, and should use the
         methods on the encoder to encode any objects it wants to add to the data stream
+    :param canonical: Forces mapping types to be output in a stable order to guarantee that the
+        output will always produce the same hash given the same input.
     """
 
     __slots__ = ('fp', 'datetime_as_timestamp', 'timezone', 'default', 'value_sharing',
                  'json_compatible', '_shared_containers', '_encoders')
 
     def __init__(self, fp, datetime_as_timestamp=False, timezone=None, value_sharing=False,
-                 default=None):
+                 default=None, canonical=False):
         self.fp = fp
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone
@@ -267,6 +313,8 @@ class CBOREncoder(object):
         self.default = default
         self._shared_containers = {}  # indexes used for value sharing
         self._encoders = default_encoders.copy()
+        if canonical:
+            self._encoders.update(canonical_encoders)
 
     def _find_encoder(self, obj_type):
         from sys import modules
