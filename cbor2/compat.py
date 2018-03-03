@@ -3,7 +3,7 @@ import struct
 import sys
 
 
-if sys.version_info.major < 3:  # pragma: no cover
+if sys.version_info.major < 3:
     from datetime import tzinfo, timedelta
 
     class timezone(tzinfo):
@@ -30,10 +30,10 @@ if sys.version_info.major < 3:  # pragma: no cover
 
     byte_as_integer = ord
     timezone.utc = timezone(timedelta(0))
-    xrange = xrange  # noqa
-    long = long  # noqa
-    unicode = unicode  # noqa
-else:  # pragma no cover
+    xrange = xrange  # noqa: F821
+    long = long  # noqa: F821
+    unicode = unicode  # noqa: F821
+else:
     from datetime import timezone
 
     def byte_as_integer(bytestr):
@@ -45,9 +45,9 @@ else:  # pragma no cover
     def iteritems(self):
         return self.items()
 
-    xrange = range  # noqa
-    long = int  # noqa
-    unicode = str  # noqa
+    xrange = range
+    long = int
+    unicode = str
     bytes_from_list = bytes
 
 
@@ -56,14 +56,12 @@ if sys.version_info.major >= 3 and sys.version_info.minor >= 6:
 
     def pack_float16(value):
         try:
-            packed = struct.pack('>Be', 0xf9, value)
+            return struct.pack('>Be', 0xf9, value)
         except OverflowError:
-            packed = False
-        return packed
+            return False
 
     def unpack_float16(payload):
         return struct.unpack('>e', payload)[0]
-
 else:
     def pack_float16(value):
         # Based on node-cbor by hildjj
@@ -78,15 +76,16 @@ else:
         exponent = (u >> 23) & 0xff
         mantissa = u & 0x7fffff
 
-        if exponent >= 113 and exponent <= 142:
+        if 113 <= exponent <= 142:
             s16 += ((exponent - 112) << 10) + (mantissa >> 13)
-        elif exponent >= 103 and exponent < 113:
+        elif 103 <= exponent < 113:
             if mantissa & ((1 << (126 - exponent)) - 1):
                 return False
 
             s16 += ((mantissa + 0x800000) >> (126 - exponent))
         else:
             return False
+
         return struct.pack('>BH', 0xf9, s16)
 
     def unpack_float16(payload):
