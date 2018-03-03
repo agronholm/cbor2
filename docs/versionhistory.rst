@@ -3,7 +3,11 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**4.0.1.** (2017-08-21)
+**UNRELEASED**
+
+- Added canonical encoding (via ``canonical=True``) (PR by Sekenre)
+
+**4.0.1** (2017-08-21)
 
 - Fixed silent truncation of decoded data if there are not enough bytes in the stream for an exact
   read (``CBORDecodeError`` is now raised instead)
