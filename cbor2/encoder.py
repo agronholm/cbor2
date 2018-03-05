@@ -202,6 +202,11 @@ def encode_set(encoder, value):
     encode_semantic(encoder, CBORTag(258, tuple(value)))
 
 
+def encode_canonical_set(encoder, value):
+    # Semantic tag 258
+    values = sorted([(encode_sortable_key(encoder, key), key) for key in value])
+    encode_semantic(encoder, CBORTag(258, [key[1] for key in values]))
+
 #
 # Special encoders (major tag 7)
 #
@@ -287,7 +292,8 @@ canonical_encoders = OrderedDict([
     (float, encode_minimal_float),
     (dict, encode_canonical_map),
     (defaultdict, encode_canonical_map),
-    (OrderedDict, encode_canonical_map)
+    (OrderedDict, encode_canonical_map),
+    (set, encode_canonical_set)
 ])
 
 
