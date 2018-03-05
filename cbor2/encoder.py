@@ -207,6 +207,7 @@ def encode_canonical_set(encoder, value):
     values = sorted([(encode_sortable_key(encoder, key), key) for key in value])
     encode_semantic(encoder, CBORTag(258, [key[1] for key in values]))
 
+
 #
 # Special encoders (major tag 7)
 #

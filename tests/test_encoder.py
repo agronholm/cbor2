@@ -306,4 +306,4 @@ def test_set():
 def test_canonical_set():
     value = set([u'y', u'x', u'aa', u'a'])
     serialized = dumps(value, canonical=True)
-    assert serialized == unhexlify('d9010284616161786179626161') 
+    assert serialized == unhexlify('d9010284616161786179626161')
