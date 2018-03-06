@@ -295,3 +295,15 @@ def test_minimal_floats(value, expected):
 
 def test_tuple_key():
     assert dumps({(2, 1): u''}) == unhexlify('a182020160')
+
+
+def test_set():
+    value = set([u'a', u'b', u'c'])
+    serialized = dumps(value)
+    assert len(serialized) == 10 and serialized.startswith(unhexlify('d9010283'))
+
+
+def test_canonical_set():
+    value = set([u'y', u'x', u'aa', u'a'])
+    serialized = dumps(value, canonical=True)
+    assert serialized == unhexlify('d9010284616161786179626161')

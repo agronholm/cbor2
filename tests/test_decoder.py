@@ -333,3 +333,10 @@ def test_nested_exception():
     exc = pytest.raises((CBORDecodeError, TypeError), loads, unhexlify('A1D9177082010201'))
     exc.match(r"error decoding value at index 8: "
               r"(unhashable type: 'CBORTag'|'CBORTag' objects are unhashable)")
+
+
+def test_set():
+    payload = unhexlify('d9010283616361626161')
+    value = loads(payload)
+    assert type(value) is set
+    assert value == set([u'a', u'b', u'c'])
