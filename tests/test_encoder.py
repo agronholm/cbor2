@@ -297,14 +297,22 @@ def test_tuple_key():
     assert dumps({(2, 1): u''}) == unhexlify('a182020160')
 
 
-def test_set():
+@pytest.mark.parametrize('frozen', [False, True], ids=['set', 'frozenset'])
+def test_set(frozen):
     value = {u'a', u'b', u'c'}
+    if frozen:
+        value = frozenset(value)
+
     serialized = dumps(value)
     assert len(serialized) == 10
     assert serialized.startswith(unhexlify('d9010283'))
 
 
-def test_canonical_set():
+@pytest.mark.parametrize('frozen', [False, True], ids=['set', 'frozenset'])
+def test_canonical_set(frozen):
     value = {u'y', u'x', u'aa', u'a'}
+    if frozen:
+        value = frozenset(value)
+
     serialized = dumps(value, canonical=True)
     assert serialized == unhexlify('d9010284616161786179626161')

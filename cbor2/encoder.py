@@ -286,7 +286,8 @@ default_encoders = OrderedDict([
     (('uuid', 'UUID'), encode_uuid),
     (CBORSimpleValue, encode_simple_value),
     (CBORTag, encode_semantic),
-    (set, encode_set)
+    (set, encode_set),
+    (frozenset, encode_set)
 ])
 
 canonical_encoders = OrderedDict([
@@ -294,7 +295,8 @@ canonical_encoders = OrderedDict([
     (dict, encode_canonical_map),
     (defaultdict, encode_canonical_map),
     (OrderedDict, encode_canonical_map),
-    (set, encode_canonical_set)
+    (set, encode_canonical_set),
+    (frozenset, encode_canonical_set)
 ])
 
 
