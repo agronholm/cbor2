@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 from contextlib import contextmanager
 from io import BytesIO
 
-from .compat import timezone, xrange, byte_as_integer, unpack_float16
-from .types import CBORTag, undefined, break_marker, CBORSimpleValue, FrozenDict
+from cbor2.compat import timezone, xrange, byte_as_integer, unpack_float16
+from cbor2.types import CBORTag, undefined, break_marker, CBORSimpleValue, HashableMap
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')
@@ -80,7 +80,7 @@ def decode_array(decoder, subtype, shareable_index=None):
             item = decoder.decode()
             items.append(item)
 
-    if decoder.immutable:
+    if decoder._hashable:
         return tuple(items)
     else:
         return items
@@ -110,8 +110,8 @@ def decode_map(decoder, subtype, shareable_index=None):
 
     if decoder.object_hook:
         return decoder.object_hook(decoder, dictionary)
-    elif decoder.immutable:
-        return FrozenDict(dictionary)
+    elif decoder._hashable:
+        return HashableMap(dictionary)
     else:
         return dictionary
 
@@ -242,7 +242,7 @@ def decode_uuid(decoder, value, shareable_index=None):
 
 def decode_set(decoder, value, shareable_index=None):
     # Semantic tag 258
-    if decoder.immutable:
+    if decoder._hashable:
         return frozenset(value)
     else:
         return set(value)
@@ -321,23 +321,14 @@ class CBORDecoder(object):
         The return value is substituted for the dict in the deserialized output.
     """
 
-    __slots__ = ('fp', 'tag_hook', 'object_hook', '_shareables', '_immutable')
+    __slots__ = ('fp', 'tag_hook', 'object_hook', '_shareables', '_hashable')
 
     def __init__(self, fp, tag_hook=None, object_hook=None):
         self.fp = fp
         self.tag_hook = tag_hook
         self.object_hook = object_hook
         self._shareables = []
-        self._immutable = False
-
-    @property
-    def immutable(self):
-        """
-        Used by decoders to check if the calling context requires an immutable type.
-        Object_hook or tag_hook should raise an exception if this flag is set unless
-        the result can be safely used as a dict key.
-        """
-        return self._immutable
+        self._hashable = False
 
     def _allocate_shareable(self):
         self._shareables.append(None)
@@ -410,11 +401,13 @@ class CBORDecoder(object):
 
     @contextmanager
     def key_decoder(self):
-        """ Forces decoders that return mutable types by default to produce immutable types."""
-        original_flag = self._immutable
-        self._immutable = True
+        """
+        Forces decoders that return mutable types by default to produce hashable types.
+        """
+        original_flag = self._hashable
+        self._hashable = True
         yield self.decode
-        self._immutable = original_flag
+        self._hashable = original_flag
 
 
 def loads(payload, **kwargs):
