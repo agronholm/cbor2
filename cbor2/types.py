@@ -53,7 +53,7 @@ class HashableMap(dict):
     """
     Allows Mapping types to be used as map keys.
     """
-    
+
     def __hash__(self):
             return hash((frozenset(self), frozenset(self.values())))
 
