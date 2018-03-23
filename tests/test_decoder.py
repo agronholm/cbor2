@@ -344,6 +344,7 @@ def test_set():
 
 @pytest.mark.parametrize('payload, expected', [
     ('a1a1616161626163', {FrozenDict({'a': 'b'}): 'c'}),
+    ('A1A1A10101A1666E6573746564F56176', {FrozenDict({FrozenDict({1:1}): FrozenDict({"nested":True})}): "v"}),
     ('a182010203', {(1, 2): 3}),
     ('a1d901028301020304', {frozenset({1, 2, 3}): 4}),
     ('A17f657374726561646d696e67ff01', {"streaming": 1}),
