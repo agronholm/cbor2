@@ -15,7 +15,7 @@ import pytest
 
 from cbor2.compat import timezone
 from cbor2.decoder import loads, CBORDecodeError, load, CBORDecoder
-from cbor2.types import CBORTag, undefined, CBORSimpleValue, HashableMap
+from cbor2.types import CBORTag, undefined, CBORSimpleValue, FrozenDict
 
 
 @pytest.mark.parametrize('payload, expected', [
@@ -343,12 +343,12 @@ def test_set():
 
 
 @pytest.mark.parametrize('payload, expected', [
-    ('a1a1616161626163', {HashableMap({'a': 'b'}): 'c'}),
+    ('a1a1616161626163', {FrozenDict({'a': 'b'}): 'c'}),
     ('a182010203', {(1, 2): 3}),
     ('a1d901028301020304', {frozenset({1, 2, 3}): 4}),
     ('A17f657374726561646d696e67ff01', {"streaming": 1}),
     ('d9010282d90102820102d90102820304', {frozenset({1, 2}), frozenset({3, 4})})
 ])
-def test_hashable_keys(payload, expected):
+def test_immutable_keys(payload, expected):
     value = loads(unhexlify(payload))
     assert value == expected
