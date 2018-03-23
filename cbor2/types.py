@@ -1,3 +1,6 @@
+from collections import Mapping
+
+
 class CBORTag(object):
     """
     Represents a CBOR semantic tag.
@@ -46,13 +49,45 @@ class CBORSimpleValue(object):
         return 'CBORSimpleValue({self.value})'.format(self=self)
 
 
-class HashableMap(dict):
+class FrozenDict(Mapping):
     """
-    Allows Mapping types to be used as map keys.
+    A hashable, immutable mapping type.
+
+    The arguments to ``FrozenDict`` are processed just like those to ``dict``.
     """
+    def __init__(self, *args, **kwargs):
+        self._d = dict(*args, **kwargs)
+        self._hash = None
+
+    @classmethod
+    def supply_dict(cls, d):
+        """
+        When called from decode_map we can safely supply the internal dict
+        directly.
+
+        We can guarantee that only immutable pairs have been used to
+        construct this dictionary.
+        """
+        frozen_dict = cls()
+        frozen_dict._d = d
+        return frozen_dict
+
+    def __iter__(self):
+        return iter(self._d)
+
+    def __len__(self):
+        return len(self._d)
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __repr__(self):
+        return "%s(%s)" % (self.__class__.__name__, self._d)
 
     def __hash__(self):
-            return hash((frozenset(self), frozenset(self.values())))
+        if self._hash is None:
+            self._hash = hash((frozenset(self), frozenset(self.values())))
+        return self._hash
 
 
 class UndefinedType(object):
