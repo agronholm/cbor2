@@ -37,5 +37,5 @@ def test_simple_value_too_big():
 
 
 def test_frozendict():
-    assert len(FrozenDict({1: 2, 3: 4})) == 2
+    assert len(FrozenDict({1: 2, 3: 4})) ==  2
     assert repr(FrozenDict({1: 2})) == "FrozenDict({1: 2})"
