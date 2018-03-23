@@ -1,6 +1,6 @@
 import pytest
 
-from cbor2.types import CBORTag, CBORSimpleValue
+from cbor2.types import CBORTag, CBORSimpleValue, FrozenDict
 
 
 def test_tag_repr():
@@ -34,3 +34,8 @@ def test_simple_value_equals():
 def test_simple_value_too_big():
     exc = pytest.raises(TypeError, CBORSimpleValue, 256)
     assert str(exc.value) == 'simple value too big'
+
+
+def test_frozendict():
+    assert len(FrozenDict({1: 2, 3: 4})) ==  2
+    assert repr(FrozenDict({1: 2})) == "FrozenDict({1: 2})"
