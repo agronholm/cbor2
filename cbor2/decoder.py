@@ -111,7 +111,7 @@ def decode_map(decoder, subtype, shareable_index=None):
     if decoder.object_hook:
         return decoder.object_hook(decoder, dictionary)
     elif decoder._immutable:
-        return FrozenDict.supply_dict(dictionary)
+        return FrozenDict(dictionary)
     else:
         return dictionary
 

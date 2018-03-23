@@ -55,22 +55,10 @@ class FrozenDict(Mapping):
 
     The arguments to ``FrozenDict`` are processed just like those to ``dict``.
     """
+
     def __init__(self, *args, **kwargs):
         self._d = dict(*args, **kwargs)
         self._hash = None
-
-    @classmethod
-    def supply_dict(cls, d):
-        """
-        When called from decode_map we can safely supply the internal dict
-        directly.
-
-        We can guarantee that only immutable pairs have been used to
-        construct this dictionary.
-        """
-        frozen_dict = cls()
-        frozen_dict._d = d
-        return frozen_dict
 
     def __iter__(self):
         return iter(self._d)
