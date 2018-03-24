@@ -3,8 +3,8 @@ import struct
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from cbor2.compat import timezone, xrange, byte_as_integer, unpack_float16
-from cbor2.types import CBORTag, undefined, break_marker, CBORSimpleValue
+from .compat import timezone, xrange, byte_as_integer, unpack_float16
+from .types import CBORTag, undefined, break_marker, CBORSimpleValue
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')

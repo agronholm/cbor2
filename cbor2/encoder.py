@@ -6,9 +6,9 @@ from functools import wraps
 from datetime import datetime, date, time
 from io import BytesIO
 
-from cbor2.compat import iteritems, timezone, long, unicode, as_unicode, bytes_from_list
-from cbor2.compat import pack_float16, unpack_float16
-from cbor2.types import CBORTag, undefined, CBORSimpleValue
+from .compat import (
+    iteritems, timezone, long, unicode, as_unicode, bytes_from_list, pack_float16, unpack_float16)
+from .types import CBORTag, undefined, CBORSimpleValue
 
 
 class CBOREncodeError(Exception):
