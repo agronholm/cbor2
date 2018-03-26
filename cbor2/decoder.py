@@ -80,7 +80,7 @@ def decode_array(decoder, subtype, shareable_index=None):
             item = decoder.decode()
             items.append(item)
 
-    if decoder._immutable:
+    if decoder.immutable:
         return tuple(items)
     else:
         return items
@@ -110,7 +110,7 @@ def decode_map(decoder, subtype, shareable_index=None):
 
     if decoder.object_hook:
         return decoder.object_hook(decoder, dictionary)
-    elif decoder._immutable:
+    elif decoder.immutable:
         return FrozenDict(dictionary)
     else:
         return dictionary
@@ -242,7 +242,7 @@ def decode_uuid(decoder, value, shareable_index=None):
 
 def decode_set(decoder, value, shareable_index=None):
     # Semantic tag 258
-    if decoder._immutable:
+    if decoder.immutable:
         return frozenset(value)
     else:
         return set(value)
@@ -329,6 +329,15 @@ class CBORDecoder(object):
         self.object_hook = object_hook
         self._shareables = []
         self._immutable = False
+
+    @property
+    def immutable(self):
+        """
+        Used by decoders to check if the calling context requires an immutable type.
+        Object_hook or tag_hook should raise an exception if this flag is set unless
+        the result can be safely used as a dict key.
+        """
+        return self._immutable
 
     def _allocate_shareable(self):
         self._shareables.append(None)
