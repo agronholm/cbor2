@@ -130,3 +130,32 @@ You could then verify that the cyclic references have been restored after deseri
     assert new_parent.children[0].parent is new_parent
     assert new_parent.children[1].parent is new_parent
 
+Decoding Tagged items as keys
+-----------------------------
+
+Since the CBOR specification allows any type to be used as a key in the mapping type, the decoder
+provides a flag that indicates it is expecting an immutable (and by implication hashable) type. If
+your custom class cannot be used this way you can raise an exception if this flag is set::
+
+    def tag_hook(decoder, tag, shareable_index=None):
+        if tag.tag != 3000:
+            return tag
+
+        if decoder.immutable:
+            raise CBORDecodeException('MyType cannot be used as a key or set member')
+
+        return MyType(*tag.value)
+
+An example where the data could be used as a dict key::
+
+    from collections import namedtuple
+
+    Pair = namedtuple('Pair', 'first second')
+
+    def tag_hook(decoder, tag, shareable_index=None):
+        if tag.tag != 4000:
+            return tag
+
+        return Pair(*tag.value)
+
+The ``object_hook`` can check for the immutable flag in the same way.
