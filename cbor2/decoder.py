@@ -1,10 +1,11 @@
 import re
 import struct
 from datetime import datetime, timedelta
+from contextlib import contextmanager
 from io import BytesIO
 
 from .compat import timezone, xrange, byte_as_integer, unpack_float16
-from .types import CBORTag, undefined, break_marker, CBORSimpleValue
+from .types import CBORTag, undefined, break_marker, CBORSimpleValue, FrozenDict
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')
@@ -43,15 +44,15 @@ def decode_bytestring(decoder, subtype, shareable_index=None):
     length = decode_uint(decoder, subtype, allow_indefinite=True)
     if length is None:
         # Indefinite length
-        buf = bytearray()
+        buf = []
         while True:
             initial_byte = byte_as_integer(decoder.read(1))
             if initial_byte == 255:
-                return buf
+                return b''.join(buf)
             else:
                 length = decode_uint(decoder, initial_byte & 31)
                 value = decoder.read(length)
-                buf.extend(value)
+                buf.append(value)
     else:
         return decoder.read(length)
 
@@ -79,7 +80,10 @@ def decode_array(decoder, subtype, shareable_index=None):
             item = decoder.decode()
             items.append(item)
 
-    return items
+    if decoder.immutable:
+        return tuple(items)
+    else:
+        return items
 
 
 def decode_map(decoder, subtype, shareable_index=None):
@@ -90,7 +94,8 @@ def decode_map(decoder, subtype, shareable_index=None):
     if length is None:
         # Indefinite length
         while True:
-            key = decoder.decode()
+            with decoder.key_decoder() as decode:
+                key = decode()
             if key is break_marker:
                 break
             else:
@@ -98,12 +103,15 @@ def decode_map(decoder, subtype, shareable_index=None):
                 dictionary[key] = value
     else:
         for _ in xrange(length):
-            key = decoder.decode()
+            with decoder.key_decoder() as decode:
+                key = decode()
             value = decoder.decode()
             dictionary[key] = value
 
     if decoder.object_hook:
         return decoder.object_hook(decoder, dictionary)
+    elif decoder.immutable:
+        return FrozenDict(dictionary)
     else:
         return dictionary
 
@@ -117,7 +125,13 @@ def decode_semantic(decoder, subtype, shareable_index=None):
         shareable_index = decoder._allocate_shareable()
         return decoder.decode(shareable_index)
 
-    value = decoder.decode()
+    # Special handling for sets
+    if tagnum == 258:
+        with decoder.key_decoder() as decode:
+            value = decode()
+    else:
+        value = decoder.decode()
+
     semantic_decoder = semantic_decoders.get(tagnum)
     if semantic_decoder:
         return semantic_decoder(decoder, value, shareable_index)
@@ -228,7 +242,10 @@ def decode_uuid(decoder, value, shareable_index=None):
 
 def decode_set(decoder, value, shareable_index=None):
     # Semantic tag 258
-    return set(value)
+    if decoder.immutable:
+        return frozenset(value)
+    else:
+        return set(value)
 
 
 #
@@ -304,13 +321,23 @@ class CBORDecoder(object):
         The return value is substituted for the dict in the deserialized output.
     """
 
-    __slots__ = ('fp', 'tag_hook', 'object_hook', '_shareables')
+    __slots__ = ('fp', 'tag_hook', 'object_hook', '_shareables', '_immutable')
 
     def __init__(self, fp, tag_hook=None, object_hook=None):
         self.fp = fp
         self.tag_hook = tag_hook
         self.object_hook = object_hook
         self._shareables = []
+        self._immutable = False
+
+    @property
+    def immutable(self):
+        """
+        Used by decoders to check if the calling context requires an immutable type.
+        Object_hook or tag_hook should raise an exception if this flag is set unless
+        the result can be safely used as a dict key.
+        """
+        return self._immutable
 
     def _allocate_shareable(self):
         self._shareables.append(None)
@@ -380,6 +407,14 @@ class CBORDecoder(object):
         retval = self.decode()
         self.fp = old_fp
         return retval
+
+    @contextmanager
+    def key_decoder(self):
+        """ Forces decoders that return mutable types by default to produce immutable types."""
+        original_flag = self._immutable
+        self._immutable = True
+        yield self.decode
+        self._immutable = original_flag
 
 
 def loads(payload, **kwargs):
