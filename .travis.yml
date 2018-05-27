@@ -12,7 +12,7 @@ jobs:
     - env: TOXENV=flake8
 
     - env: TOXENV=pypy
-      python: pypy3
+      python: pypy
 
     - env: TOXENV=pypy3
       python: pypy3
