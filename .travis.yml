@@ -35,6 +35,10 @@ jobs:
       python: "3.6"
       after_success: *after_success
 
+    - env: TOXENV=py37
+      python: "3.7-dev"
+      after_success: *after_success
+
     - stage: deploy to pypi
       install: pip install "setuptools >= 36.2.7"
       script: skip
