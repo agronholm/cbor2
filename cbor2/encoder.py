@@ -8,7 +8,7 @@ from io import BytesIO
 
 from .compat import (
     iteritems, timezone, long, unicode, as_unicode, bytes_from_list, pack_float16, unpack_float16)
-from .types import CBORTag, undefined, CBORSimpleValue
+from .types import CBORTag, undefined, CBORSimpleValue, FrozenDict
 
 
 class CBOREncodeError(Exception):
@@ -277,6 +277,7 @@ default_encoders = OrderedDict([
     (dict, encode_map),
     (defaultdict, encode_map),
     (OrderedDict, encode_map),
+    (FrozenDict, encode_map),
     (type(undefined), encode_undefined),
     (datetime, encode_datetime),
     (date, encode_date),
@@ -295,6 +296,7 @@ canonical_encoders = OrderedDict([
     (dict, encode_canonical_map),
     (defaultdict, encode_canonical_map),
     (OrderedDict, encode_canonical_map),
+    (FrozenDict, encode_canonical_map),
     (set, encode_canonical_set),
     (frozenset, encode_canonical_set)
 ])
