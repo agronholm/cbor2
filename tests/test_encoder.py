@@ -297,8 +297,10 @@ def test_minimal_floats(value, expected):
 def test_tuple_key():
     assert dumps({(2, 1): u''}) == unhexlify('a182020160')
 
+
 def test_dict_key():
     assert dumps({FrozenDict({2: 1}): u''}) == unhexlify('a1a1020160')
+
 
 @pytest.mark.parametrize('frozen', [False, True], ids=['set', 'frozenset'])
 def test_set(frozen):
