@@ -11,7 +11,7 @@ import pytest
 
 from cbor2.compat import timezone
 from cbor2.encoder import dumps, CBOREncodeError, dump, shareable_encoder
-from cbor2.types import CBORTag, undefined, CBORSimpleValue
+from cbor2.types import CBORTag, undefined, CBORSimpleValue, FrozenDict
 
 
 @pytest.mark.parametrize('value, expected', [
@@ -267,9 +267,10 @@ def test_dump_to_file(tmpdir):
     (OrderedDict([(u'a', u''), (u'b', u'')]), 'a2616160616260'),
     (OrderedDict([(u'b', u''), (u'a', u'')]), 'a2616160616260'),
     (OrderedDict([(b'00001', u''), (b'002', u'')]), 'A2433030326045303030303160'),
-    (OrderedDict([(255, 0), (2, 0)]), 'a2020018ff00')
+    (OrderedDict([(255, 0), (2, 0)]), 'a2020018ff00'),
+    (FrozenDict([(b'a', b''), (b'b', b'')]), 'A2416140416240')
 ], ids=['bytes in order', 'bytes out of order', 'text in order',
-        'text out of order', 'byte length', 'integer keys'])
+        'text out of order', 'byte length', 'integer keys', 'frozendict'])
 def test_ordered_map(value, expected):
     expected = unhexlify(expected)
     assert dumps(value, canonical=True) == expected
@@ -296,6 +297,8 @@ def test_minimal_floats(value, expected):
 def test_tuple_key():
     assert dumps({(2, 1): u''}) == unhexlify('a182020160')
 
+def test_dict_key():
+    assert dumps({FrozenDict({2: 1}): u''}) == unhexlify('a1a1020160')
 
 @pytest.mark.parametrize('frozen', [False, True], ids=['set', 'frozenset'])
 def test_set(frozen):
