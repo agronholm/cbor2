@@ -171,7 +171,7 @@ def encode_decimal(encoder, value):
         encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
     else:
         dt = value.as_tuple()
-        negation = -1 if dt.sign else 1
+        negation = (1, -1)[dt.sign] # sign is 0 for positive numbers and 1 for negative
         mantissa = negation * sum(d * 10 ** i for i, d in enumerate(reversed(dt.digits)))
         with encoder.disable_value_sharing():
             encode_semantic(encoder, CBORTag(4, [dt.exponent, mantissa]))
