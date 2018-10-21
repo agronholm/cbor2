@@ -258,7 +258,11 @@ def decode_simple_value(decoder, shareable_index=None):
 
 def decode_float16(decoder, shareable_index=None):
     payload = decoder.read(2)
-    return unpack_float16(payload)
+    try:
+        value = struct.unpack('>e', payload)[0]
+    except struct.error:
+        value = unpack_float16(payload)
+    return value
 
 
 def decode_float32(decoder, shareable_index=None):

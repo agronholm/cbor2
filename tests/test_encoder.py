@@ -286,10 +286,11 @@ def test_ordered_map(value, expected):
     (float('-inf'), 'f9fc00'),
     (float.fromhex('0x1.0p-24'), 'f90001'),
     (float.fromhex('0x1.4p-24'), 'fa33a00000'),
-    (float.fromhex('0x1.ff8p-63'), 'fa207fc000')
+    (float.fromhex('0x1.ff8p-63'), 'fa207fc000'),
+    (1e300, 'fb7e37e43c8800759c')
 ], ids=['float 16', 'float 32', 'float 64', 'inf', 'nan', '-inf',
         'float 16 minimum positive subnormal', 'mantissa o/f to 32',
-        'exponent o/f to 32'])
+        'exponent o/f to 32', 'oversize float'])
 def test_minimal_floats(value, expected):
     expected = unhexlify(expected)
     assert dumps(value, canonical=True) == expected

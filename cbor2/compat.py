@@ -55,20 +55,21 @@ if sys.version_info.major >= 3 and sys.version_info.minor >= 6:
     # Python 3.6 added 16 bit floating point to struct
 
     def pack_float16(value):
-        try:
-            return struct.pack('>Be', 0xf9, value)
-        except OverflowError:
-            return False
+        pass
 
     def unpack_float16(payload):
-        return struct.unpack('>e', payload)[0]
+        pass
+
 else:
     def pack_float16(value):
         # Based on node-cbor by hildjj
         # which was based in turn on Carsten Borman's cn-cbor
-        u32 = struct.pack('>f', value)
-        u = struct.unpack('>I', u32)[0]
+        try:
+            u32 = struct.pack('>f', value)
+        except OverflowError:
+            return False
 
+        u = struct.unpack('>I', u32)[0]
         if u & 0x1FFF != 0:
             return False
 
