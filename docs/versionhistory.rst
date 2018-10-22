@@ -3,10 +3,16 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**UNRELEASED**
+**4.1.1** (2018-10-14)
+
+- Fixed encoding of negative ``Decimal`` instances (PR by Sekenre)
+
+**4.1.0** (2018-05-27)
 
 - Added canonical encoding (via ``canonical=True``) (PR by Sekenre)
 - Added support for encoding/decoding sets (semantic tag 258) (PR by Sekenre)
+- Added support for encoding ``FrozenDict`` (hashable dict) as map keys or set elements
+  (PR by Sekenre)
 
 **4.0.1** (2017-08-21)
 

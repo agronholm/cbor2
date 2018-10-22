@@ -134,10 +134,11 @@ def test_naive_datetime():
 
 @pytest.mark.parametrize('value, expected', [
     (Decimal('14.123'), 'c4822219372b'),
+    (Decimal('-14.123'), 'C4822239372A'),
     (Decimal('NaN'), 'f97e00'),
     (Decimal('Infinity'), 'f97c00'),
     (Decimal('-Infinity'), 'f9fc00')
-], ids=['normal', 'nan', 'inf', 'neginf'])
+], ids=['normal', 'negative', 'nan', 'inf', 'neginf'])
 def test_decimal(value, expected):
     expected = unhexlify(expected)
     assert dumps(value) == expected
