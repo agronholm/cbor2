@@ -51,7 +51,7 @@ else:
     bytes_from_list = bytes
 
 
-if sys.version_info.major >= 3 and sys.version_info.minor >= 6:
+if sys.version_info.major >= 3 and sys.version_info.minor >= 6:  # pragma: no cover
     # Python 3.6 added 16 bit floating point to struct
 
     def pack_float16(value):
