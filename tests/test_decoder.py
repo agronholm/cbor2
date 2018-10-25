@@ -276,7 +276,7 @@ def test_premature_end_of_stream():
 
     """
     exc = pytest.raises(CBORDecodeError, loads, unhexlify('437879'))
-    exc.match('premature end of stream \(expected to read 3 bytes, got 2 instead\)')
+    exc.match(r'premature end of stream \(expected to read 3 bytes, got 2 instead\)')
 
 
 def test_tag_hook():
