@@ -25,9 +25,6 @@ if sys.version_info.major < 3:
     def iteritems(self):
         return self.iteritems()
 
-    def bytes_from_list(values):
-        return bytes(bytearray(values))
-
     byte_as_integer = ord
     timezone.utc = timezone(timedelta(0))
     xrange = xrange  # noqa: F821
@@ -48,7 +45,6 @@ else:
     xrange = range
     long = int
     unicode = str
-    bytes_from_list = bytes
 
 
 if sys.version_info.major >= 3 and sys.version_info.minor >= 6:  # pragma: no cover
