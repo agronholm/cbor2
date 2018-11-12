@@ -7,7 +7,7 @@ from datetime import datetime, date, time
 from io import BytesIO
 
 from .compat import (
-    iteritems, timezone, long, unicode, as_unicode, bytes_from_list, pack_float16, unpack_float16)
+    iteritems, timezone, long, int2bytes, unicode, as_unicode, pack_float16, unpack_float16)
 from .types import CBORTag, undefined, CBORSimpleValue, FrozenDict
 
 
@@ -74,12 +74,7 @@ def encode_int(encoder, value):
             major_type = 0x03
             value = -value - 1
 
-        values = []
-        while value > 0:
-            value, remainder = divmod(value, 256)
-            values.insert(0, remainder)
-
-        payload = bytes_from_list(values)
+        payload = int2bytes(value)
         encode_semantic(encoder, CBORTag(major_type, payload))
     elif value >= 0:
         encoder.write(encode_length(0, value))

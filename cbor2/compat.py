@@ -5,6 +5,7 @@ import sys
 
 if sys.version_info.major < 3:
     from datetime import tzinfo, timedelta
+    from binascii import unhexlify
 
     class timezone(tzinfo):
         def __init__(self, offset):
@@ -25,8 +26,11 @@ if sys.version_info.major < 3:
     def iteritems(self):
         return self.iteritems()
 
-    def bytes_from_list(values):
-        return bytes(bytearray(values))
+    def int2bytes(i):
+        hexstr = '%x' % i
+        n = len(hexstr)
+        pad = ('', '0')[n & 1]
+        return unhexlify(pad + hexstr)
 
     byte_as_integer = ord
     timezone.utc = timezone(timedelta(0))
@@ -45,10 +49,13 @@ else:
     def iteritems(self):
         return self.items()
 
+    def int2bytes(i):
+        bits = i.bit_length()
+        return i.to_bytes((bits + 7) // 8, 'big')
+
     xrange = range
     long = int
     unicode = str
-    bytes_from_list = bytes
 
 
 if sys.version_info.major >= 3 and sys.version_info.minor >= 6:  # pragma: no cover
