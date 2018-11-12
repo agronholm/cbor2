@@ -239,16 +239,26 @@ def encode_minimal_float(encoder, value):
     elif math.isinf(value):
         encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
     else:
-        encoded = struct.pack('>Bf', 0xfa, value)
-        if struct.unpack('>Bf', encoded)[1] != value:
-            encoded = struct.pack('>Bd', 0xfb, value)
-            encoder.write(encoded)
-        else:
-            f16 = pack_float16(value)
-            if f16 and unpack_float16(f16[1:]) == value:
-                encoder.write(f16)
-            else:
-                encoder.write(encoded)
+        # Try each encoding in turn from longest to shortest
+        encoded = struct.pack('>Bd', 0xfb, value)
+        for format, tag in [('>Bf', 0xfa), ('>Be', 0xf9)]:
+            try:
+                new_encoded = struct.pack(format, tag, value)
+                # Check if encoding as low-byte float loses precision
+                if struct.unpack(format, new_encoded)[1] == value:
+                    encoded = new_encoded
+                else:
+                    break
+            except struct.error:
+                # Catch the case where the 'e' format is not supported
+                new_encoded = pack_float16(value)
+                if new_encoded and unpack_float16(new_encoded[1:]) == value:
+                    encoded = new_encoded
+                else:
+                    break
+            except OverflowError:
+                break
+        encoder.write(encoded)
 
 
 def encode_boolean(encoder, value):
