@@ -94,8 +94,10 @@ def decode_map(decoder, subtype, shareable_index=None):
     if length is None:
         # Indefinite length
         while True:
-            with decoder.key_decoder() as decode:
-                key = decode()
+            key_flag = decoder.immutable
+            decoder._immutable = True
+            key = decoder.decode()
+            decoder._immutable = key_flag
             if key is break_marker:
                 break
             else:
@@ -103,8 +105,10 @@ def decode_map(decoder, subtype, shareable_index=None):
                 dictionary[key] = value
     else:
         for _ in xrange(length):
-            with decoder.key_decoder() as decode:
-                key = decode()
+            key_flag = decoder.immutable
+            decoder._immutable = True
+            key = decoder.decode()
+            decoder._immutable = key_flag
             value = decoder.decode()
             dictionary[key] = value
 
@@ -127,8 +131,10 @@ def decode_semantic(decoder, subtype, shareable_index=None):
 
     # Special handling for sets
     if tagnum == 258:
-        with decoder.key_decoder() as decode:
-            value = decode()
+        key_flag = decoder.immutable
+        decoder._immutable = True
+        value = decoder.decode()
+        decoder._immutable = key_flag
     else:
         value = decoder.decode()
 
