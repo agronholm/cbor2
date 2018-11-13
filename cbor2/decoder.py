@@ -1,7 +1,6 @@
 import re
 import struct
 from datetime import datetime, timedelta
-from contextlib import contextmanager
 from io import BytesIO
 
 from .compat import timezone, xrange, byte_as_integer, unpack_float16
@@ -417,14 +416,6 @@ class CBORDecoder(object):
         retval = self.decode()
         self.fp = old_fp
         return retval
-
-    @contextmanager
-    def key_decoder(self):
-        """ Forces decoders that return mutable types by default to produce immutable types."""
-        original_flag = self._immutable
-        self._immutable = True
-        yield self.decode
-        self._immutable = original_flag
 
 
 def loads(payload, **kwargs):
