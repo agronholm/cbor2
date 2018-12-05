@@ -1,47 +1,51 @@
+dist: xenial
 language: python
-sudo: false
+python: "3.6"
 
 stages:
+  - name: static analysis
   - name: test
   - name: deploy to pypi
     if: type = push AND tag =~ ^\d+\.\d+\.\d+
 
 jobs:
-  fast_finish: true
   include:
-    - env: TOXENV=flake8
+    - stage: static analysis
+      env: TOXENV=flake8
+      after_success: skip
 
-    - env: TOXENV=pypy
-      python: pypy
+    - stage: test
+      env: TOXENV=pypy
+      python: pypy2.7-6.0
 
-    - env: TOXENV=pypy3
-      python: pypy3
+    - stage: test
+      env: TOXENV=pypy3
+      python: pypy3.5-6.0
 
-    - env: TOXENV=py27
+    - stage: test
+      env: TOXENV=py27
       python: "2.7"
-      after_success: &after_success
-        - pip install coveralls
-        - coveralls
 
-    - env: TOXENV=py34
+    - stage: test
+      env: TOXENV=py34
       python: "3.4"
-      after_success: *after_success
 
-    - env: TOXENV=py35
+    - stage: test
+      env: TOXENV=py35
       python: "3.5"
-      after_success: *after_success
 
-    - env: TOXENV=py36
+    - stage: test
+      env: TOXENV=py36
       python: "3.6"
-      after_success: *after_success
 
-    - env: TOXENV=py37
-      python: "3.7-dev"
-      after_success: *after_success
+    - stage: test
+      env: TOXENV=py37
+      python: "3.7"
 
     - stage: deploy to pypi
-      install: pip install "setuptools >= 36.2.7"
+      install: true
       script: skip
+      after_success: skip
       deploy:
         provider: pypi
         user: agronholm
@@ -51,8 +55,10 @@ jobs:
         on:
           tags: true
 
-install:
-  - pip install "setuptools >= 36.2.7"
-  - pip install tox
+install: pip install tox
 
 script: tox
+
+after_success:
+  - pip install coveralls
+  - coveralls
