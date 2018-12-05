@@ -1,5 +1,5 @@
-.. image:: https://travis-ci.org/agronholm/cbor2.svg?branch=master
-  :target: https://travis-ci.org/agronholm/cbor2
+.. image:: https://travis-ci.com/agronholm/cbor2.svg?branch=master
+  :target: https://travis-ci.com/agronholm/cbor2
   :alt: Build Status
 .. image:: https://coveralls.io/repos/github/agronholm/cbor2/badge.svg?branch=master
   :target: https://coveralls.io/github/agronholm/cbor2?branch=master
