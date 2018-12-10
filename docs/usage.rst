@@ -79,3 +79,15 @@ Tag Semantics                                Python type(s)
 === ======================================== ====================================================
 
 Arbitary tags can be represented with the :class:`~cbor2.types.CBORTag` class.
+
+
+Use Cases
+---------
+
+Here are some things that the cbor2 library could be (and in some cases, is being) used for:
+
+- Experimenting with network protocols based on CBOR encoding
+- Designing new data storage formats
+- Submitting binary documents to ElasticSearch without base64 encoding overhead
+- Storing and validating file metadata in a secure backup system
+- RPC which supports Decimals with low overhead

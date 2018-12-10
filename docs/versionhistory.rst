@@ -3,6 +3,13 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**4.1.2** (2018-12-10)
+
+- Fixed bigint encoding taking quadratic time
+- Fixed overflow errors when encoding floating point numbers in canonical mode
+- Improved decoder performance for dictionaries
+- Minor documentation tweaks
+
 **4.1.1** (2018-10-14)
 
 - Fixed encoding of negative ``Decimal`` instances (PR by Sekenre)
