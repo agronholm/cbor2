@@ -4,7 +4,7 @@ import sys
 
 
 if sys.version_info.major < 3:
-    from collections import Mapping
+    from collections import Mapping  # noqa: F401
     from datetime import tzinfo, timedelta
     from binascii import unhexlify
 
@@ -39,7 +39,7 @@ if sys.version_info.major < 3:
     long = long  # noqa: F821
     unicode = unicode  # noqa: F821
 else:
-    from collections.abc import Mapping
+    from collections.abc import Mapping  # noqa: F401
     from datetime import timezone
 
     def byte_as_integer(bytestr):

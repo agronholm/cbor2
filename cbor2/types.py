@@ -1,5 +1,6 @@
 from .compat import Mapping
 
+
 class CBORTag(object):
     """
     Represents a CBOR semantic tag.
