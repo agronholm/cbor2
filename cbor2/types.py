@@ -1,4 +1,4 @@
-from collections import Mapping
+from .compat import Mapping
 
 
 class CBORTag(object):
