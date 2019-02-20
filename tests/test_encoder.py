@@ -123,8 +123,13 @@ def test_datetime(value, as_timestamp, expected):
 
 
 def test_date():
+    with pytest.raises(CBOREncodeError):
+        dumps(date(2013, 3, 21))
+
+
+def test_date_as_datetime():
     expected = unhexlify('c074323031332d30332d32315430303a30303a30305a')
-    assert dumps(date(2013, 3, 21), timezone=timezone.utc) == expected
+    assert dumps(date(2013, 3, 21), timezone=timezone.utc, date_as_datetime=True) == expected
 
 
 def test_naive_datetime():
