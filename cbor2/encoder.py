@@ -66,6 +66,9 @@ class CBOREncoder(object):
         when True, use "canonical" CBOR representation; this typically involves
         sorting maps, sets, etc. into a pre-determined order ensuring that
         serializations are comparable without decoding
+    :param bool date_as_datetime: set to ``True`` to serialize date objects as
+        datetimes (CBOR tag 0), which was the default behavior in previous
+        releases (cbor2 <= 4.1.2).
 
     .. _CBOR: https://cbor.io/
     """
@@ -76,7 +79,8 @@ class CBOREncoder(object):
         '_canonical')
 
     def __init__(self, fp, datetime_as_timestamp=False, timezone=None,
-                 value_sharing=False, default=None, canonical=False):
+                 value_sharing=False, default=None, canonical=False,
+                 date_as_datetime=False):
         self.fp = fp
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone
@@ -87,6 +91,8 @@ class CBOREncoder(object):
         self._encoders = default_encoders.copy()
         if canonical:
             self._encoders.update(canonical_encoders)
+        if date_as_datetime:
+            self._encoders[date] = CBOREncoder.encode_date
 
     def _find_encoder(self, obj_type):
         for type_, enc in list(iteritems(self._encoders)):
@@ -471,7 +477,6 @@ default_encoders = OrderedDict([
     (FrozenDict,                    CBOREncoder.encode_map),
     (type(undefined),               CBOREncoder.encode_undefined),
     (datetime,                      CBOREncoder.encode_datetime),
-    (date,                          CBOREncoder.encode_date),
     (type(re.compile('')),          CBOREncoder.encode_regexp),
     (('fractions', 'Fraction'),     CBOREncoder.encode_rational),
     (('email.message', 'Message'),  CBOREncoder.encode_mime),
