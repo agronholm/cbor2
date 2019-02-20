@@ -286,7 +286,6 @@ default_encoders = OrderedDict([
     (FrozenDict, encode_map),
     (type(undefined), encode_undefined),
     (datetime, encode_datetime),
-    (date, encode_date),
     (type(re.compile('')), encode_regexp),
     (('fractions', 'Fraction'), encode_rational),
     (('email.message', 'Message'), encode_mime),
@@ -322,13 +321,15 @@ class CBOREncoder(object):
         methods on the encoder to encode any objects it wants to add to the data stream
     :param canonical: Forces mapping types to be output in a stable order to guarantee that the
         output will always produce the same hash given the same input.
+    :param date_as_datetime: set to ``True`` to serialize date objects as datetimes (CBOR tag 0),
+        which was the default behavior in previous releases (cbor2 <= 4.1.2).
     """
 
     __slots__ = ('fp', 'datetime_as_timestamp', 'timezone', 'default', 'value_sharing',
                  'json_compatible', '_shared_containers', '_encoders')
 
     def __init__(self, fp, datetime_as_timestamp=False, timezone=None, value_sharing=False,
-                 default=None, canonical=False):
+                 default=None, canonical=False, date_as_datetime=False):
         self.fp = fp
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone
@@ -338,6 +339,8 @@ class CBOREncoder(object):
         self._encoders = default_encoders.copy()
         if canonical:
             self._encoders.update(canonical_encoders)
+        if date_as_datetime:
+            self._encoders[date] = encode_date
 
     def _find_encoder(self, obj_type):
         from sys import modules
