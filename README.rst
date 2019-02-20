@@ -8,8 +8,8 @@
   :target: https://cbor2.readthedocs.io/en/latest/?badge=latest
   :alt: Documentation Status
 
-  This library provides encoding and decoding for the Concise Binary Object Representation (CBOR)
-(`RFC 7049`_) serialization format.
+This library provides encoding and decoding for the Concise Binary Object Representation (CBOR)
+(`RFC 7049`_) serialization format. `Read the docs <https://cbor2.readthedocs.io/>`_ to learn more.
 
 There exists another Python CBOR implementation (cbor) which is faster on CPython due to its C
 extensions. On PyPy, cbor2 and cbor are almost identical in performance. The other implementation
