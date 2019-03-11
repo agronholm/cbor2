@@ -6,7 +6,7 @@ setup(
         'local_scheme': 'dirty-tag'
     },
     setup_requires=[
-        'setuptools >= 36.2.7',
+        'setuptools >= 22.0.0',
         'setuptools_scm >= 1.7.0'
     ]
 )
