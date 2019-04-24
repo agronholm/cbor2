@@ -114,9 +114,10 @@ def test_simple_value(value, expected):
      'c07819323031332d30332d32315432323a30343a30302b30323a3030'),
     (datetime(2013, 3, 21, 20, 4, 0), False, 'c074323031332d30332d32315432303a30343a30305a'),
     (datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc), True, 'c11a514b67b0'),
-    (datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))), True, 'c11a514b67b0')
+    (datetime(2013, 3, 21, 20, 4, 0, 123456, tzinfo=timezone.utc), True, 'c1fb41d452d9ec07e6b4'),
+    (datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))), True, 'c11a514b67b0'),
 ], ids=['datetime/utc', 'datetime+micro/utc', 'datetime/eet', 'naive', 'timestamp/utc',
-        'timestamp/eet'])
+        'timestamp+micro/utc', 'timestamp/eet'])
 def test_datetime(value, as_timestamp, expected):
     expected = unhexlify(expected)
     assert dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc) == expected
