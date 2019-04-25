@@ -1,3 +1,5 @@
+from __future__ import division
+
 import re
 import struct
 from collections import OrderedDict, defaultdict
