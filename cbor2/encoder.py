@@ -150,6 +150,7 @@ def encode_datetime(encoder, value):
             timestamp = timegm(value.utctimetuple())
         else:
             timestamp = timegm(value.utctimetuple()) + value.microsecond / 1000000
+
         encode_semantic(encoder, CBORTag(1, timestamp))
     else:
         datestring = as_unicode(value.isoformat().replace('+00:00', 'Z'))
