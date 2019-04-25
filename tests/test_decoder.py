@@ -251,9 +251,9 @@ def test_uninitialized_shared_reference():
 
 
 def test_immutable_shared_reference():
-    #a = (1, 2, 3)
-    #b = ((a, a), a)
-    #data = dumps(set(b))
+    # a = (1, 2, 3)
+    # b = ((a, a), a)
+    # data = dumps(set(b))
     decoded = loads(unhexlify('d90102d81c82d81c82d81c83010203d81d02d81d02'))
     a = [item for item in decoded if len(item) == 3][0]
     b = [item for item in decoded if len(item) == 2][0]
