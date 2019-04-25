@@ -80,9 +80,9 @@ def decode_array(decoder, subtype, shareable_index=None):
             items.append(item)
 
     if decoder.immutable:
-        return tuple(items)
-    else:
-        return items
+        items = tuple(items)
+        decoder.set_shareable(shareable_index, items)
+    return items
 
 
 def decode_map(decoder, subtype, shareable_index=None):
@@ -113,9 +113,10 @@ def decode_map(decoder, subtype, shareable_index=None):
 
     if decoder.object_hook:
         return decoder.object_hook(decoder, dictionary)
-    elif decoder.immutable:
-        return FrozenDict(dictionary)
     else:
+        if decoder.immutable:
+            dictionary = FrozenDict(dictionary)
+            decoder.set_shareable(shareable_index, dictionary)
         return dictionary
 
 

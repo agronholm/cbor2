@@ -250,6 +250,18 @@ def test_uninitialized_shared_reference():
     assert str(exc.value).endswith('shared value 0 has not been initialized')
 
 
+def test_immutable_shared_reference():
+    #a = (1, 2, 3)
+    #b = ((a, a), a)
+    #data = dumps(set(b))
+    decoded = loads(unhexlify('d90102d81c82d81c82d81c83010203d81d02d81d02'))
+    a = [item for item in decoded if len(item) == 3][0]
+    b = [item for item in decoded if len(item) == 2][0]
+    assert decoded == set(((a, a), a))
+    assert b[0] is a
+    assert b[1] is a
+
+
 def test_cyclic_array():
     decoded = loads(unhexlify('d81c81d81d00'))
     assert decoded == [decoded]
