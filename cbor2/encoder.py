@@ -168,10 +168,13 @@ def encode_decimal(encoder, value):
         encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
     else:
         dt = value.as_tuple()
-        negation = (1, -1)[dt.sign]  # sign is 0 for positive numbers and 1 for negative
-        mantissa = negation * sum(d * 10 ** i for i, d in enumerate(reversed(dt.digits)))
+        sig = 0
+        for digit in dt.digits:
+            sig = (sig * 10) + digit
+        if dt.sign:
+            sig = -sig
         with encoder.disable_value_sharing():
-            encode_semantic(encoder, CBORTag(4, [dt.exponent, mantissa]))
+            encode_semantic(encoder, CBORTag(4, [dt.exponent, sig]))
 
 
 def encode_rational(encoder, value):
