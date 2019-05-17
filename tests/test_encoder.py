@@ -1,5 +1,6 @@
 import re
 import sys
+from io import BytesIO
 from binascii import unhexlify
 from collections import OrderedDict
 from datetime import datetime, timedelta, date
@@ -11,8 +12,33 @@ from uuid import UUID
 import pytest
 
 from cbor2.compat import timezone, pack_float16
-from cbor2.encoder import dumps, CBOREncodeError, dump, shareable_encoder
+from cbor2.encoder import dumps, CBOREncoder, CBOREncodeError, dump, shareable_encoder
 from cbor2.types import CBORTag, undefined, CBORSimpleValue, FrozenDict
+
+
+def test_fp_attr():
+    with pytest.raises(ValueError):
+        CBOREncoder(None)
+    with pytest.raises(ValueError):
+        class A(object):
+            pass
+        foo = A()
+        foo.write = None
+        CBOREncoder(foo)
+    with BytesIO() as stream:
+        encoder = CBOREncoder(stream)
+        assert encoder.fp is stream
+        with pytest.raises(AttributeError):
+            del encoder.fp
+
+
+def test_write():
+    with BytesIO() as stream:
+        encoder = CBOREncoder(stream)
+        encoder.write(b'foo')
+        assert stream.getvalue() == b'foo'
+        with pytest.raises(TypeError):
+            encoder.write(1)
 
 
 @pytest.mark.parametrize('value, expected', [

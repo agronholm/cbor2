@@ -324,8 +324,9 @@ class CBOREncoder(object):
         output will always produce the same hash given the same input.
     """
 
-    __slots__ = ('fp', 'datetime_as_timestamp', 'timezone', 'default', 'value_sharing',
-                 'json_compatible', '_shared_containers', '_encoders')
+    __slots__ = (
+        'datetime_as_timestamp', 'timezone', 'default', 'value_sharing',
+        'json_compatible', '_fp_write', '_shared_containers', '_encoders')
 
     def __init__(self, fp, datetime_as_timestamp=False, timezone=None, value_sharing=False,
                  default=None, canonical=False):
@@ -359,6 +360,20 @@ class CBOREncoder(object):
 
         return None
 
+    @property
+    def fp(self):
+        return self._fp_write.__self__
+
+    @fp.setter
+    def fp(self, value):
+        try:
+            if not callable(value.write):
+                raise ValueError('fp.write is not callable')
+        except AttributeError:
+            raise ValueError('fp object has no write method')
+        else:
+            self._fp_write = value.write
+
     @contextmanager
     def disable_value_sharing(self):
         """Disable value sharing in the encoder for the duration of the context block."""
@@ -374,7 +389,7 @@ class CBOREncoder(object):
         :param data: the bytes to write
 
         """
-        self.fp.write(data)
+        self._fp_write(data)
 
     def encode(self, obj):
         """
