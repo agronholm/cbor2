@@ -358,12 +358,6 @@ def test_object_hook():
     assert decoded.state == {'a': 3, 'b': 5}
 
 
-def test_error_major_type():
-    with pytest.raises(CBORDecodeError) as exc:
-        loads(b'')
-        assert str(exc.value).startswith('error reading major type at index 0: ')
-
-
 def test_load_from_file(tmpdir):
     path = tmpdir.join('testdata.cbor')
     path.write_binary(b'\x82\x01\x0a')
