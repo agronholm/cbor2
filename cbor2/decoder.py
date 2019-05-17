@@ -104,22 +104,11 @@ class CBORDecoder(object):
             old_index = self._share_index
             self._share_index = None
         try:
-            try:
-                initial_byte = byte_as_integer(self.read(1))
-                major_type = initial_byte >> 5
-                subtype = initial_byte & 31
-            except Exception as e:
-                raise CBORDecodeError('error reading major type at index {}: {}'
-                                      .format(self.fp.tell(), e))
-
+            initial_byte = byte_as_integer(self.read(1))
+            major_type = initial_byte >> 5
+            subtype = initial_byte & 31
             decoder = major_decoders[major_type]
-            try:
-                return decoder(self, subtype)
-            except CBORDecodeError:
-                raise
-            except Exception as e:
-                raise CBORDecodeError('error decoding value at index {}: {}'
-                                      .format(self.fp.tell(), e))
+            return decoder(self, subtype)
         finally:
             if immutable:
                 self._immutable = old_immutable
