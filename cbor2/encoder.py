@@ -83,7 +83,8 @@ def encode_int(encoder, value):
 
 
 def encode_bytestring(encoder, value):
-    encoder.write(encode_length(0x40, len(value)) + value)
+    encoder.write(encode_length(0x40, len(value)))
+    encoder.write(value)
 
 
 def encode_bytearray(encoder, value):
@@ -92,7 +93,8 @@ def encode_bytearray(encoder, value):
 
 def encode_string(encoder, value):
     encoded = value.encode('utf-8')
-    encoder.write(encode_length(0x60, len(encoded)) + encoded)
+    encoder.write(encode_length(0x60, len(encoded)))
+    encoder.write(encoded)
 
 
 @shareable_encoder
