@@ -331,7 +331,8 @@ class CBORDecoder(object):
         The return value is substituted for the dict in the deserialized output.
     """
 
-    __slots__ = ('fp', 'tag_hook', 'object_hook', '_shareables', '_immutable')
+    __slots__ = (
+        'tag_hook', 'object_hook', '_shareables', '_fp_read', '_immutable')
 
     def __init__(self, fp, tag_hook=None, object_hook=None):
         self.fp = fp
@@ -348,6 +349,20 @@ class CBORDecoder(object):
         the result can be safely used as a dict key.
         """
         return self._immutable
+
+    @property
+    def fp(self):
+        return self._fp_read.__self__
+
+    @fp.setter
+    def fp(self, value):
+        try:
+            if not callable(value.read):
+                raise ValueError('fp.read is not callable')
+        except AttributeError:
+            raise ValueError('fp object has no read method')
+        else:
+            self._fp_read = value.read
 
     def _allocate_shareable(self):
         self._shareables.append(None)

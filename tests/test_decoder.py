@@ -18,6 +18,33 @@ from cbor2.decoder import loads, CBORDecodeError, load, CBORDecoder
 from cbor2.types import CBORTag, undefined, CBORSimpleValue, FrozenDict
 
 
+def test_fp_attr():
+    with pytest.raises(ValueError):
+        CBORDecoder(None)
+    with pytest.raises(ValueError):
+        class A(object):
+            pass
+        foo = A()
+        foo.read = None
+        CBORDecoder(foo)
+    with BytesIO(b'foobar') as stream:
+        decoder = CBORDecoder(stream)
+        assert decoder.fp is stream
+        with pytest.raises(AttributeError):
+            del decoder.fp
+
+
+def test_read():
+    with BytesIO(b'foobar') as stream:
+        decoder = CBORDecoder(stream)
+        assert decoder.read(3) == b'foo'
+        assert decoder.read(3) == b'bar'
+        with pytest.raises(TypeError):
+            decoder.read('foo')
+        with pytest.raises(CBORDecodeError):
+            decoder.read(10)
+
+
 @pytest.mark.parametrize('payload, expected', [
     ('00', 0),
     ('01', 1),
