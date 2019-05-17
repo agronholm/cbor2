@@ -9,12 +9,10 @@ from io import BytesIO
 from sys import modules
 
 from .compat import (
-    iteritems, timezone, long, int2bytes, unicode, as_unicode, pack_float16, unpack_float16)
-from .types import CBORTag, undefined, CBORSimpleValue, FrozenDict
-
-
-class CBOREncodeError(Exception):
-    """Raised when an error occurs while serializing an object into a CBOR datastream."""
+    iteritems, timezone, long, int2bytes, unicode, as_unicode, pack_float16,
+    unpack_float16)
+from .types import (
+    CBOREncodeError, CBORTag, undefined, CBORSimpleValue, FrozenDict)
 
 
 def shareable_encoder(func):

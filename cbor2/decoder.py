@@ -4,14 +4,12 @@ from datetime import datetime, timedelta
 from io import BytesIO
 
 from .compat import timezone, range, byte_as_integer, unpack_float16
-from .types import CBORTag, undefined, break_marker, CBORSimpleValue, FrozenDict
+from .types import (
+    CBORDecodeError, CBORTag, undefined, break_marker, CBORSimpleValue,
+    FrozenDict)
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')
-
-
-class CBORDecodeError(Exception):
-    """Raised when an error occurs deserializing a CBOR datastream."""
 
 
 class CBORDecoder(object):

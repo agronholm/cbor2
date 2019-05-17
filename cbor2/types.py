@@ -1,6 +1,18 @@
 from .compat import Mapping
 
 
+class CBORError(ValueError):
+    "Base class for errors that occur during CBOR encoding or decoding."
+
+
+class CBOREncodeError(CBORError):
+    "Error class raised for exceptions occurring during CBOR encoding."
+
+
+class CBORDecodeError(CBORError):
+    "Error class raised for exceptions occurring during CBOR decoding."
+
+
 class CBORTag(object):
     """
     Represents a CBOR semantic tag.
