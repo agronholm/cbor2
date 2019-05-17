@@ -28,34 +28,7 @@ def shareable_encoder(func):
     """
     @wraps(func)
     def wrapper(encoder, value):
-        value_id = id(value)
-        try:
-            container_index = encoder._shared_containers[id(value)][1]
-        except KeyError:
-            if encoder.value_sharing:
-                # Mark the container as shareable
-                encoder._shared_containers[value_id] = (
-                    value, len(encoder._shared_containers)
-                )
-                encoder.encode_length(6, 0x1c)
-                func(encoder, value)
-            else:
-                encoder._shared_containers[value_id] = (value, None)
-                try:
-                    func(encoder, value)
-                finally:
-                    del encoder._shared_containers[value_id]
-        else:
-            if encoder.value_sharing:
-                # Generate a reference to the previous index instead of
-                # encoding this again
-                encoder.encode_length(6, 0x1d)
-                encoder.encode_int(container_index)
-            else:
-                raise CBOREncodeError(
-                    'cyclic data structure detected but value sharing is '
-                    'disabled')
-
+        encoder.encode_shared(func, value)
     return wrapper
 
 
@@ -169,6 +142,35 @@ class CBOREncoder(object):
             self.encode(obj)
             self.fp = old_fp
             return fp.getvalue()
+
+    def encode_shared(self, encoder, value):
+        value_id = id(value)
+        try:
+            index = self._shared_containers[id(value)][1]
+        except KeyError:
+            if self.value_sharing:
+                # Mark the container as shareable
+                self._shared_containers[value_id] = (
+                    value, len(self._shared_containers)
+                )
+                self.encode_length(6, 0x1c)
+                encoder(self, value)
+            else:
+                self._shared_containers[value_id] = (value, None)
+                try:
+                    encoder(self, value)
+                finally:
+                    del self._shared_containers[value_id]
+        else:
+            if self.value_sharing:
+                # Generate a reference to the previous index instead of
+                # encoding this again
+                self.encode_length(6, 0x1d)
+                self.encode_int(index)
+            else:
+                raise CBOREncodeError(
+                    'cyclic data structure detected but value sharing is '
+                    'disabled')
 
     def encode_length(self, major_tag, length):
         major_tag <<= 5
