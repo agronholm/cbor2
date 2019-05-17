@@ -35,7 +35,7 @@ if sys.version_info.major < 3:
 
     byte_as_integer = ord
     timezone.utc = timezone(timedelta(0))
-    xrange = xrange  # noqa: F821
+    range = xrange  # noqa: F821
     long = long  # noqa: F821
     unicode = unicode  # noqa: F821
 else:
@@ -55,7 +55,7 @@ else:
         bits = i.bit_length()
         return i.to_bytes((bits + 7) // 8, 'big')
 
-    xrange = range
+    range = range
     long = int
     unicode = str
 
