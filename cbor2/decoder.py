@@ -1,3 +1,8 @@
+try:
+    range = xrange
+except NameError:
+    pass
+
 import re
 import struct
 from datetime import datetime, timedelta
@@ -63,11 +68,11 @@ def decode_string(decoder, subtype, shareable_index=None):
 
 def decode_array(decoder, subtype, shareable_index=None):
     # Major tag 4
-    items = []
-    decoder.set_shareable(shareable_index, items)
     length = decode_uint(decoder, subtype, allow_indefinite=True)
     if length is None:
         # Indefinite length
+        items = []
+        decoder.set_shareable(shareable_index, items)
         while True:
             value = decoder.decode()
             if value is break_marker:
@@ -75,9 +80,10 @@ def decode_array(decoder, subtype, shareable_index=None):
             else:
                 items.append(value)
     else:
-        for _ in xrange(length):
-            item = decoder.decode()
-            items.append(item)
+        items = [None] * length
+        decoder.set_shareable(shareable_index, items)
+        for index in range(length):
+            items[index] = decoder.decode()
 
     if decoder.immutable:
         items = tuple(items)
@@ -87,11 +93,11 @@ def decode_array(decoder, subtype, shareable_index=None):
 
 def decode_map(decoder, subtype, shareable_index=None):
     # Major tag 5
-    dictionary = {}
-    decoder.set_shareable(shareable_index, dictionary)
     length = decode_uint(decoder, subtype, allow_indefinite=True)
     if length is None:
         # Indefinite length
+        dictionary = {}
+        decoder.set_shareable(shareable_index, dictionary)
         while True:
             key_flag = decoder.immutable
             decoder._immutable = True
@@ -100,16 +106,28 @@ def decode_map(decoder, subtype, shareable_index=None):
             if key is break_marker:
                 break
             else:
-                value = decoder.decode()
-                dictionary[key] = value
-    else:
-        for _ in xrange(length):
+                dictionary[key] = decoder.decode()
+    elif shareable_index is None:
+        # Optimization: pre-allocate structures from length. Note this cannot
+        # be done when sharing the structure as the resulting structure is not
+        # the one initially allocated
+        seq = [None] * length
+        for index in range(length):
             key_flag = decoder.immutable
             decoder._immutable = True
             key = decoder.decode()
             decoder._immutable = key_flag
-            value = decoder.decode()
-            dictionary[key] = value
+            seq[index] = (key, decoder.decode())
+        dictionary = dict(seq)
+    else:
+        dictionary = {}
+        decoder.set_shareable(shareable_index, dictionary)
+        for _ in range(length):
+            key_flag = decoder.immutable
+            decoder._immutable = True
+            key = decoder.decode()
+            decoder._immutable = key_flag
+            dictionary[key] = decoder.decode()
 
     if decoder.object_hook:
         return decoder.object_hook(decoder, dictionary)
