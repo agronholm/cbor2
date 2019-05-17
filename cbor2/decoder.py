@@ -1,14 +1,9 @@
-try:
-    range = xrange
-except NameError:
-    pass
-
 import re
 import struct
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from .compat import timezone, xrange, byte_as_integer, unpack_float16
+from .compat import timezone, range, byte_as_integer, unpack_float16
 from .types import CBORTag, undefined, break_marker, CBORSimpleValue, FrozenDict
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
@@ -17,323 +12,6 @@ timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
 
 class CBORDecodeError(Exception):
     """Raised when an error occurs deserializing a CBOR datastream."""
-
-
-def decode_uint(decoder, subtype, shareable_index=None, allow_indefinite=False):
-    # Major tag 0
-    if subtype < 24:
-        return subtype
-    elif subtype == 24:
-        return struct.unpack('>B', decoder.read(1))[0]
-    elif subtype == 25:
-        return struct.unpack('>H', decoder.read(2))[0]
-    elif subtype == 26:
-        return struct.unpack('>L', decoder.read(4))[0]
-    elif subtype == 27:
-        return struct.unpack('>Q', decoder.read(8))[0]
-    elif subtype == 31 and allow_indefinite:
-        return None
-    else:
-        raise CBORDecodeError('unknown unsigned integer subtype 0x%x' % subtype)
-
-
-def decode_negint(decoder, subtype, shareable_index=None):
-    # Major tag 1
-    uint = decode_uint(decoder, subtype)
-    return -uint - 1
-
-
-def decode_bytestring(decoder, subtype, shareable_index=None):
-    # Major tag 2
-    length = decode_uint(decoder, subtype, allow_indefinite=True)
-    if length is None:
-        # Indefinite length
-        buf = []
-        while True:
-            initial_byte = byte_as_integer(decoder.read(1))
-            if initial_byte == 255:
-                return b''.join(buf)
-            else:
-                length = decode_uint(decoder, initial_byte & 31)
-                value = decoder.read(length)
-                buf.append(value)
-    else:
-        return decoder.read(length)
-
-
-def decode_string(decoder, subtype, shareable_index=None):
-    # Major tag 3
-    return decode_bytestring(decoder, subtype).decode('utf-8')
-
-
-def decode_array(decoder, subtype, shareable_index=None):
-    # Major tag 4
-    length = decode_uint(decoder, subtype, allow_indefinite=True)
-    if length is None:
-        # Indefinite length
-        items = []
-        decoder.set_shareable(shareable_index, items)
-        while True:
-            value = decoder.decode()
-            if value is break_marker:
-                break
-            else:
-                items.append(value)
-    else:
-        items = [None] * length
-        decoder.set_shareable(shareable_index, items)
-        for index in range(length):
-            items[index] = decoder.decode()
-
-    if decoder.immutable:
-        items = tuple(items)
-        decoder.set_shareable(shareable_index, items)
-    return items
-
-
-def decode_map(decoder, subtype, shareable_index=None):
-    # Major tag 5
-    length = decode_uint(decoder, subtype, allow_indefinite=True)
-    if length is None:
-        # Indefinite length
-        dictionary = {}
-        decoder.set_shareable(shareable_index, dictionary)
-        while True:
-            key_flag = decoder.immutable
-            decoder._immutable = True
-            key = decoder.decode()
-            decoder._immutable = key_flag
-            if key is break_marker:
-                break
-            else:
-                dictionary[key] = decoder.decode()
-    elif shareable_index is None:
-        # Optimization: pre-allocate structures from length. Note this cannot
-        # be done when sharing the structure as the resulting structure is not
-        # the one initially allocated
-        seq = [None] * length
-        for index in range(length):
-            key_flag = decoder.immutable
-            decoder._immutable = True
-            key = decoder.decode()
-            decoder._immutable = key_flag
-            seq[index] = (key, decoder.decode())
-        dictionary = dict(seq)
-    else:
-        dictionary = {}
-        decoder.set_shareable(shareable_index, dictionary)
-        for _ in range(length):
-            key_flag = decoder.immutable
-            decoder._immutable = True
-            key = decoder.decode()
-            decoder._immutable = key_flag
-            dictionary[key] = decoder.decode()
-
-    if decoder.object_hook:
-        return decoder.object_hook(decoder, dictionary)
-    else:
-        if decoder.immutable:
-            dictionary = FrozenDict(dictionary)
-            decoder.set_shareable(shareable_index, dictionary)
-        return dictionary
-
-
-def decode_semantic(decoder, subtype, shareable_index=None):
-    # Major tag 6
-    tagnum = decode_uint(decoder, subtype)
-
-    # Special handling for the "shareable" tag
-    if tagnum == 28:
-        shareable_index = decoder._allocate_shareable()
-        return decoder.decode(shareable_index)
-
-    # Special handling for sets
-    if tagnum == 258:
-        key_flag = decoder.immutable
-        decoder._immutable = True
-        value = decoder.decode()
-        decoder._immutable = key_flag
-    else:
-        value = decoder.decode()
-
-    semantic_decoder = semantic_decoders.get(tagnum)
-    if semantic_decoder:
-        return semantic_decoder(decoder, value, shareable_index)
-
-    tag = CBORTag(tagnum, value)
-    if decoder.tag_hook:
-        return decoder.tag_hook(decoder, tag, shareable_index)
-    else:
-        return tag
-
-
-def decode_special(decoder, subtype, shareable_index=None):
-    # Simple value
-    if subtype < 20:
-        return CBORSimpleValue(subtype)
-
-    # Major tag 7
-    return special_decoders[subtype](decoder)
-
-
-#
-# Semantic decoders (major tag 6)
-#
-
-def decode_datetime_string(decoder, value, shareable_index=None):
-    # Semantic tag 0
-    match = timestamp_re.match(value)
-    if match:
-        year, month, day, hour, minute, second, micro, offset_h, offset_m = match.groups()
-        if offset_h:
-            tz = timezone(timedelta(hours=int(offset_h), minutes=int(offset_m)))
-        else:
-            tz = timezone.utc
-
-        return datetime(int(year), int(month), int(day), int(hour), int(minute), int(second),
-                        int(micro or 0), tz)
-    else:
-        raise CBORDecodeError('invalid datetime string: {}'.format(value))
-
-
-def decode_epoch_datetime(decoder, value, shareable_index=None):
-    # Semantic tag 1
-    return datetime.fromtimestamp(value, timezone.utc)
-
-
-def decode_positive_bignum(decoder, value, shareable_index=None):
-    # Semantic tag 2
-    from binascii import hexlify
-    return int(hexlify(value), 16)
-
-
-def decode_negative_bignum(decoder, value, shareable_index=None):
-    # Semantic tag 3
-    return -decode_positive_bignum(decoder, value) - 1
-
-
-def decode_fraction(decoder, value, shareable_index=None):
-    # Semantic tag 4
-    from decimal import Decimal
-    exp = Decimal(value[0])
-    mantissa = Decimal(value[1])
-    return mantissa * (10 ** exp)
-
-
-def decode_bigfloat(decoder, value, shareable_index=None):
-    # Semantic tag 5
-    from decimal import Decimal
-    exp = Decimal(value[0])
-    mantissa = Decimal(value[1])
-    return mantissa * (2 ** exp)
-
-
-def decode_sharedref(decoder, value, shareable_index=None):
-    # Semantic tag 29
-    try:
-        shared = decoder._shareables[value]
-    except IndexError:
-        raise CBORDecodeError('shared reference %d not found' % value)
-
-    if shared is None:
-        raise CBORDecodeError('shared value %d has not been initialized' % value)
-    else:
-        return shared
-
-
-def decode_rational(decoder, value, shareable_index=None):
-    # Semantic tag 30
-    from fractions import Fraction
-    return Fraction(*value)
-
-
-def decode_regexp(decoder, value, shareable_index=None):
-    # Semantic tag 35
-    return re.compile(value)
-
-
-def decode_mime(decoder, value, shareable_index=None):
-    # Semantic tag 36
-    from email.parser import Parser
-    return Parser().parsestr(value)
-
-
-def decode_uuid(decoder, value, shareable_index=None):
-    # Semantic tag 37
-    from uuid import UUID
-    return UUID(bytes=value)
-
-
-def decode_set(decoder, value, shareable_index=None):
-    # Semantic tag 258
-    if decoder.immutable:
-        return frozenset(value)
-    else:
-        return set(value)
-
-
-#
-# Special decoders (major tag 7)
-#
-
-def decode_simple_value(decoder, shareable_index=None):
-    return CBORSimpleValue(struct.unpack('>B', decoder.read(1))[0])
-
-
-def decode_float16(decoder, shareable_index=None):
-    payload = decoder.read(2)
-    try:
-        value = struct.unpack('>e', payload)[0]
-    except struct.error:
-        value = unpack_float16(payload)
-    return value
-
-
-def decode_float32(decoder, shareable_index=None):
-    return struct.unpack('>f', decoder.read(4))[0]
-
-
-def decode_float64(decoder, shareable_index=None):
-    return struct.unpack('>d', decoder.read(8))[0]
-
-
-major_decoders = {
-    0: decode_uint,
-    1: decode_negint,
-    2: decode_bytestring,
-    3: decode_string,
-    4: decode_array,
-    5: decode_map,
-    6: decode_semantic,
-    7: decode_special
-}
-
-special_decoders = {
-    20: lambda self: False,
-    21: lambda self: True,
-    22: lambda self: None,
-    23: lambda self: undefined,
-    24: decode_simple_value,
-    25: decode_float16,
-    26: decode_float32,
-    27: decode_float64,
-    31: lambda self: break_marker
-}
-
-semantic_decoders = {
-    0: decode_datetime_string,
-    1: decode_epoch_datetime,
-    2: decode_positive_bignum,
-    3: decode_negative_bignum,
-    4: decode_fraction,
-    5: decode_bigfloat,
-    29: decode_sharedref,
-    30: decode_rational,
-    35: decode_regexp,
-    36: decode_mime,
-    37: decode_uuid,
-    258: decode_set
-}
 
 
 class CBORDecoder(object):
@@ -350,12 +28,14 @@ class CBORDecoder(object):
     """
 
     __slots__ = (
-        'tag_hook', 'object_hook', '_shareables', '_fp_read', '_immutable')
+        'tag_hook', 'object_hook', '_share_index', '_shareables', '_fp_read',
+        '_immutable')
 
     def __init__(self, fp, tag_hook=None, object_hook=None):
         self.fp = fp
         self.tag_hook = tag_hook
         self.object_hook = object_hook
+        self._share_index = None
         self._shareables = []
         self._immutable = False
 
@@ -382,22 +62,17 @@ class CBORDecoder(object):
         else:
             self._fp_read = value.read
 
-    def _allocate_shareable(self):
-        self._shareables.append(None)
-        return len(self._shareables) - 1
-
-    def set_shareable(self, index, value):
+    def set_shareable(self, value):
         """
-        Set the shareable value for the last encountered shared value marker, if any.
+        Set the shareable value for the last encountered shared value marker,
+        if any.
 
-        If the given index is ``None``, nothing is done.
+        If the current shared index is ``None``, nothing is done.
 
-        :param index: the value of the ``shared_index`` argument to the decoder
         :param value: the shared value
-
         """
-        if index is not None:
-            self._shareables[index] = value
+        if self._share_index is not None:
+            self._shareables[self._share_index] = value
 
     def read(self, amount):
         """
@@ -406,50 +81,364 @@ class CBORDecoder(object):
         :param int amount: the number of bytes to read
 
         """
-        data = self.fp.read(amount)
+        data = self._fp_read(amount)
         if len(data) < amount:
-            raise CBORDecodeError('premature end of stream (expected to read {} bytes, got {} '
-                                  'instead)'.format(amount, len(data)))
+            raise CBORDecodeError(
+                'premature end of stream (expected to read {} bytes, got {} '
+                'instead)'.format(amount, len(data)))
 
         return data
 
-    def decode(self, shareable_index=None):
+    def _decode(self, immutable=False, unshared=False):
+        if immutable:
+            old_immutable = self._immutable
+            self._immutable = True
+        if unshared:
+            old_index = self._share_index
+            self._share_index = None
+        try:
+            try:
+                initial_byte = byte_as_integer(self.read(1))
+                major_type = initial_byte >> 5
+                subtype = initial_byte & 31
+            except Exception as e:
+                raise CBORDecodeError('error reading major type at index {}: {}'
+                                      .format(self.fp.tell(), e))
+
+            decoder = major_decoders[major_type]
+            try:
+                return decoder(self, subtype)
+            except CBORDecodeError:
+                raise
+            except Exception as e:
+                raise CBORDecodeError('error decoding value at index {}: {}'
+                                      .format(self.fp.tell(), e))
+        finally:
+            if immutable:
+                self._immutable = old_immutable
+            if unshared:
+                self._share_index = old_index
+
+    def decode(self):
         """
         Decode the next value from the stream.
 
         :raises CBORDecodeError: if there is any problem decoding the stream
 
         """
-        try:
-            initial_byte = byte_as_integer(self.fp.read(1))
-            major_type = initial_byte >> 5
-            subtype = initial_byte & 31
-        except Exception as e:
-            raise CBORDecodeError('error reading major type at index {}: {}'
-                                  .format(self.fp.tell(), e))
-
-        decoder = major_decoders[major_type]
-        try:
-            return decoder(self, subtype, shareable_index)
-        except CBORDecodeError:
-            raise
-        except Exception as e:
-            raise CBORDecodeError('error decoding value at index {}: {}'.format(self.fp.tell(), e))
+        return self._decode()
 
     def decode_from_bytes(self, buf):
         """
-        Wrap the given bytestring as a file and call :meth:`decode` with it as the argument.
+        Wrap the given bytestring as a file and call :meth:`decode` with it as
+        the argument.
 
-        This method was intended to be used from the ``tag_hook`` hook when an object needs to be
-        decoded separately from the rest but while still taking advantage of the shared value
-        registry.
-
+        This method was intended to be used from the ``tag_hook`` hook when an
+        object needs to be decoded separately from the rest but while still
+        taking advantage of the shared value registry.
         """
-        old_fp = self.fp
-        self.fp = BytesIO(buf)
-        retval = self.decode()
-        self.fp = old_fp
-        return retval
+        with BytesIO(buf) as fp:
+            old_fp = self.fp
+            self.fp = fp
+            retval = self._decode()
+            self.fp = old_fp
+            return retval
+
+    def _decode_length(self, subtype, allow_indefinite=False):
+        # Major tag 0
+        if subtype < 24:
+            return subtype
+        elif subtype == 24:
+            return byte_as_integer(self.read(1))
+        elif subtype == 25:
+            return struct.unpack('>H', self.read(2))[0]
+        elif subtype == 26:
+            return struct.unpack('>L', self.read(4))[0]
+        elif subtype == 27:
+            return struct.unpack('>Q', self.read(8))[0]
+        elif subtype == 31 and allow_indefinite:
+            return None
+        else:
+            raise CBORDecodeError(
+                'unknown unsigned integer subtype 0x%x' % subtype)
+
+    def decode_uint(self, subtype):
+        # Major tag 0
+        return self._decode_length(subtype)
+
+    def decode_negint(self, subtype):
+        # Major tag 1
+        return -self._decode_length(subtype) - 1
+
+    def decode_bytestring(self, subtype):
+        # Major tag 2
+        length = self._decode_length(subtype, allow_indefinite=True)
+        if length is None:
+            # Indefinite length
+            buf = []
+            while True:
+                initial_byte = byte_as_integer(self.read(1))
+                if initial_byte == 0xff:
+                    return b''.join(buf)
+                else:
+                    length = self._decode_length(initial_byte & 0x1f)
+                    value = self.read(length)
+                    buf.append(value)
+        else:
+            return self.read(length)
+
+    def decode_string(self, subtype):
+        # Major tag 3
+        return self.decode_bytestring(subtype).decode('utf-8')
+
+    def decode_array(self, subtype):
+        # Major tag 4
+        length = self._decode_length(subtype, allow_indefinite=True)
+        if length is None:
+            # Indefinite length
+            items = []
+            self.set_shareable(items)
+            while True:
+                value = self._decode()
+                if value is break_marker:
+                    break
+                else:
+                    items.append(value)
+        else:
+            items = [None] * length
+            self.set_shareable(items)
+            for index in range(length):
+                items[index] = self._decode()
+
+        if self.immutable:
+            items = tuple(items)
+            self.set_shareable(items)
+        return items
+
+    def decode_map(self, subtype):
+        # Major tag 5
+        length = self._decode_length(subtype, allow_indefinite=True)
+        if length is None:
+            # Indefinite length
+            dictionary = {}
+            self.set_shareable(dictionary)
+            while True:
+                key = self._decode(immutable=True, unshared=True)
+                if key is break_marker:
+                    break
+                else:
+                    dictionary[key] = self._decode(unshared=True)
+        elif self._share_index is None:
+            # Optimization: pre-allocate structures from length. Note this cannot
+            # be done when sharing the structure as the resulting structure is not
+            # the one initially allocated
+            seq = [None] * length
+            for index in range(length):
+                key = self._decode(immutable=True, unshared=True)
+                seq[index] = (key, self._decode(unshared=True))
+            dictionary = dict(seq)
+        else:
+            dictionary = {}
+            self.set_shareable(dictionary)
+            for _ in range(length):
+                key = self._decode(immutable=True, unshared=True)
+                dictionary[key] = self._decode(unshared=True)
+
+        if self.object_hook:
+            dictionary = self.object_hook(self, dictionary)
+            self.set_shareable(dictionary)
+        elif self.immutable:
+            dictionary = FrozenDict(dictionary)
+            self.set_shareable(dictionary)
+        return dictionary
+
+    def decode_semantic(self, subtype):
+        # Major tag 6
+        tagnum = self._decode_length(subtype)
+        semantic_decoder = semantic_decoders.get(tagnum)
+        if semantic_decoder:
+            return semantic_decoder(self)
+        else:
+            tag = CBORTag(tagnum, self._decode(unshared=True))
+            if self.tag_hook:
+                return self.tag_hook(self, tag)
+            else:
+                return tag
+
+    def decode_special(self, subtype):
+        # Simple value
+        if subtype < 20:
+            return CBORSimpleValue(subtype)
+
+        # Major tag 7
+        return special_decoders[subtype](self)
+
+    #
+    # Semantic decoders (major tag 6)
+    #
+
+    def decode_datetime_string(self):
+        # Semantic tag 0
+        value = self._decode()
+        match = timestamp_re.match(value)
+        if match:
+            (
+                year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                micro,
+                offset_h,
+                offset_m,
+            ) = match.groups()
+            if offset_h:
+                tz = timezone(timedelta(hours=int(offset_h), minutes=int(offset_m)))
+            else:
+                tz = timezone.utc
+
+            return datetime(
+                int(year), int(month), int(day),
+                int(hour), int(minute), int(second), int(micro or 0), tz)
+        else:
+            raise CBORDecodeError('invalid datetime string: {}'.format(value))
+
+    def decode_epoch_datetime(self):
+        # Semantic tag 1
+        value = self._decode()
+        return datetime.fromtimestamp(value, timezone.utc)
+
+    def decode_positive_bignum(self):
+        # Semantic tag 2
+        from binascii import hexlify
+        value = self._decode()
+        return int(hexlify(value), 16)
+
+    def decode_negative_bignum(self):
+        # Semantic tag 3
+        return -self.decode_positive_bignum() - 1
+
+    def decode_fraction(self):
+        # Semantic tag 4
+        from decimal import Decimal
+        exp, sig = self._decode()
+        return Decimal(sig) * (10 ** Decimal(exp))
+
+    def decode_bigfloat(self):
+        # Semantic tag 5
+        from decimal import Decimal
+        exp, sig = self._decode()
+        return Decimal(sig) * (2 ** Decimal(exp))
+
+    def decode_shareable(self):
+        old_index = self._share_index
+        self._share_index = len(self._shareables)
+        self._shareables.append(None)
+        try:
+            return self._decode()
+        finally:
+            self._share_index = old_index
+
+    def decode_sharedref(self):
+        # Semantic tag 29
+        value = self._decode()
+        try:
+            shared = self._shareables[value]
+        except IndexError:
+            raise CBORDecodeError('shared reference %d not found' % value)
+
+        if shared is None:
+            raise CBORDecodeError('shared value %d has not been initialized' % value)
+        else:
+            return shared
+
+    def decode_rational(self):
+        # Semantic tag 30
+        from fractions import Fraction
+        return Fraction(*self._decode())
+
+    def decode_regexp(self):
+        # Semantic tag 35
+        return re.compile(self._decode())
+
+    def decode_mime(self):
+        # Semantic tag 36
+        from email.parser import Parser
+        return Parser().parsestr(self._decode())
+
+    def decode_uuid(self):
+        # Semantic tag 37
+        from uuid import UUID
+        return UUID(bytes=self._decode())
+
+    def decode_set(self):
+        # Semantic tag 258
+        if self._immutable:
+            return frozenset(self._decode(immutable=True))
+        else:
+            return set(self._decode(immutable=True))
+
+    #
+    # Special decoders (major tag 7)
+    #
+
+    def decode_simple_value(self):
+        return CBORSimpleValue(byte_as_integer(self.read(1)))
+
+    def decode_float16(self):
+        payload = self.read(2)
+        try:
+            value = struct.unpack('>e', payload)[0]
+        except struct.error:
+            value = unpack_float16(payload)
+        return value
+
+    def decode_float32(self):
+        return struct.unpack('>f', self.read(4))[0]
+
+    def decode_float64(self):
+        return struct.unpack('>d', self.read(8))[0]
+
+
+major_decoders = {
+    0: CBORDecoder.decode_uint,
+    1: CBORDecoder.decode_negint,
+    2: CBORDecoder.decode_bytestring,
+    3: CBORDecoder.decode_string,
+    4: CBORDecoder.decode_array,
+    5: CBORDecoder.decode_map,
+    6: CBORDecoder.decode_semantic,
+    7: CBORDecoder.decode_special
+}
+
+special_decoders = {
+    20: lambda self: False,
+    21: lambda self: True,
+    22: lambda self: None,
+    23: lambda self: undefined,
+    24: CBORDecoder.decode_simple_value,
+    25: CBORDecoder.decode_float16,
+    26: CBORDecoder.decode_float32,
+    27: CBORDecoder.decode_float64,
+    31: lambda self: break_marker
+}
+
+semantic_decoders = {
+    0:   CBORDecoder.decode_datetime_string,
+    1:   CBORDecoder.decode_epoch_datetime,
+    2:   CBORDecoder.decode_positive_bignum,
+    3:   CBORDecoder.decode_negative_bignum,
+    4:   CBORDecoder.decode_fraction,
+    5:   CBORDecoder.decode_bigfloat,
+    28:  CBORDecoder.decode_shareable,
+    29:  CBORDecoder.decode_sharedref,
+    30:  CBORDecoder.decode_rational,
+    35:  CBORDecoder.decode_regexp,
+    36:  CBORDecoder.decode_mime,
+    37:  CBORDecoder.decode_uuid,
+    258: CBORDecoder.decode_set
+}
 
 
 def loads(payload, **kwargs):
@@ -461,8 +450,8 @@ def loads(payload, **kwargs):
     :return: the deserialized object
 
     """
-    fp = BytesIO(payload)
-    return CBORDecoder(fp, **kwargs).decode()
+    with BytesIO(payload) as fp:
+        return CBORDecoder(fp, **kwargs).decode()
 
 
 def load(fp, **kwargs):

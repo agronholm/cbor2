@@ -1,10 +1,12 @@
 import re
+import math
 import struct
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from functools import wraps
 from datetime import datetime, date, time
 from io import BytesIO
+from sys import modules
 
 from .compat import (
     iteritems, timezone, long, int2bytes, unicode, as_unicode, pack_float16, unpack_float16)
@@ -27,290 +29,36 @@ def shareable_encoder(func):
 
     """
     @wraps(func)
-    def wrapper(encoder, value, *args, **kwargs):
+    def wrapper(encoder, value):
         value_id = id(value)
-        container, container_index = encoder._shared_containers.get(value_id, (None, None))
-        if encoder.value_sharing:
-            if container is value:
-                # Generate a reference to the previous index instead of encoding this again
-                encoder.write(encode_length(0xd8, 0x1d))
-                encode_int(encoder, container_index)
-            else:
+        try:
+            container_index = encoder._shared_containers[id(value)][1]
+        except KeyError:
+            if encoder.value_sharing:
                 # Mark the container as shareable
-                encoder._shared_containers[value_id] = (value, len(encoder._shared_containers))
-                encoder.write(encode_length(0xd8, 0x1c))
-                func(encoder, value, *args, **kwargs)
-        else:
-            if container is value:
-                raise CBOREncodeError('cyclic data structure detected but value sharing is '
-                                      'disabled')
+                encoder._shared_containers[value_id] = (
+                    value, len(encoder._shared_containers)
+                )
+                encoder.encode_length(6, 0x1c)
+                func(encoder, value)
             else:
                 encoder._shared_containers[value_id] = (value, None)
-                func(encoder, value, *args, **kwargs)
-                del encoder._shared_containers[value_id]
+                try:
+                    func(encoder, value)
+                finally:
+                    del encoder._shared_containers[value_id]
+        else:
+            if encoder.value_sharing:
+                # Generate a reference to the previous index instead of
+                # encoding this again
+                encoder.encode_length(6, 0x1d)
+                encoder.encode_int(container_index)
+            else:
+                raise CBOREncodeError(
+                    'cyclic data structure detected but value sharing is '
+                    'disabled')
 
     return wrapper
-
-
-def encode_length(major_tag, length):
-    if length < 24:
-        return struct.pack('>B', major_tag | length)
-    elif length < 256:
-        return struct.pack('>BB', major_tag | 24, length)
-    elif length < 65536:
-        return struct.pack('>BH', major_tag | 25, length)
-    elif length < 4294967296:
-        return struct.pack('>BL', major_tag | 26, length)
-    else:
-        return struct.pack('>BQ', major_tag | 27, length)
-
-
-def encode_int(encoder, value):
-    # Big integers (2 ** 64 and over)
-    if value >= 18446744073709551616 or value < -18446744073709551616:
-        if value >= 0:
-            major_type = 0x02
-        else:
-            major_type = 0x03
-            value = -value - 1
-
-        payload = int2bytes(value)
-        encode_semantic(encoder, CBORTag(major_type, payload))
-    elif value >= 0:
-        encoder.write(encode_length(0, value))
-    else:
-        encoder.write(encode_length(0x20, abs(value) - 1))
-
-
-def encode_bytestring(encoder, value):
-    encoder.write(encode_length(0x40, len(value)))
-    encoder.write(value)
-
-
-def encode_bytearray(encoder, value):
-    encode_bytestring(encoder, bytes(value))
-
-
-def encode_string(encoder, value):
-    encoded = value.encode('utf-8')
-    encoder.write(encode_length(0x60, len(encoded)))
-    encoder.write(encoded)
-
-
-@shareable_encoder
-def encode_array(encoder, value):
-    encoder.write(encode_length(0x80, len(value)))
-    for item in value:
-        encoder.encode(item)
-
-
-@shareable_encoder
-def encode_map(encoder, value):
-    encoder.write(encode_length(0xa0, len(value)))
-    for key, val in iteritems(value):
-        encoder.encode(key)
-        encoder.encode(val)
-
-
-def encode_sortable_key(encoder, value):
-    """Takes a key and calculates the length of its optimal byte representation"""
-    encoded = encoder.encode_to_bytes(value)
-    return len(encoded), encoded
-
-
-@shareable_encoder
-def encode_canonical_map(encoder, value):
-    """Reorder keys according to Canonical CBOR specification"""
-    keyed_keys = ((encode_sortable_key(encoder, key), key) for key in value.keys())
-    encoder.write(encode_length(0xa0, len(value)))
-    for sortkey, realkey in sorted(keyed_keys):
-        encoder.write(sortkey[1])
-        encoder.encode(value[realkey])
-
-
-def encode_semantic(encoder, value):
-    encoder.write(encode_length(0xc0, value.tag))
-    encoder.encode(value.value)
-
-
-#
-# Semantic decoders (major tag 6)
-#
-
-def encode_datetime(encoder, value):
-    # Semantic tag 0
-    if not value.tzinfo:
-        if encoder.timezone:
-            value = value.replace(tzinfo=encoder.timezone)
-        else:
-            raise CBOREncodeError(
-                'naive datetime encountered and no default timezone has been set')
-
-    if encoder.datetime_as_timestamp:
-        from calendar import timegm
-        timestamp = timegm(value.utctimetuple()) + value.microsecond // 1000000
-        encode_semantic(encoder, CBORTag(1, timestamp))
-    else:
-        datestring = as_unicode(value.isoformat().replace('+00:00', 'Z'))
-        encode_semantic(encoder, CBORTag(0, datestring))
-
-
-def encode_date(encoder, value):
-    value = datetime.combine(value, time()).replace(tzinfo=timezone.utc)
-    encode_datetime(encoder, value)
-
-
-def encode_decimal(encoder, value):
-    # Semantic tag 4
-    if value.is_nan():
-        encoder.write(b'\xf9\x7e\x00')
-    elif value.is_infinite():
-        encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
-    else:
-        dt = value.as_tuple()
-        sig = 0
-        for digit in dt.digits:
-            sig = (sig * 10) + digit
-        if dt.sign:
-            sig = -sig
-        with encoder.disable_value_sharing():
-            encode_semantic(encoder, CBORTag(4, [dt.exponent, sig]))
-
-
-def encode_rational(encoder, value):
-    # Semantic tag 30
-    with encoder.disable_value_sharing():
-        encode_semantic(encoder, CBORTag(30, [value.numerator, value.denominator]))
-
-
-def encode_regexp(encoder, value):
-    # Semantic tag 35
-    encode_semantic(encoder, CBORTag(35, as_unicode(value.pattern)))
-
-
-def encode_mime(encoder, value):
-    # Semantic tag 36
-    encode_semantic(encoder, CBORTag(36, as_unicode(value.as_string())))
-
-
-def encode_uuid(encoder, value):
-    # Semantic tag 37
-    encode_semantic(encoder, CBORTag(37, value.bytes))
-
-
-def encode_set(encoder, value):
-    # Semantic tag 258
-    encode_semantic(encoder, CBORTag(258, tuple(value)))
-
-
-def encode_canonical_set(encoder, value):
-    # Semantic tag 258
-    values = sorted([(encode_sortable_key(encoder, key), key) for key in value])
-    encode_semantic(encoder, CBORTag(258, [key[1] for key in values]))
-
-
-#
-# Special encoders (major tag 7)
-#
-
-def encode_simple_value(encoder, value):
-    if value.value < 20:
-        encoder.write(struct.pack('>B', 0xe0 | value.value))
-    else:
-        encoder.write(struct.pack('>BB', 0xf8, value.value))
-
-
-def encode_float(encoder, value):
-    # Handle special values efficiently
-    import math
-    if math.isnan(value):
-        encoder.write(b'\xf9\x7e\x00')
-    elif math.isinf(value):
-        encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
-    else:
-        encoder.write(struct.pack('>Bd', 0xfb, value))
-
-
-def encode_minimal_float(encoder, value):
-    # Handle special values efficiently
-    import math
-    if math.isnan(value):
-        encoder.write(b'\xf9\x7e\x00')
-    elif math.isinf(value):
-        encoder.write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
-    else:
-        # Try each encoding in turn from longest to shortest
-        encoded = struct.pack('>Bd', 0xfb, value)
-        for format, tag in [('>Bf', 0xfa), ('>Be', 0xf9)]:
-            try:
-                new_encoded = struct.pack(format, tag, value)
-                # Check if encoding as low-byte float loses precision
-                if struct.unpack(format, new_encoded)[1] == value:
-                    encoded = new_encoded
-                else:
-                    break
-            except struct.error:
-                # Catch the case where the 'e' format is not supported
-                new_encoded = pack_float16(value)
-                if new_encoded and unpack_float16(new_encoded[1:]) == value:
-                    encoded = new_encoded
-                else:
-                    break
-            except OverflowError:
-                break
-        encoder.write(encoded)
-
-
-def encode_boolean(encoder, value):
-    encoder.write(b'\xf5' if value else b'\xf4')
-
-
-def encode_none(encoder, value):
-    encoder.write(b'\xf6')
-
-
-def encode_undefined(encoder, value):
-    encoder.write(b'\xf7')
-
-
-default_encoders = OrderedDict([
-    (bytes, encode_bytestring),
-    (bytearray, encode_bytearray),
-    (unicode, encode_string),
-    (int, encode_int),
-    (long, encode_int),
-    (float, encode_float),
-    (('decimal', 'Decimal'), encode_decimal),
-    (bool, encode_boolean),
-    (type(None), encode_none),
-    (tuple, encode_array),
-    (list, encode_array),
-    (dict, encode_map),
-    (defaultdict, encode_map),
-    (OrderedDict, encode_map),
-    (FrozenDict, encode_map),
-    (type(undefined), encode_undefined),
-    (datetime, encode_datetime),
-    (date, encode_date),
-    (type(re.compile('')), encode_regexp),
-    (('fractions', 'Fraction'), encode_rational),
-    (('email.message', 'Message'), encode_mime),
-    (('uuid', 'UUID'), encode_uuid),
-    (CBORSimpleValue, encode_simple_value),
-    (CBORTag, encode_semantic),
-    (set, encode_set),
-    (frozenset, encode_set)
-])
-
-canonical_encoders = OrderedDict([
-    (float, encode_minimal_float),
-    (dict, encode_canonical_map),
-    (defaultdict, encode_canonical_map),
-    (OrderedDict, encode_canonical_map),
-    (FrozenDict, encode_canonical_map),
-    (set, encode_canonical_set),
-    (frozenset, encode_canonical_set)
-])
 
 
 class CBOREncoder(object):
@@ -346,8 +94,6 @@ class CBOREncoder(object):
             self._encoders.update(canonical_encoders)
 
     def _find_encoder(self, obj_type):
-        from sys import modules
-
         for type_, enc in list(iteritems(self._encoders)):
             if type(type_) is tuple:
                 modname, typename = type_
@@ -419,11 +165,254 @@ class CBOREncoder(object):
         registry.
 
         """
-        old_fp = self.fp
-        self.fp = fp = BytesIO()
-        self.encode(obj)
-        self.fp = old_fp
-        return fp.getvalue()
+        with BytesIO() as fp:
+            old_fp = self.fp
+            self.fp = fp
+            self.encode(obj)
+            self.fp = old_fp
+            return fp.getvalue()
+
+    def encode_length(self, major_tag, length):
+        major_tag <<= 5
+        if length < 24:
+            self._fp_write(struct.pack('>B', major_tag | length))
+        elif length < 256:
+            self._fp_write(struct.pack('>BB', major_tag | 24, length))
+        elif length < 65536:
+            self._fp_write(struct.pack('>BH', major_tag | 25, length))
+        elif length < 4294967296:
+            self._fp_write(struct.pack('>BL', major_tag | 26, length))
+        else:
+            self._fp_write(struct.pack('>BQ', major_tag | 27, length))
+
+    def encode_int(self, value):
+        # Big integers (2 ** 64 and over)
+        if value >= 18446744073709551616 or value < -18446744073709551616:
+            if value >= 0:
+                major_type = 0x02
+            else:
+                major_type = 0x03
+                value = -value - 1
+
+            payload = int2bytes(value)
+            self.encode_semantic(CBORTag(major_type, payload))
+        elif value >= 0:
+            self.encode_length(0, value)
+        else:
+            self.encode_length(1, -(value + 1))
+
+    def encode_bytestring(self, value):
+        self.encode_length(2, len(value))
+        self._fp_write(value)
+
+    def encode_bytearray(self, value):
+        self.encode_bytestring(bytes(value))
+
+    def encode_string(self, value):
+        encoded = value.encode('utf-8')
+        self.encode_length(3, len(encoded))
+        self._fp_write(encoded)
+
+    @shareable_encoder
+    def encode_array(self, value):
+        self.encode_length(4, len(value))
+        for item in value:
+            self.encode(item)
+
+    @shareable_encoder
+    def encode_map(self, value):
+        self.encode_length(5, len(value))
+        for key, val in value.items():
+            self.encode(key)
+            self.encode(val)
+
+    def encode_sortable_key(self, value):
+        """Takes a key and calculates the length of its optimal byte representation"""
+        encoded = self.encode_to_bytes(value)
+        return len(encoded), encoded
+
+    @shareable_encoder
+    def encode_canonical_map(self, value):
+        """Reorder keys according to Canonical CBOR specification"""
+        keyed_keys = (
+            (self.encode_sortable_key(key), key, value)
+            for key, value in value.items()
+        )
+        self.encode_length(5, len(value))
+        for sortkey, realkey, value in sorted(keyed_keys):
+            self._fp_write(sortkey[1])
+            self.encode(value)
+
+    def encode_semantic(self, value):
+        self.encode_length(6, value.tag)
+        self.encode(value.value)
+
+    #
+    # Semantic decoders (major tag 6)
+    #
+
+    def encode_datetime(self, value):
+        # Semantic tag 0
+        if not value.tzinfo:
+            if self.timezone:
+                value = value.replace(tzinfo=self.timezone)
+            else:
+                raise CBOREncodeError(
+                    'naive datetime encountered and no default timezone has been set')
+
+        if self.datetime_as_timestamp:
+            from calendar import timegm
+            timestamp = timegm(value.utctimetuple()) + value.microsecond // 1000000
+            self.encode_semantic(CBORTag(1, timestamp))
+        else:
+            datestring = as_unicode(value.isoformat().replace('+00:00', 'Z'))
+            self.encode_semantic(CBORTag(0, datestring))
+
+    def encode_date(self, value):
+        value = datetime.combine(value, time()).replace(tzinfo=timezone.utc)
+        self.encode_datetime(value)
+
+    def encode_decimal(self, value):
+        # Semantic tag 4
+        if value.is_nan():
+            self._fp_write(b'\xf9\x7e\x00')
+        elif value.is_infinite():
+            self._fp_write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+        else:
+            dt = value.as_tuple()
+            sig = 0
+            for digit in dt.digits:
+                sig = (sig * 10) + digit
+            if dt.sign:
+                sig = -sig
+            with self.disable_value_sharing():
+                self.encode_semantic(CBORTag(4, [dt.exponent, sig]))
+
+    def encode_rational(self, value):
+        # Semantic tag 30
+        with self.disable_value_sharing():
+            self.encode_semantic(CBORTag(30, [value.numerator, value.denominator]))
+
+    def encode_regexp(self, value):
+        # Semantic tag 35
+        self.encode_semantic(CBORTag(35, as_unicode(value.pattern)))
+
+    def encode_mime(self, value):
+        # Semantic tag 36
+        self.encode_semantic(CBORTag(36, as_unicode(value.as_string())))
+
+    def encode_uuid(self, value):
+        # Semantic tag 37
+        self.encode_semantic(CBORTag(37, value.bytes))
+
+    def encode_set(self, value):
+        # Semantic tag 258
+        self.encode_semantic(CBORTag(258, tuple(value)))
+
+    def encode_canonical_set(self, value):
+        # Semantic tag 258
+        values = sorted(
+            (self.encode_sortable_key(key), key)
+            for key in value
+        )
+        self.encode_semantic(CBORTag(258, [key[1] for key in values]))
+
+    #
+    # Special encoders (major tag 7)
+    #
+
+    def encode_simple_value(self, value):
+        if value.value < 20:
+            self._fp_write(struct.pack('>B', 0xe0 | value.value))
+        else:
+            self._fp_write(struct.pack('>BB', 0xf8, value.value))
+
+    def encode_float(self, value):
+        # Handle special values efficiently
+        if math.isnan(value):
+            self._fp_write(b'\xf9\x7e\x00')
+        elif math.isinf(value):
+            self._fp_write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+        else:
+            self._fp_write(struct.pack('>Bd', 0xfb, value))
+
+    def encode_minimal_float(self, value):
+        # Handle special values efficiently
+        if math.isnan(value):
+            self._fp_write(b'\xf9\x7e\x00')
+        elif math.isinf(value):
+            self._fp_write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+        else:
+            # Try each encoding in turn from longest to shortest
+            encoded = struct.pack('>Bd', 0xfb, value)
+            for format, tag in [('>Bf', 0xfa), ('>Be', 0xf9)]:
+                try:
+                    new_encoded = struct.pack(format, tag, value)
+                    # Check if encoding as low-byte float loses precision
+                    if struct.unpack(format, new_encoded)[1] == value:
+                        encoded = new_encoded
+                    else:
+                        break
+                except struct.error:
+                    # Catch the case where the 'e' format is not supported
+                    new_encoded = pack_float16(value)
+                    if new_encoded and unpack_float16(new_encoded[1:]) == value:
+                        encoded = new_encoded
+                    else:
+                        break
+                except OverflowError:
+                    break
+            self._fp_write(encoded)
+
+    def encode_boolean(self, value):
+        self._fp_write(b'\xf5' if value else b'\xf4')
+
+    def encode_none(self, value):
+        self._fp_write(b'\xf6')
+
+    def encode_undefined(self, value):
+        self._fp_write(b'\xf7')
+
+
+default_encoders = OrderedDict([
+    (bytes,                         CBOREncoder.encode_bytestring),
+    (bytearray,                     CBOREncoder.encode_bytearray),
+    (unicode,                       CBOREncoder.encode_string),
+    (int,                           CBOREncoder.encode_int),
+    (long,                          CBOREncoder.encode_int),
+    (float,                         CBOREncoder.encode_float),
+    (('decimal', 'Decimal'),        CBOREncoder.encode_decimal),
+    (bool,                          CBOREncoder.encode_boolean),
+    (type(None),                    CBOREncoder.encode_none),
+    (tuple,                         CBOREncoder.encode_array),
+    (list,                          CBOREncoder.encode_array),
+    (dict,                          CBOREncoder.encode_map),
+    (defaultdict,                   CBOREncoder.encode_map),
+    (OrderedDict,                   CBOREncoder.encode_map),
+    (FrozenDict,                    CBOREncoder.encode_map),
+    (type(undefined),               CBOREncoder.encode_undefined),
+    (datetime,                      CBOREncoder.encode_datetime),
+    (date,                          CBOREncoder.encode_date),
+    (type(re.compile('')),          CBOREncoder.encode_regexp),
+    (('fractions', 'Fraction'),     CBOREncoder.encode_rational),
+    (('email.message', 'Message'),  CBOREncoder.encode_mime),
+    (('uuid', 'UUID'),              CBOREncoder.encode_uuid),
+    (CBORSimpleValue,               CBOREncoder.encode_simple_value),
+    (CBORTag,                       CBOREncoder.encode_semantic),
+    (set,                           CBOREncoder.encode_set),
+    (frozenset,                     CBOREncoder.encode_set)
+])
+
+
+canonical_encoders = OrderedDict([
+    (float,       CBOREncoder.encode_minimal_float),
+    (dict,        CBOREncoder.encode_canonical_map),
+    (defaultdict, CBOREncoder.encode_canonical_map),
+    (OrderedDict, CBOREncoder.encode_canonical_map),
+    (FrozenDict,  CBOREncoder.encode_canonical_map),
+    (set,         CBOREncoder.encode_canonical_set),
+    (frozenset,   CBOREncoder.encode_canonical_set)
+])
 
 
 def dumps(obj, **kwargs):
@@ -436,9 +425,9 @@ def dumps(obj, **kwargs):
     :rtype: bytes
 
     """
-    fp = BytesIO()
-    dump(obj, fp, **kwargs)
-    return fp.getvalue()
+    with BytesIO() as fp:
+        dump(obj, fp, **kwargs)
+        return fp.getvalue()
 
 
 def dump(obj, fp, **kwargs):
