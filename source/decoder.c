@@ -320,8 +320,8 @@ fp_read(CBORDecoderObject *self, char *buf, const uint64_t size)
             } else {
                 PyErr_Format(
                     _CBOR2_CBORDecodeError,
-                    "premature end of stream (expected to read %d bytes, "
-                    "got %d instead)", size, PyBytes_GET_SIZE(obj));
+                    "premature end of stream (expected to read %llu bytes, "
+                    "got %lld instead)", size, PyBytes_GET_SIZE(obj));
             }
             Py_DECREF(obj);
         }
