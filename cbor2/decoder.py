@@ -1,5 +1,6 @@
 import re
 import struct
+from collections import Mapping
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -376,6 +377,30 @@ class CBORDecoder(object):
         else:
             return set(self._decode(immutable=True))
 
+    def decode_ipaddress(self):
+        # Semantic tag 260
+        from ipaddress import ip_address
+        buf = self.decode()
+        if not isinstance(buf, bytes) or len(buf) not in (4, 6, 16):
+            raise CBORDecodeError("invalid ipaddress value %r" % buf)
+        elif len(buf) in (4, 16):
+            return ip_address(buf)
+        elif len(buf) == 6:
+            # MAC address
+            return CBORTag(260, buf)
+
+    def decode_ipnetwork(self):
+        # Semantic tag 261
+        from ipaddress import ip_network
+        net_map = self.decode()
+        if isinstance(net_map, Mapping) and len(net_map) == 1:
+            for net in net_map.items():
+                try:
+                    return ip_network(net, strict=False)
+                except (TypeError, ValueError):
+                    break
+        raise CBORDecodeError("invalid ipnetwork value %r" % net_map)
+
     #
     # Special decoders (major tag 7)
     #
@@ -406,7 +431,7 @@ major_decoders = {
     4: CBORDecoder.decode_array,
     5: CBORDecoder.decode_map,
     6: CBORDecoder.decode_semantic,
-    7: CBORDecoder.decode_special
+    7: CBORDecoder.decode_special,
 }
 
 special_decoders = {
@@ -418,7 +443,7 @@ special_decoders = {
     25: CBORDecoder.decode_float16,
     26: CBORDecoder.decode_float32,
     27: CBORDecoder.decode_float64,
-    31: lambda self: break_marker
+    31: lambda self: break_marker,
 }
 
 semantic_decoders = {
@@ -434,7 +459,9 @@ semantic_decoders = {
     35:  CBORDecoder.decode_regexp,
     36:  CBORDecoder.decode_mime,
     37:  CBORDecoder.decode_uuid,
-    258: CBORDecoder.decode_set
+    258: CBORDecoder.decode_set,
+    260: CBORDecoder.decode_ipaddress,
+    261: CBORDecoder.decode_ipnetwork,
 }
 
 

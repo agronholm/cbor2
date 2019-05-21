@@ -10,6 +10,11 @@ from email.message import Message
 from fractions import Fraction
 from io import BytesIO
 from uuid import UUID
+try:
+    from ipaddress import ip_address, ip_network
+except ImportError:
+    def ip_address(x): pass
+    def ip_network(x, strict): pass
 
 import pytest
 
@@ -274,6 +279,66 @@ def test_mime(impl):
 def test_uuid(impl):
     decoded = impl.loads(unhexlify('d825505eaffac8b51e480581277fdcc7842faf'))
     assert decoded == UUID(hex='5eaffac8b51e480581277fdcc7842faf')
+
+
+@pytest.mark.skipif(sys.version_info < (3, 3), reason="Address decoding requires Py3.3+")
+@pytest.mark.parametrize('payload, expected', [
+    ('d9010444c00a0a01', ip_address('192.10.10.1')),
+    ('d901045020010db885a3000000008a2e03707334', ip_address('2001:db8:85a3::8a2e:370:7334')),
+    ('d9010446010203040506', (260, b'\x01\x02\x03\x04\x05\x06')),
+], ids=[
+    'ipv4',
+    'ipv6',
+    'mac',
+])
+def test_ipaddress(impl, payload, expected):
+    if isinstance(expected, tuple):
+        expected = impl.CBORTag(*expected)
+    payload = unhexlify(payload)
+    assert impl.loads(payload) == expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 3), reason="Address decoding requires Py3.3+")
+def test_bad_ipaddress(impl):
+    with pytest.raises(impl.CBORDecodeError) as exc:
+        impl.loads(unhexlify('d9010443c00a0a'))
+    assert str(exc.value).endswith('invalid ipaddress value %r' % b'\xc0\x0a\x0a')
+    with pytest.raises(impl.CBORDecodeError) as exc:
+        impl.loads(unhexlify('d9010401'))
+    assert str(exc.value).endswith('invalid ipaddress value 1')
+
+
+@pytest.mark.skipif(sys.version_info < (3, 5), reason="Network decoding requires Py3.5+")
+@pytest.mark.parametrize('payload, expected', [
+    ('d90105a144c0a800641818', ip_network('192.168.0.100/24', False)),
+    ('d90105a15020010db885a3000000008a2e000000001860',
+     ip_network('2001:db8:85a3:0:0:8a2e::/96', False)),
+], ids=[
+    'ipv4',
+    'ipv6',
+])
+def test_ipnetwork(impl, payload, expected):
+    # XXX The following pytest.skip is only included to work-around a bug in
+    # pytest under python 3.3 (which prevents the decorator above from skipping
+    # correctly); remove when 3.3 support is dropped
+    if sys.version_info < (3, 5):
+        pytest.skip("Network decoding requires Py3.5+")
+    payload = unhexlify(payload)
+    assert impl.loads(payload) == expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 5), reason="Network decoding requires Py3.5+")
+def test_bad_ipnetwork(impl):
+    with pytest.raises(impl.CBORDecodeError) as exc:
+        impl.loads(unhexlify('d90105a244c0a80064181844c0a800001818'))
+    assert str(exc.value).endswith(
+        'invalid ipnetwork value %r' %
+        {b'\xc0\xa8\x00d': 24, b'\xc0\xa8\x00\x00': 24})
+    with pytest.raises(impl.CBORDecodeError) as exc:
+        impl.loads(unhexlify('d90105a144c0a80064420102'))
+    assert str(exc.value).endswith(
+        'invalid ipnetwork value %r' %
+        {b'\xc0\xa8\x00d': b'\x01\x02'})
 
 
 def test_bad_shared_reference(impl):
