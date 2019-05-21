@@ -561,9 +561,9 @@ CBOREncoder_encode_int(CBOREncoderObject *self, PyObject *value)
 }
 
 
-// CBOREncoder.encode_bytes(self, value)
+// CBOREncoder.encode_bytestring(self, value)
 static PyObject *
-CBOREncoder_encode_bytes(CBOREncoderObject *self, PyObject *value)
+CBOREncoder_encode_bytestring(CBOREncoderObject *self, PyObject *value)
 {
     // major type 2
     char *buf;
@@ -1075,7 +1075,8 @@ encode_shared(CBOREncoderObject *self, EncodeFunction *encoder,
             if (tuple) {
                 PyErr_SetString(
                     _CBOR2_CBOREncodeError,
-                    "cyclic data structure detected but value_sharing is False");
+                    "cyclic data structure detected but value sharing is "
+                    "disabled");
             } else {
                 tuple = PyTuple_Pack(2, value, Py_None);
                 if (tuple) {
@@ -1158,9 +1159,9 @@ CBOREncoder_encode_rational(CBOREncoderObject *self, PyObject *value)
 }
 
 
-// CBOREncoder.encode_regex(self, value)
+// CBOREncoder.encode_regexp(self, value)
 static PyObject *
-CBOREncoder_encode_regex(CBOREncoderObject *self, PyObject *value)
+CBOREncoder_encode_regexp(CBOREncoderObject *self, PyObject *value)
 {
     // semantic type 35
     PyObject *pattern, *ret = NULL;
@@ -1404,9 +1405,9 @@ CBOREncoder_encode_undefined(CBOREncoderObject *self, PyObject *value)
 }
 
 
-// CBOREncoder.encode_simple(self, (value,))
+// CBOREncoder.encode_simple_value(self, (value,))
 static PyObject *
-CBOREncoder_encode_simple(CBOREncoderObject *self, PyObject *args)
+CBOREncoder_encode_simple_value(CBOREncoderObject *self, PyObject *args)
 {
     // special types 0..255
     uint8_t value;
@@ -1736,7 +1737,7 @@ encode(CBOREncoderObject *self, PyObject *value)
         case 0:
             // regular encoders
             if (PyBytes_CheckExact(value))
-                return CBOREncoder_encode_bytes(self, value);
+                return CBOREncoder_encode_bytestring(self, value);
             else if (PyByteArray_CheckExact(value))
                 return CBOREncoder_encode_bytearray(self, value);
             else if (PyUnicode_CheckExact(value))
@@ -1883,7 +1884,7 @@ static PyMethodDef CBOREncoder_methods[] = {
         "encode the datetime *value* to the output"},
     {"encode_date", (PyCFunction) CBOREncoder_encode_date, METH_O,
         "encode the date *value* to the output"},
-    {"encode_bytes", (PyCFunction) CBOREncoder_encode_bytes, METH_O,
+    {"encode_bytestring", (PyCFunction) CBOREncoder_encode_bytestring, METH_O,
         "encode the specified bytes *value* to the output"},
     {"encode_bytearray", (PyCFunction) CBOREncoder_encode_bytearray, METH_O,
         "encode the specified bytearray *value* to the output"},
@@ -1895,13 +1896,13 @@ static PyMethodDef CBOREncoder_methods[] = {
         "encode the specified mapping *value* to the output"},
     {"encode_semantic", (PyCFunction) CBOREncoder_encode_semantic, METH_O,
         "encode the specified CBORTag to the output"},
-    {"encode_simple", (PyCFunction) CBOREncoder_encode_simple, METH_O,
+    {"encode_simple_value", (PyCFunction) CBOREncoder_encode_simple_value, METH_O,
         "encode the specified CBORSimpleValue to the output"},
     {"encode_rational", (PyCFunction) CBOREncoder_encode_rational, METH_O,
         "encode the specified fraction to the output"},
     {"encode_decimal", (PyCFunction) CBOREncoder_encode_decimal, METH_O,
         "encode the specified Decimal to the output"},
-    {"encode_regex", (PyCFunction) CBOREncoder_encode_regex, METH_O,
+    {"encode_regexp", (PyCFunction) CBOREncoder_encode_regexp, METH_O,
         "encode the specified regular expression object to the output"},
     {"encode_mime", (PyCFunction) CBOREncoder_encode_mime, METH_O,
         "encode the specified MIME message object to the output"},
@@ -1955,13 +1956,10 @@ PyDoc_STRVAR(CBOREncoder__doc__,
 "    encoder instance and the value being encoded) when no suitable\n"
 "    encoder has been found, and should use the methods on the encoder\n"
 "    to encode any objects it wants to add to the data stream\n"
-":param int enc_style:\n"
-"    when 0 (the default), optimizes the standard encoders table for\n"
-"    faster encoding; when 1, overrides the standard encoders with\n"
-"    optimized variants of canonical encoders; when 2 (or any other\n"
-"    value), ignores the optimized tables and relies entirely on the\n"
-"    :attr:`encoders` dict to lookup encoding methods (note: this is\n"
-"    considerably slower but the most flexible option)\n"
+":param int canonical:\n"
+"    when True, use \"canonical\" CBOR representation; this typically\n"
+"    involves sorting maps, sets, etc. into a pre-determined order ensuring\n"
+"    that serializations are comparable without decoding\n"
 "\n"
 ".. _CBOR: https://cbor.io/\n"
 );
