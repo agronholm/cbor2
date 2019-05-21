@@ -143,6 +143,9 @@ CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
     if (str_errors && _CBORDecoder_set_str_errors(self, str_errors, NULL) == -1)
         return -1;
 
+    if (!_CBOR2_FrozenDict && _CBOR2_init_FrozenDict() == -1)
+        return -1;
+
     return 0;
 }
 
@@ -782,9 +785,17 @@ decode_map(CBORDecoderObject *self, uint8_t subtype)
         if (!ret)
             Py_DECREF(map);
     }
+    if (ret && self->immutable) {
+        // _CBOR2_FrozenDict is initialized in CBORDecoder_init
+        map = PyObject_CallFunctionObjArgs(_CBOR2_FrozenDict, ret, NULL);
+        if (map) {
+            set_shareable(self, map);
+            Py_DECREF(ret);
+            ret = map;
+        }
+    }
     if (ret && self->object_hook != Py_None) {
-        map = PyObject_CallFunctionObjArgs(
-                self->object_hook, self, ret, NULL);
+        map = PyObject_CallFunctionObjArgs(self->object_hook, self, ret, NULL);
         if (map) {
             set_shareable(self, map);
             Py_DECREF(ret);

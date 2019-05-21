@@ -121,16 +121,22 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
     if (!self->shared)
         return -1;
 
+    if (!_CBOR2_default_encoders && init_default_encoders() == -1)
+        return -1;
+
     tmp = self->encoders;
     self->encoders = PyObject_CallMethodObjArgs(
         _CBOR2_default_encoders, _CBOR2_str_copy, NULL);
     Py_DECREF(tmp);
     if (!self->encoders)
         return -1;
-    if (self->enc_style)
+    if (self->enc_style) {
+        if (!_CBOR2_canonical_encoders && init_canonical_encoders() == -1)
+            return -1;
         if (!PyObject_CallMethodObjArgs(self->encoders,
                     _CBOR2_str_update, _CBOR2_canonical_encoders, NULL))
             return -1;
+    }
 
     return 0;
 }

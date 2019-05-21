@@ -403,22 +403,22 @@ error:
 }
 
 int
-_CBOR2_init_OrderedDict(void)
+_CBOR2_init_FrozenDict(void)
 {
-    PyObject *collections;
+    PyObject *cbor2_types;
 
-    // from collections import OrderedDict
-    collections = PyImport_ImportModule("collections");
-    if (!collections)
+    // from cbor2.types import FrozenDict
+    cbor2_types = PyImport_ImportModule("cbor2.types");
+    if (!cbor2_types)
         goto error;
-    _CBOR2_OrderedDict = PyObject_GetAttr(collections, _CBOR2_str_OrderedDict);
-    Py_DECREF(collections);
-    if (!_CBOR2_OrderedDict)
+    _CBOR2_FrozenDict = PyObject_GetAttr(cbor2_types, _CBOR2_str_FrozenDict);
+    Py_DECREF(cbor2_types);
+    if (!_CBOR2_FrozenDict)
         goto error;
     return 0;
 error:
     PyErr_SetString(PyExc_ImportError,
-            "unable to import OrderedDict from collections");
+            "unable to import FrozenDict from cbor2.types");
     return -1;
 }
 
@@ -591,13 +591,16 @@ PyObject *_CBOR2_str_bit_length = NULL;
 PyObject *_CBOR2_str_buf = NULL;
 PyObject *_CBOR2_str_bytes = NULL;
 PyObject *_CBOR2_str_BytesIO = NULL;
+PyObject *_CBOR2_str_canonical_encoders = NULL;
 PyObject *_CBOR2_str_compile = NULL;
 PyObject *_CBOR2_str_copy = NULL;
 PyObject *_CBOR2_str_datestr_re = NULL;
 PyObject *_CBOR2_str_Decimal = NULL;
+PyObject *_CBOR2_str_default_encoders = NULL;
 PyObject *_CBOR2_str_denominator = NULL;
 PyObject *_CBOR2_str_Fraction = NULL;
 PyObject *_CBOR2_str_fromtimestamp = NULL;
+PyObject *_CBOR2_str_FrozenDict = NULL;
 PyObject *_CBOR2_str_getvalue = NULL;
 PyObject *_CBOR2_str_groups = NULL;
 PyObject *_CBOR2_str_ip_address = NULL;
@@ -610,7 +613,6 @@ PyObject *_CBOR2_str_match = NULL;
 PyObject *_CBOR2_str_network_address = NULL;
 PyObject *_CBOR2_str_numerator = NULL;
 PyObject *_CBOR2_str_obj = NULL;
-PyObject *_CBOR2_str_OrderedDict = NULL;
 PyObject *_CBOR2_str_packed = NULL;
 PyObject *_CBOR2_str_Parser = NULL;
 PyObject *_CBOR2_str_parsestr = NULL;
@@ -632,9 +634,9 @@ PyObject *_CBOR2_CBORDecodeError = NULL;
 PyObject *_CBOR2_timezone = NULL;
 PyObject *_CBOR2_timezone_utc = NULL;
 PyObject *_CBOR2_BytesIO = NULL;
-PyObject *_CBOR2_OrderedDict = NULL;
 PyObject *_CBOR2_Decimal = NULL;
 PyObject *_CBOR2_Fraction = NULL;
+PyObject *_CBOR2_FrozenDict = NULL;
 PyObject *_CBOR2_UUID = NULL;
 PyObject *_CBOR2_Parser = NULL;
 PyObject *_CBOR2_re_compile = NULL;
@@ -645,136 +647,12 @@ PyObject *_CBOR2_ip_network = NULL;
 PyObject *_CBOR2_default_encoders = NULL;
 PyObject *_CBOR2_canonical_encoders = NULL;
 
-static int
-add_default_encoder(PyObject *dict, PyObject *type, const char * const method)
-{
-    int ret = -1;
-    PyObject *meth;
-
-    meth = PyObject_GetAttrString((PyObject *) &CBOREncoderType, method);
-    if (meth) {
-        ret = PyObject_SetItem(dict, type, meth);
-        Py_DECREF(meth);
-    }
-    return ret;
-}
-
-static int
-add_deferred_encoder(PyObject *dict, const char * const module,
-        const char * const type, const char * const method)
-{
-    int ret = -1;
-    PyObject *mod_name, *type_name, *tuple;
-
-    mod_name = PyUnicode_FromString(module);
-    if (mod_name) {
-        type_name = PyUnicode_FromString(type);
-        if (type_name) {
-            tuple = PyTuple_Pack(2, mod_name, type_name);
-            if (tuple) {
-                ret = add_default_encoder(dict, tuple, method);
-                Py_DECREF(tuple);
-            }
-            Py_DECREF(type_name);
-        }
-        Py_DECREF(mod_name);
-    }
-    return ret;
-}
-
-#define ADD_MAPPING(type, method) \
-    if (add_default_encoder(ret, type, method) == -1) goto error;
-#define ADD_DEFERRED(module, type, method) \
-    if (add_deferred_encoder(ret, module, type, method) == -1) goto error;
-
-static PyObject *
-init_default_encoders(PyObject *m)
-{
-    PyObject *pattern, *ret = NULL;
-
-    if (!_CBOR2_OrderedDict && _CBOR2_init_OrderedDict() == -1)
-        return NULL;
-
-    if (!_CBOR2_re_compile && _CBOR2_init_re_compile() == -1)
-        return NULL;
-
-    ret = PyObject_CallFunctionObjArgs(_CBOR2_OrderedDict, NULL);
-    if (ret) {
-        ADD_MAPPING((PyObject *) &PyBytes_Type,                "encode_bytestring");
-        ADD_MAPPING((PyObject *) &PyByteArray_Type,            "encode_bytearray");
-        ADD_MAPPING((PyObject *) &PyUnicode_Type,              "encode_string");
-        ADD_MAPPING((PyObject *) &PyLong_Type,                 "encode_int");
-        ADD_MAPPING((PyObject *) &PyFloat_Type,                "encode_float");
-        ADD_DEFERRED("decimal", "Decimal",                     "encode_decimal");
-        ADD_MAPPING((PyObject *) &PyBool_Type,                 "encode_boolean");
-        ADD_MAPPING((PyObject *) Py_None->ob_type,             "encode_none");
-        ADD_MAPPING((PyObject *) &PyTuple_Type,                "encode_array");
-        ADD_MAPPING((PyObject *) &PyList_Type,                 "encode_array");
-        ADD_MAPPING((PyObject *) &PyDict_Type,                 "encode_map");
-        ADD_DEFERRED("collections", "defaultdict",             "encode_map");
-        ADD_MAPPING(_CBOR2_OrderedDict,                        "encode_map");
-        // TODO add FrozenDict type
-        ADD_MAPPING((PyObject *) undefined->ob_type,           "encode_undefined");
-        ADD_MAPPING((PyObject *) PyDateTimeAPI->DateTimeType,  "encode_datetime");
-        ADD_MAPPING((PyObject *) PyDateTimeAPI->DateType,      "encode_date");
-        pattern = PyObject_CallFunctionObjArgs(
-                _CBOR2_re_compile, _CBOR2_empty_str, NULL);
-        if (!pattern)
-            goto error;
-        ADD_MAPPING((PyObject *) pattern->ob_type,             "encode_regexp");
-        Py_DECREF(pattern);
-        ADD_DEFERRED("fractions", "Fraction",                  "encode_rational");
-        ADD_DEFERRED("email.message", "Message",               "encode_mime");
-        ADD_DEFERRED("uuid", "UUID",                           "encode_uuid");
-        ADD_DEFERRED("ipaddress", "IPv4Address",               "encode_ipaddress");
-        ADD_DEFERRED("ipaddress", "IPv6Address",               "encode_ipaddress");
-        ADD_DEFERRED("ipaddress", "IPv4Network",               "encode_ipnetwork");
-        ADD_DEFERRED("ipaddress", "IPv6Network",               "encode_ipnetwork");
-        ADD_MAPPING((PyObject *) &CBORSimpleValueType,         "encode_simple_value");
-        ADD_MAPPING((PyObject *) &CBORTagType,                 "encode_semantic");
-        ADD_MAPPING((PyObject *) &PySet_Type,                  "encode_set");
-        ADD_MAPPING((PyObject *) &PyFrozenSet_Type,            "encode_set");
-    }
-    return ret;
-error:
-    Py_DECREF(ret);
-    return NULL;
-}
-
-static PyObject *
-init_canonical_encoders(PyObject *m)
-{
-    PyObject *ret = NULL;
-
-    if (!_CBOR2_OrderedDict && _CBOR2_init_OrderedDict() == -1)
-        return NULL;
-
-    ret = PyObject_CallFunctionObjArgs(_CBOR2_OrderedDict, NULL);
-    if (ret) {
-        ADD_MAPPING((PyObject *) &PyFloat_Type,         "encode_minimal_float");
-        ADD_MAPPING((PyObject *) &PyDict_Type,          "encode_canonical_map");
-        ADD_DEFERRED("collections", "defaultdict",      "encode_canonical_map");
-        ADD_MAPPING(_CBOR2_OrderedDict,                 "encode_canonical_map");
-        // TODO add FrozenDict type
-        ADD_MAPPING((PyObject *) &PySet_Type,           "encode_canonical_set");
-        ADD_MAPPING((PyObject *) &PyFrozenSet_Type,     "encode_canonical_set");
-    }
-    return ret;
-error:
-    Py_DECREF(ret);
-    return NULL;
-}
-
-#undef ADD_DEFERRED
-#undef ADD_MAPPING
-
 static void
 cbor2_free(PyObject *m)
 {
     Py_CLEAR(_CBOR2_timezone_utc);
     Py_CLEAR(_CBOR2_timezone);
     Py_CLEAR(_CBOR2_BytesIO);
-    Py_CLEAR(_CBOR2_OrderedDict);
     Py_CLEAR(_CBOR2_Decimal);
     Py_CLEAR(_CBOR2_Fraction);
     Py_CLEAR(_CBOR2_UUID);
@@ -831,6 +709,54 @@ static struct PyModuleDef _cbor2module = {
     .m_free = (freefunc) cbor2_free,
     .m_methods = _cbor2methods,
 };
+
+int
+init_default_encoders(void)
+{
+    PyObject *mod, *dict;
+
+    // NOTE: All functions below return borrowed references, hence the lack of
+    // DECREF calls
+    if (_CBOR2_default_encoders)
+        return 0;
+    mod = PyState_FindModule(&_cbor2module);
+    if (!mod)
+        return -1;
+    dict = PyModule_GetDict(mod);
+    if (!dict)
+        return -1;
+    _CBOR2_default_encoders = PyDict_GetItem(
+        dict, _CBOR2_str_default_encoders);
+    if (_CBOR2_default_encoders) {
+        Py_INCREF(_CBOR2_default_encoders);
+        return 0;
+    }
+    return -1;
+}
+
+int
+init_canonical_encoders(void)
+{
+    PyObject *mod, *dict;
+
+    // NOTE: All functions below return borrowed references, hence the lack of
+    // DECREF calls
+    if (_CBOR2_canonical_encoders)
+        return 0;
+    mod = PyState_FindModule(&_cbor2module);
+    if (!mod)
+        return -1;
+    dict = PyModule_GetDict(mod);
+    if (!dict)
+        return -1;
+    _CBOR2_canonical_encoders = PyDict_GetItem(
+        dict, _CBOR2_str_canonical_encoders);
+    if (_CBOR2_canonical_encoders) {
+        Py_INCREF(_CBOR2_canonical_encoders);
+        return 0;
+    }
+    return -1;
+}
 
 PyMODINIT_FUNC
 PyInit__cbor2(void)
@@ -922,12 +848,15 @@ PyInit__cbor2(void)
     INTERN_STRING(buf);
     INTERN_STRING(bytes);
     INTERN_STRING(BytesIO);
+    INTERN_STRING(canonical_encoders);
     INTERN_STRING(compile);
     INTERN_STRING(copy);
     INTERN_STRING(Decimal);
+    INTERN_STRING(default_encoders);
     INTERN_STRING(denominator);
     INTERN_STRING(Fraction);
     INTERN_STRING(fromtimestamp);
+    INTERN_STRING(FrozenDict);
     INTERN_STRING(getvalue);
     INTERN_STRING(groups);
     INTERN_STRING(ip_address);
@@ -940,7 +869,6 @@ PyInit__cbor2(void)
     INTERN_STRING(network_address);
     INTERN_STRING(numerator);
     INTERN_STRING(obj);
-    INTERN_STRING(OrderedDict);
     INTERN_STRING(packed);
     INTERN_STRING(Parser);
     INTERN_STRING(parsestr);
@@ -971,18 +899,6 @@ PyInit__cbor2(void)
         goto error;
     if (!_CBOR2_empty_str &&
             !(_CBOR2_empty_str = PyUnicode_FromStringAndSize(NULL, 0)))
-        goto error;
-
-    _CBOR2_default_encoders = init_default_encoders(module);
-    if (!_CBOR2_default_encoders)
-        goto error;
-    if (PyModule_AddObject(module, "default_encoders", _CBOR2_default_encoders) == -1)
-        goto error;
-
-    _CBOR2_canonical_encoders = init_canonical_encoders(module);
-    if (!_CBOR2_canonical_encoders)
-        goto error;
-    if (PyModule_AddObject(module, "canonical_encoders", _CBOR2_canonical_encoders) == -1)
         goto error;
 
     return module;
