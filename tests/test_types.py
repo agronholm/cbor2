@@ -32,8 +32,9 @@ def test_simple_value_equals():
 
 
 def test_simple_value_too_big():
-    exc = pytest.raises(TypeError, CBORSimpleValue, 256)
-    assert str(exc.value) == 'simple value too big'
+    with pytest.raises(TypeError) as exc:
+        CBORSimpleValue(256)
+        assert str(exc.value) == 'simple value too big'
 
 
 def test_frozendict():

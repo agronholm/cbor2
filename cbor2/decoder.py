@@ -14,15 +14,27 @@ timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
 
 class CBORDecoder(object):
     """
-    Deserializes a CBOR encoded byte stream.
+    The CBORDecoder class implements a fully featured `CBOR`_ decoder with
+    several extensions for handling shared references, big integers, rational
+    numbers and so on. Typically the class is not used directly, but the
+    :func:`load` and :func:`loads` functions are called to indirectly construct
+    and use the class.
 
-    :param tag_hook: Callable that takes 3 arguments: the decoder instance, the
-        :class:`~cbor2.types.CBORTag` and the shareable index for the resulting object, if any.
-        This callback is called for any tags for which there is no built-in decoder.
-        The return value is substituted for the CBORTag object in the deserialized output.
-    :param object_hook: Callable that takes 2 arguments: the decoder instance and the dictionary.
-        This callback is called for each deserialized :class:`dict` object.
-        The return value is substituted for the dict in the deserialized output.
+    When the class is constructed manually, the main entry points are
+    :meth:`decode` and :meth:`decode_from_bytes`.
+
+    :param tag_hook:
+        callable that takes 2 arguments: the decoder instance, and the
+        :class:`CBORTag` to be decoded. This callback is invoked for any tags
+        for which there is no built-in decoder. The return value is substituted
+        for the :class:`CBORTag` object in the deserialized output
+    :param object_hook:
+        callable that takes 2 arguments: the decoder instance, and a
+        dictionary. This callback is invoked for each deserialized
+        :class:`dict` object. The return value is substituted for the dict in
+        the deserialized output.
+
+    .. _CBOR: https://cbor.io/
     """
 
     __slots__ = (
@@ -40,9 +52,9 @@ class CBORDecoder(object):
     @property
     def immutable(self):
         """
-        Used by decoders to check if the calling context requires an immutable type.
-        Object_hook or tag_hook should raise an exception if this flag is set unless
-        the result can be safely used as a dict key.
+        Used by decoders to check if the calling context requires an immutable
+        type.  Object_hook or tag_hook should raise an exception if this flag
+        is set unless the result can be safely used as a dict key.
         """
         return self._immutable
 
@@ -63,9 +75,7 @@ class CBORDecoder(object):
     def set_shareable(self, value):
         """
         Set the shareable value for the last encountered shared value marker,
-        if any.
-
-        If the current shared index is ``None``, nothing is done.
+        if any. If the current shared index is ``None``, nothing is done.
 
         :param value: the shared value
         """
@@ -77,7 +87,6 @@ class CBORDecoder(object):
         Read bytes from the data stream.
 
         :param int amount: the number of bytes to read
-
         """
         data = self._fp_read(amount)
         if len(data) < amount:
@@ -122,7 +131,6 @@ class CBORDecoder(object):
         Decode the next value from the stream.
 
         :raises CBORDecodeError: if there is any problem decoding the stream
-
         """
         return self._decode()
 
@@ -143,7 +151,6 @@ class CBORDecoder(object):
             return retval
 
     def _decode_length(self, subtype, allow_indefinite=False):
-        # Major tag 0
         if subtype < 24:
             return subtype
         elif subtype == 24:
@@ -227,9 +234,9 @@ class CBORDecoder(object):
                 else:
                     dictionary[key] = self._decode(unshared=True)
         elif self._share_index is None:
-            # Optimization: pre-allocate structures from length. Note this cannot
-            # be done when sharing the structure as the resulting structure is not
-            # the one initially allocated
+            # Optimization: pre-allocate structures from length. Note this
+            # cannot be done when sharing the structure as the resulting
+            # structure is not the one initially allocated
             seq = [None] * length
             for index in range(length):
                 key = self._decode(immutable=True, unshared=True)
@@ -330,6 +337,7 @@ class CBORDecoder(object):
         return Decimal(sig) * (2 ** Decimal(exp))
 
     def decode_shareable(self):
+        # Semantic tag 28
         old_index = self._share_index
         self._share_index = len(self._shareables)
         self._shareables.append(None)
@@ -443,10 +451,12 @@ def loads(payload, **kwargs):
     """
     Deserialize an object from a bytestring.
 
-    :param bytes payload: the bytestring to serialize
-    :param kwargs: keyword arguments passed to :class:`~.CBORDecoder`
-    :return: the deserialized object
-
+    :param bytes payload:
+        the bytestring to deserialize
+    :param kwargs:
+        keyword arguments passed to :class:`CBORDecoder`
+    :return:
+        the deserialized object
     """
     with BytesIO(payload) as fp:
         return CBORDecoder(fp, **kwargs).decode()
@@ -456,9 +466,11 @@ def load(fp, **kwargs):
     """
     Deserialize an object from an open file.
 
-    :param fp: the input file (any file-like object)
-    :param kwargs: keyword arguments passed to :class:`~.CBORDecoder`
-    :return: the deserialized object
-
+    :param fp:
+        the input file (any file-like object)
+    :param kwargs:
+        keyword arguments passed to :class:`CBORDecoder`
+    :return:
+        the deserialized object
     """
     return CBORDecoder(fp, **kwargs).decode()

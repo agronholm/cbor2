@@ -71,8 +71,9 @@ def test_integer(payload, expected):
 
 
 def test_invalid_integer_subtype():
-    exc = pytest.raises(CBORDecodeError, loads, b'\x1c')
-    assert str(exc.value).endswith('unknown unsigned integer subtype 0x1c')
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(b'\x1c')
+        assert str(exc.value).endswith('unknown unsigned integer subtype 0x1c')
 
 
 @pytest.mark.parametrize('payload, expected', [
@@ -225,8 +226,9 @@ def test_datetime(payload, expected):
 
 
 def test_bad_datetime():
-    exc = pytest.raises(CBORDecodeError, loads, unhexlify('c06b303030302d3132332d3031'))
-    assert str(exc.value).endswith('invalid datetime string: 0000-123-01')
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify('c06b303030302d3132332d3031'))
+        assert str(exc.value).endswith('invalid datetime string: 0000-123-01')
 
 
 def test_fraction():
@@ -265,16 +267,18 @@ def test_uuid():
 
 
 def test_bad_shared_reference():
-    exc = pytest.raises(CBORDecodeError, loads, unhexlify('d81d05'))
-    assert str(exc.value).endswith('shared reference 5 not found')
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify('d81d05'))
+        assert str(exc.value).endswith('shared reference 5 not found')
 
 
 def test_uninitialized_shared_reference():
     fp = BytesIO(unhexlify('d81d00'))
     decoder = CBORDecoder(fp)
     decoder._shareables.append(None)
-    exc = pytest.raises(CBORDecodeError, decoder.decode)
-    assert str(exc.value).endswith('shared value 0 has not been initialized')
+    with pytest.raises(CBORDecodeError) as exc:
+        decoder.decode()
+        assert str(exc.value).endswith('shared value 0 has not been initialized')
 
 
 def test_immutable_shared_reference():
@@ -314,8 +318,9 @@ def test_premature_end_of_stream():
     Test that the decoder detects a situation where read() returned fewer than expected bytes.
 
     """
-    exc = pytest.raises(CBORDecodeError, loads, unhexlify('437879'))
-    exc.match(r'premature end of stream \(expected to read 3 bytes, got 2 instead\)')
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify('437879'))
+        exc.match(r'premature end of stream \(expected to read 3 bytes, got 2 instead\)')
 
 
 def test_tag_hook():
@@ -354,8 +359,9 @@ def test_object_hook():
 
 
 def test_error_major_type():
-    exc = pytest.raises(CBORDecodeError, loads, b'')
-    assert str(exc.value).startswith('error reading major type at index 0: ')
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(b'')
+        assert str(exc.value).startswith('error reading major type at index 0: ')
 
 
 def test_load_from_file(tmpdir):
@@ -369,16 +375,17 @@ def test_load_from_file(tmpdir):
 
 @pytest.mark.skipif(sys.version_info < (3, 0), reason="No exception with python 2.7")
 def test_nested_exception():
-    exc = pytest.raises((CBORDecodeError, TypeError), loads, unhexlify('A1D9177082010201'))
-    exc.match(r"error decoding value at index 8: "
-              r"(unhashable type: 'CBORTag'|'CBORTag' objects are unhashable)")
+    with pytest.raises((CBORDecodeError, TypeError)) as exc:
+        loads(unhexlify('A1D9177082010201'))
+        exc.match(r"(unhashable type: '(_?cbor2\.)?CBORTag'|'(_?cbor2\.)?CBORTag' "
+                  r"objects are unhashable)")
 
 
 def test_set():
     payload = unhexlify('d9010283616361626161')
     value = loads(payload)
     assert type(value) is set
-    assert value == set([u'a', u'b', u'c'])
+    assert value == {u'a', u'b', u'c'}
 
 
 @pytest.mark.parametrize('payload, expected', [
