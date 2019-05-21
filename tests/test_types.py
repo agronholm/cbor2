@@ -26,9 +26,10 @@ def test_simple_value_equals():
     tag3 = CBORSimpleValue(21)
     assert tag1 == tag2
     assert tag1 == 1
-    assert not tag1 == tag3
-    assert not tag1 == 21
     assert not tag2 == "21"
+    assert tag1 != tag3
+    assert tag1 != 21
+    assert tag2 != "21"
 
 
 def test_simple_value_too_big():

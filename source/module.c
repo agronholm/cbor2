@@ -183,6 +183,30 @@ CBORSimpleValue_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
     return ret;
 }
 
+static PyObject *
+CBORSimpleValue_richcompare(PyObject *a, PyObject *b, int op)
+{
+    if (op == Py_EQ || op == Py_NE) {
+        switch (PyObject_IsInstance(b, (PyObject *) &CBORSimpleValueType)) {
+            case 1:
+                return PyObject_RichCompare(
+                    PyStructSequence_GET_ITEM(a, 0),
+                    PyStructSequence_GET_ITEM(b, 0),
+                    op);
+            case -1:
+                return NULL;
+        }
+        switch (PyObject_IsInstance(b, (PyObject *) &PyLong_Type)) {
+            case 1:
+                return PyObject_RichCompare(
+                    PyStructSequence_GET_ITEM(a, 0), b, op);
+            case -1:
+                return NULL;
+        }
+    }
+    Py_RETURN_NOTIMPLEMENTED;
+}
+
 
 // dump/load functions ///////////////////////////////////////////////////////
 
@@ -857,6 +881,7 @@ PyInit__cbor2(void)
 #endif
     Py_INCREF((PyObject *) &CBORSimpleValueType);
     CBORSimpleValueType.tp_new = CBORSimpleValue_new;
+    CBORSimpleValueType.tp_richcompare = CBORSimpleValue_richcompare;
     if (PyModule_AddObject(
             module, "CBORSimpleValue", (PyObject *) &CBORSimpleValueType) == -1)
         goto error;
