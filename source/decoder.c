@@ -29,8 +29,8 @@ static int _CBORDecoder_set_str_errors(CBORDecoderObject *, PyObject *, void *);
 static PyObject * decode(CBORDecoderObject *, DecodeOptions);
 static PyObject * decode_bytestring(CBORDecoderObject *, uint8_t);
 static PyObject * decode_string(CBORDecoderObject *, uint8_t);
-static PyObject * CBORDecoder_decode_datestr(CBORDecoderObject *);
-static PyObject * CBORDecoder_decode_timestamp(CBORDecoderObject *);
+static PyObject * CBORDecoder_decode_datetime_string(CBORDecoderObject *);
+static PyObject * CBORDecoder_decode_epoch_datetime(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_fraction(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_bigfloat(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_rational(CBORDecoderObject *);
@@ -39,7 +39,7 @@ static PyObject * CBORDecoder_decode_uuid(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_mime(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_positive_bignum(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_negative_bignum(CBORDecoderObject *);
-static PyObject * CBORDecoder_decode_simplevalue(CBORDecoderObject *);
+static PyObject * CBORDecoder_decode_simple_value(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_float16(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_float32(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_float64(CBORDecoderObject *);
@@ -47,7 +47,7 @@ static PyObject * CBORDecoder_decode_ipaddress(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_ipnetwork(CBORDecoderObject *);
 
 static PyObject * CBORDecoder_decode_shareable(CBORDecoderObject *);
-static PyObject * CBORDecoder_decode_shared(CBORDecoderObject *);
+static PyObject * CBORDecoder_decode_sharedref(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_set(CBORDecoderObject *);
 
 
@@ -806,14 +806,14 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
 
     if (decode_length(self, subtype, &tagnum, NULL) == 0) {
         switch (tagnum) {
-            case 0:   ret = CBORDecoder_decode_datestr(self);         break;
-            case 1:   ret = CBORDecoder_decode_timestamp(self);       break;
+            case 0:   ret = CBORDecoder_decode_datetime_string(self); break;
+            case 1:   ret = CBORDecoder_decode_epoch_datetime(self);  break;
             case 2:   ret = CBORDecoder_decode_positive_bignum(self); break;
             case 3:   ret = CBORDecoder_decode_negative_bignum(self); break;
             case 4:   ret = CBORDecoder_decode_fraction(self);        break;
             case 5:   ret = CBORDecoder_decode_bigfloat(self);        break;
             case 28:  ret = CBORDecoder_decode_shareable(self);       break;
-            case 29:  ret = CBORDecoder_decode_shared(self);          break;
+            case 29:  ret = CBORDecoder_decode_sharedref(self);       break;
             case 30:  ret = CBORDecoder_decode_rational(self);        break;
             case 35:  ret = CBORDecoder_decode_regexp(self);          break;
             case 36:  ret = CBORDecoder_decode_mime(self);            break;
@@ -913,9 +913,9 @@ parse_datestr(CBORDecoderObject *self, PyObject *str)
 }
 
 
-// CBORDecoder.decode_datestr(self)
+// CBORDecoder.decode_datetime_string(self)
 static PyObject *
-CBORDecoder_decode_datestr(CBORDecoderObject *self)
+CBORDecoder_decode_datetime_string(CBORDecoderObject *self)
 {
     // semantic type 0
     PyObject *match, *str, *ret = NULL;
@@ -933,12 +933,12 @@ CBORDecoder_decode_datestr(CBORDecoderObject *self)
                 else
                     PyErr_Format(
                         _CBOR2_CBORDecodeError,
-                        "invalid datetime string %R", str);
+                        "invalid datetime string: %R", str);
                 Py_DECREF(match);
             }
         } else
             PyErr_Format(
-                _CBOR2_CBORDecodeError, "invalid datetime value %R", str);
+                _CBOR2_CBORDecodeError, "invalid datetime value: %R", str);
         Py_DECREF(str);
     }
     set_shareable(self, ret);
@@ -946,9 +946,9 @@ CBORDecoder_decode_datestr(CBORDecoderObject *self)
 }
 
 
-// CBORDecoder.decode_timestamp(self)
+// CBORDecoder.decode_epoch_datetime(self)
 static PyObject *
-CBORDecoder_decode_timestamp(CBORDecoderObject *self)
+CBORDecoder_decode_epoch_datetime(CBORDecoderObject *self)
 {
     // semantic type 1
     PyObject *num, *tuple, *ret = NULL;
@@ -1103,9 +1103,9 @@ CBORDecoder_decode_shareable(CBORDecoderObject *self)
 }
 
 
-// CBORDecoder.decode_shared(self)
+// CBORDecoder.decode_sharedref(self)
 static PyObject *
-CBORDecoder_decode_shared(CBORDecoderObject *self)
+CBORDecoder_decode_sharedref(CBORDecoderObject *self)
 {
     // semantic type 29
     PyObject *index, *ret = NULL;
@@ -1365,7 +1365,7 @@ decode_special(CBORDecoderObject *self, uint8_t subtype)
             case 21: Py_RETURN_TRUE;
             case 22: Py_RETURN_NONE;
             case 23: CBOR2_RETURN_UNDEFINED;
-            case 24: return CBORDecoder_decode_simplevalue(self);
+            case 24: return CBORDecoder_decode_simple_value(self);
             case 25: return CBORDecoder_decode_float16(self);
             case 26: return CBORDecoder_decode_float32(self);
             case 27: return CBORDecoder_decode_float64(self);
@@ -1379,9 +1379,9 @@ decode_special(CBORDecoderObject *self, uint8_t subtype)
 }
 
 
-// CBORDecoder.decode_simplevalue(self)
+// CBORDecoder.decode_simple_value(self)
 static PyObject *
-CBORDecoder_decode_simplevalue(CBORDecoderObject *self)
+CBORDecoder_decode_simple_value(CBORDecoderObject *self)
 {
     PyObject *tag, *ret = NULL;
     uint8_t buf;
@@ -1594,9 +1594,11 @@ static PyMethodDef CBORDecoder_methods[] = {
         "decode a semantically tagged value from the input"},
     {"decode_special", (PyCFunction) CBORDecoder_decode_special, METH_O,
         "decode a special value from the input"},
-    {"decode_datestr", (PyCFunction) CBORDecoder_decode_datestr, METH_NOARGS,
+    {"decode_datetime_string",
+        (PyCFunction) CBORDecoder_decode_datetime_string, METH_NOARGS,
         "decode a date-time string from the input"},
-    {"decode_timestamp", (PyCFunction) CBORDecoder_decode_timestamp, METH_NOARGS,
+    {"decode_epoch_datetime",
+        (PyCFunction) CBORDecoder_decode_epoch_datetime, METH_NOARGS,
         "decode a timestamp offset from the input"},
     {"decode_positive_bignum",
         (PyCFunction) CBORDecoder_decode_positive_bignum, METH_NOARGS,
@@ -1604,17 +1606,29 @@ static PyMethodDef CBORDecoder_methods[] = {
     {"decode_negative_bignum",
         (PyCFunction) CBORDecoder_decode_negative_bignum, METH_NOARGS,
         "decode a negative big-integer from the input"},
+    {"decode_fraction", (PyCFunction) CBORDecoder_decode_fraction, METH_NOARGS,
+        "decode a fractional number from the input"},
+    {"decode_rational", (PyCFunction) CBORDecoder_decode_rational, METH_NOARGS,
+        "decode a rational value from the input"},
+    {"decode_bigfloat", (PyCFunction) CBORDecoder_decode_bigfloat, METH_NOARGS,
+        "decode a large floating-point value from the input"},
+    {"decode_regexp", (PyCFunction) CBORDecoder_decode_regexp, METH_NOARGS,
+        "decode a regular expression from the input"},
+    {"decode_mime", (PyCFunction) CBORDecoder_decode_mime, METH_NOARGS,
+        "decode a MIME message from the input"},
+    {"decode_uuid", (PyCFunction) CBORDecoder_decode_uuid, METH_NOARGS,
+        "decode a UUID from the input"},
     {"decode_shareable",
         (PyCFunction) CBORDecoder_decode_shareable, METH_NOARGS,
         "decode a shareable value from the input"},
-    {"decode_shared", (PyCFunction) CBORDecoder_decode_shared, METH_NOARGS,
+    {"decode_sharedref", (PyCFunction) CBORDecoder_decode_sharedref, METH_NOARGS,
         "decode a shared reference from the input"},
     {"decode_set", (PyCFunction) CBORDecoder_decode_set, METH_NOARGS,
         "decode a set or frozenset from the input"},
     {"decode_ipaddress", (PyCFunction) CBORDecoder_decode_ipaddress, METH_NOARGS,
         "decode an IPv4Address or IPv6Address from the input"},
-    {"decode_simplevalue",
-        (PyCFunction) CBORDecoder_decode_simplevalue, METH_NOARGS,
+    {"decode_simple_value",
+        (PyCFunction) CBORDecoder_decode_simple_value, METH_NOARGS,
         "decode a CBORSimpleValue from the input"},
     {"decode_float16", (PyCFunction) CBORDecoder_decode_float16, METH_NOARGS,
         "decode a half-precision floating-point value from the input"},

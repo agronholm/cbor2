@@ -671,7 +671,7 @@ init_default_encoders(PyObject *m)
 
     ret = PyObject_CallFunctionObjArgs(_CBOR2_OrderedDict, NULL);
     if (ret) {
-        ADD_MAPPING((PyObject *) &PyBytes_Type,                "encode_bytes");
+        ADD_MAPPING((PyObject *) &PyBytes_Type,                "encode_bytestring");
         ADD_MAPPING((PyObject *) &PyByteArray_Type,            "encode_bytearray");
         ADD_MAPPING((PyObject *) &PyUnicode_Type,              "encode_string");
         ADD_MAPPING((PyObject *) &PyLong_Type,                 "encode_int");
@@ -692,7 +692,7 @@ init_default_encoders(PyObject *m)
                 _CBOR2_re_compile, _CBOR2_empty_str, NULL);
         if (!pattern)
             goto error;
-        ADD_MAPPING((PyObject *) pattern->ob_type,             "encode_regex");
+        ADD_MAPPING((PyObject *) pattern->ob_type,             "encode_regexp");
         Py_DECREF(pattern);
         ADD_DEFERRED("fractions", "Fraction",                  "encode_rational");
         ADD_DEFERRED("email.message", "Message",               "encode_mime");
@@ -701,7 +701,7 @@ init_default_encoders(PyObject *m)
         ADD_DEFERRED("ipaddress", "IPv6Address",               "encode_ipaddress");
         ADD_DEFERRED("ipaddress", "IPv4Network",               "encode_ipnetwork");
         ADD_DEFERRED("ipaddress", "IPv6Network",               "encode_ipnetwork");
-        ADD_MAPPING((PyObject *) &CBORSimpleValueType,         "encode_simple");
+        ADD_MAPPING((PyObject *) &CBORSimpleValueType,         "encode_simple_value");
         ADD_MAPPING((PyObject *) &CBORTagType,                 "encode_semantic");
         ADD_MAPPING((PyObject *) &PySet_Type,                  "encode_set");
         ADD_MAPPING((PyObject *) &PyFrozenSet_Type,            "encode_set");
