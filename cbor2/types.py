@@ -57,8 +57,15 @@ class CBORSimpleValue(object):
             return self.value == other
         return NotImplemented
 
+    def __ne__(self, other):
+        if isinstance(other, CBORSimpleValue):
+            return self.value != other.value
+        elif isinstance(other, int):
+            return self.value != other
+        return NotImplemented
+
     def __repr__(self):
-        return 'CBORSimpleValue({self.value})'.format(self=self)
+        return 'CBORSimpleValue(value={self.value})'.format(self=self)
 
 
 class FrozenDict(Mapping):
