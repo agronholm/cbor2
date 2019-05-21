@@ -1595,6 +1595,7 @@ mapping_to_canonical_list(CBOREncoderObject *self, PyObject *value)
                     } else
                         ret = NULL;
                     items++;
+                    index++;
                     fast_len--;
                 }
                 Py_DECREF(fast);
