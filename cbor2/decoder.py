@@ -79,9 +79,11 @@ class CBORDecoder(object):
         if any. If the current shared index is ``None``, nothing is done.
 
         :param value: the shared value
+        :returns: the shared value to permit chaining
         """
         if self._share_index is not None:
             self._shareables[self._share_index] = value
+        return value
 
     def read(self, amount):
         """
@@ -159,11 +161,11 @@ class CBORDecoder(object):
 
     def decode_uint(self, subtype):
         # Major tag 0
-        return self._decode_length(subtype)
+        return self.set_shareable(self._decode_length(subtype))
 
     def decode_negint(self, subtype):
         # Major tag 1
-        return -self._decode_length(subtype) - 1
+        return self.set_shareable(-self._decode_length(subtype) - 1)
 
     def decode_bytestring(self, subtype):
         # Major tag 2
@@ -174,17 +176,19 @@ class CBORDecoder(object):
             while True:
                 initial_byte = byte_as_integer(self.read(1))
                 if initial_byte == 0xff:
-                    return b''.join(buf)
+                    result = b''.join(buf)
+                    break
                 else:
                     length = self._decode_length(initial_byte & 0x1f)
                     value = self.read(length)
                     buf.append(value)
         else:
-            return self.read(length)
+            result = self.read(length)
+        return self.set_shareable(result)
 
     def decode_string(self, subtype):
         # Major tag 3
-        return self.decode_bytestring(subtype).decode('utf-8')
+        return self.set_shareable(self.decode_bytestring(subtype).decode('utf-8'))
 
     def decode_array(self, subtype):
         # Major tag 4
@@ -256,15 +260,17 @@ class CBORDecoder(object):
         if semantic_decoder:
             return semantic_decoder(self)
         else:
-            tag = CBORTag(tagnum, self._decode(unshared=True))
+            tag = CBORTag(tagnum, None)
+            self.set_shareable(tag)
+            tag.value = self._decode(unshared=True)
             if self.tag_hook:
-                return self.tag_hook(self, tag)
-            else:
-                return tag
+                tag = self.tag_hook(self, tag)
+            return self.set_shareable(tag)
 
     def decode_special(self, subtype):
         # Simple value
         if subtype < 20:
+            # XXX Set shareable?
             return CBORSimpleValue(subtype)
 
         # Major tag 7
@@ -295,38 +301,38 @@ class CBORDecoder(object):
             else:
                 tz = timezone.utc
 
-            return datetime(
+            return self.set_shareable(datetime(
                 int(year), int(month), int(day),
-                int(hour), int(minute), int(second), int(micro or 0), tz)
+                int(hour), int(minute), int(second), int(micro or 0), tz))
         else:
             raise CBORDecodeError('invalid datetime string: {!r}'.format(value))
 
     def decode_epoch_datetime(self):
         # Semantic tag 1
         value = self._decode()
-        return datetime.fromtimestamp(value, timezone.utc)
+        return self.set_shareable(datetime.fromtimestamp(value, timezone.utc))
 
     def decode_positive_bignum(self):
         # Semantic tag 2
         from binascii import hexlify
         value = self._decode()
-        return int(hexlify(value), 16)
+        return self.set_shareable(int(hexlify(value), 16))
 
     def decode_negative_bignum(self):
         # Semantic tag 3
-        return -self.decode_positive_bignum() - 1
+        return self.set_shareable(-self.decode_positive_bignum() - 1)
 
     def decode_fraction(self):
         # Semantic tag 4
         from decimal import Decimal
         exp, sig = self._decode()
-        return Decimal(sig) * (10 ** Decimal(exp))
+        return self.set_shareable(Decimal(sig) * (10 ** Decimal(exp)))
 
     def decode_bigfloat(self):
         # Semantic tag 5
         from decimal import Decimal
         exp, sig = self._decode()
-        return Decimal(sig) * (2 ** Decimal(exp))
+        return self.set_shareable(Decimal(sig) * (2 ** Decimal(exp)))
 
     def decode_shareable(self):
         # Semantic tag 28
@@ -340,7 +346,7 @@ class CBORDecoder(object):
 
     def decode_sharedref(self):
         # Semantic tag 29
-        value = self._decode()
+        value = self._decode(unshared=True)
         try:
             shared = self._shareables[value]
         except IndexError:
@@ -354,28 +360,28 @@ class CBORDecoder(object):
     def decode_rational(self):
         # Semantic tag 30
         from fractions import Fraction
-        return Fraction(*self._decode())
+        return self.set_shareable(Fraction(*self._decode()))
 
     def decode_regexp(self):
         # Semantic tag 35
-        return re.compile(self._decode())
+        return self.set_shareable(re.compile(self._decode()))
 
     def decode_mime(self):
         # Semantic tag 36
         from email.parser import Parser
-        return Parser().parsestr(self._decode())
+        return self.set_shareable(Parser().parsestr(self._decode()))
 
     def decode_uuid(self):
         # Semantic tag 37
         from uuid import UUID
-        return UUID(bytes=self._decode())
+        return self.set_shareable(UUID(bytes=self._decode()))
 
     def decode_set(self):
         # Semantic tag 258
         if self._immutable:
-            return frozenset(self._decode(immutable=True))
+            return self.set_shareable(frozenset(self._decode(immutable=True)))
         else:
-            return set(self._decode(immutable=True))
+            return self.set_shareable(set(self._decode(immutable=True)))
 
     def decode_ipaddress(self):
         # Semantic tag 260
@@ -384,10 +390,10 @@ class CBORDecoder(object):
         if not isinstance(buf, bytes) or len(buf) not in (4, 6, 16):
             raise CBORDecodeError("invalid ipaddress value %r" % buf)
         elif len(buf) in (4, 16):
-            return ip_address(buf)
+            return self.set_shareable(ip_address(buf))
         elif len(buf) == 6:
             # MAC address
-            return CBORTag(260, buf)
+            return self.set_shareable(CBORTag(260, buf))
 
     def decode_ipnetwork(self):
         # Semantic tag 261
@@ -396,7 +402,7 @@ class CBORDecoder(object):
         if isinstance(net_map, Mapping) and len(net_map) == 1:
             for net in net_map.items():
                 try:
-                    return ip_network(net, strict=False)
+                    return self.set_shareable(ip_network(net, strict=False))
                 except (TypeError, ValueError):
                     break
         raise CBORDecodeError("invalid ipnetwork value %r" % net_map)
@@ -406,6 +412,7 @@ class CBORDecoder(object):
     #
 
     def decode_simple_value(self):
+        # XXX Set shareable?
         return CBORSimpleValue(byte_as_integer(self.read(1)))
 
     def decode_float16(self):
@@ -414,13 +421,13 @@ class CBORDecoder(object):
             value = struct.unpack('>e', payload)[0]
         except struct.error:
             value = unpack_float16(payload)
-        return value
+        return self.set_shareable(value)
 
     def decode_float32(self):
-        return struct.unpack('>f', self.read(4))[0]
+        return self.set_shareable(struct.unpack('>f', self.read(4))[0])
 
     def decode_float64(self):
-        return struct.unpack('>d', self.read(8))[0]
+        return self.set_shareable(struct.unpack('>d', self.read(8))[0])
 
 
 major_decoders = {
