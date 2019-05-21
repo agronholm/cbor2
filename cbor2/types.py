@@ -47,7 +47,7 @@ class CBORSimpleValue(object):
 
     def __init__(self, value):
         if value < 0 or value > 255:
-            raise TypeError('simple value too big')
+            raise TypeError('simple value out of range (0..255)')
         self.value = value
 
     def __eq__(self, other):

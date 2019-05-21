@@ -157,7 +157,8 @@ def test_naive_datetime():
     """Test that naive datetimes are gracefully rejected when no timezone has been set."""
     with pytest.raises(CBOREncodeError) as exc:
         dumps(datetime(2013, 3, 21))
-        exc.match('naive datetime encountered and no default timezone has been set')
+        exc.match('naive datetime datetime.datetime(2013, 3, 21) encountered '
+                  'and no default timezone has been set')
 
 
 @pytest.mark.parametrize('value, expected', [

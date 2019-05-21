@@ -191,7 +191,8 @@ class CBORDecoder(object):
         if length is None:
             # Indefinite length
             items = []
-            self.set_shareable(items)
+            if not self._immutable:
+                self.set_shareable(items)
             while True:
                 value = self._decode()
                 if value is break_marker:
@@ -200,11 +201,12 @@ class CBORDecoder(object):
                     items.append(value)
         else:
             items = [None] * length
-            self.set_shareable(items)
+            if not self._immutable:
+                self.set_shareable(items)
             for index in range(length):
                 items[index] = self._decode()
 
-        if self.immutable:
+        if self._immutable:
             items = tuple(items)
             self.set_shareable(items)
         return items
@@ -241,7 +243,7 @@ class CBORDecoder(object):
         if self.object_hook:
             dictionary = self.object_hook(self, dictionary)
             self.set_shareable(dictionary)
-        elif self.immutable:
+        elif self._immutable:
             dictionary = FrozenDict(dictionary)
             self.set_shareable(dictionary)
         return dictionary
@@ -296,7 +298,7 @@ class CBORDecoder(object):
                 int(year), int(month), int(day),
                 int(hour), int(minute), int(second), int(micro or 0), tz)
         else:
-            raise CBORDecodeError('invalid datetime string: {}'.format(value))
+            raise CBORDecodeError('invalid datetime string: {!r}'.format(value))
 
     def decode_epoch_datetime(self):
         # Semantic tag 1
