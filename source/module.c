@@ -169,14 +169,19 @@ CBORSimpleValue_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {"value", NULL};
     PyObject *value = NULL, *ret;
-    uint8_t val;
+    Py_ssize_t val;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "B", keywords, &val))
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "n", keywords, &val))
         return NULL;
+
+    if (val < 0 || val > 255) {
+        PyErr_SetString(PyExc_TypeError, "simple value out of range (0..255)");
+        return NULL;
+    }
 
     ret = PyStructSequence_New(type);
     if (ret) {
-        value = PyLong_FromLong(val);
+        value = PyLong_FromSsize_t(val);
         if (value)
             PyStructSequence_SET_ITEM(ret, 0, value);
     }
