@@ -1296,8 +1296,7 @@ CBORDecoder_decode_ipaddress(CBORDecoderObject *self)
                 }
             } else
                 PyErr_Format(
-                    _CBOR2_CBORDecodeError,
-                    "invalid ipaddress length %d", PyBytes_GET_SIZE(bytes));
+                    _CBOR2_CBORDecodeError, "invalid ipaddress value %R", bytes);
         } else
             PyErr_Format(
                 _CBOR2_CBORDecodeError, "invalid ipaddress value %R", bytes);

@@ -348,6 +348,15 @@ class CBOREncoder(object):
         )
         self.encode_semantic(CBORTag(258, [key[1] for key in values]))
 
+    def encode_ipaddress(self, value):
+        # Semantic tag 260
+        self.encode_semantic(CBORTag(260, value.packed))
+
+    def encode_ipnetwork(self, value):
+        # Semantic tag 261
+        self.encode_semantic(
+            CBORTag(261, {value.network_address.packed: value.prefixlen}))
+
     #
     # Special encoders (major tag 7)
     #
@@ -428,10 +437,14 @@ default_encoders = OrderedDict([
     (('fractions', 'Fraction'),     CBOREncoder.encode_rational),
     (('email.message', 'Message'),  CBOREncoder.encode_mime),
     (('uuid', 'UUID'),              CBOREncoder.encode_uuid),
+    (('ipaddress', 'IPv4Address'),  CBOREncoder.encode_ipaddress),
+    (('ipaddress', 'IPv6Address'),  CBOREncoder.encode_ipaddress),
+    (('ipaddress', 'IPv4Network'),  CBOREncoder.encode_ipnetwork),
+    (('ipaddress', 'IPv6Network'),  CBOREncoder.encode_ipnetwork),
     (CBORSimpleValue,               CBOREncoder.encode_simple_value),
     (CBORTag,                       CBOREncoder.encode_semantic),
     (set,                           CBOREncoder.encode_set),
-    (frozenset,                     CBOREncoder.encode_set)
+    (frozenset,                     CBOREncoder.encode_set),
 ])
 
 
@@ -442,7 +455,7 @@ canonical_encoders = OrderedDict([
     (OrderedDict, CBOREncoder.encode_canonical_map),
     (FrozenDict,  CBOREncoder.encode_canonical_map),
     (set,         CBOREncoder.encode_canonical_set),
-    (frozenset,   CBOREncoder.encode_canonical_set)
+    (frozenset,   CBOREncoder.encode_canonical_set),
 ])
 
 

@@ -8,6 +8,11 @@ from decimal import Decimal
 from email.mime.text import MIMEText
 from fractions import Fraction
 from uuid import UUID
+try:
+    from ipaddress import ip_address, ip_network
+except ImportError:
+    def ip_address(x): pass
+    def ip_network(x, strict): pass
 
 import pytest
 
@@ -209,6 +214,33 @@ def test_mime(impl):
 def test_uuid(impl):
     expected = unhexlify('d825505eaffac8b51e480581277fdcc7842faf')
     assert impl.dumps(UUID(hex='5eaffac8b51e480581277fdcc7842faf')) == expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 3), reason="Address encoding requires Py3.3+")
+@pytest.mark.parametrize('value, expected', [
+    (ip_address('192.10.10.1'), 'd9010444c00a0a01'),
+    (ip_address('2001:db8:85a3::8a2e:370:7334'), 'd901045020010db885a3000000008a2e03707334'),
+], ids=[
+    'ipv4',
+    'ipv6',
+])
+def test_ipaddress(impl, value, expected):
+    expected = unhexlify(expected)
+    assert impl.dumps(value) == expected
+
+
+@pytest.mark.skipif(sys.version_info < (3, 3), reason="Network encoding requires Py3.3+")
+@pytest.mark.parametrize('value, expected', [
+    (ip_network('192.168.0.100/24', False), 'd90105a144c0a800001818'),
+    (ip_network('2001:db8:85a3:0:0:8a2e::/96', False),
+     'd90105a15020010db885a3000000008a2e000000001860'),
+], ids=[
+    'ipv4',
+    'ipv6',
+])
+def test_ipnetwork(impl, value, expected):
+    expected = unhexlify(expected)
+    assert impl.dumps(value) == expected
 
 
 def test_custom_tag(impl):
