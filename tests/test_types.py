@@ -17,7 +17,7 @@ def test_tag_equals():
 
 
 def test_simple_value_repr():
-    assert repr(CBORSimpleValue(1)) == "CBORSimpleValue(1)"
+    assert repr(CBORSimpleValue(1)) == "CBORSimpleValue(value=1)"
 
 
 def test_simple_value_equals():
@@ -33,9 +33,9 @@ def test_simple_value_equals():
 
 
 def test_simple_value_too_big():
-    with pytest.raises(TypeError) as exc:
+    with pytest.raises(TypeError):
         CBORSimpleValue(256)
-        assert str(exc.value) == 'simple value too big'
+        assert str(exc.value) == 'simple value out of range (0..255)'
 
 
 def test_frozendict():

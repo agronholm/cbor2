@@ -288,7 +288,8 @@ class CBOREncoder(object):
                 value = value.replace(tzinfo=self.timezone)
             else:
                 raise CBOREncodeError(
-                    'naive datetime encountered and no default timezone has been set')
+                    'naive datetime {!r} encountered and no default timezone '
+                    'has been set'.format(value))
 
         if self.datetime_as_timestamp:
             from calendar import timegm
