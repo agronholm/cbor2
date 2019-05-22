@@ -3,8 +3,38 @@ import pytest
 from cbor2.types import FrozenDict
 
 
-def test_tag_repr(impl):
-    assert repr(impl.CBORTag(600, 'blah')) == "CBORTag(600, 'blah')"
+def test_undefined_bool(impl):
+    assert not impl.undefined
+
+
+def test_undefined_repr(impl):
+    assert repr(impl.undefined) == 'undefined'
+
+
+def test_undefined_singleton(impl):
+    assert type(impl.undefined)() is impl.undefined
+
+
+def test_undefined_init(impl):
+    with pytest.raises(TypeError):
+        type(impl.undefined)('foo')
+
+
+def test_break_bool(impl):
+    assert impl.break_marker
+
+
+def test_break_repr(impl):
+    assert repr(impl.break_marker) == 'break_marker'
+
+
+def test_break_singleton(impl):
+    assert type(impl.break_marker)() is impl.break_marker
+
+
+def test_break_init(impl):
+    with pytest.raises(TypeError):
+        type(impl.break_marker)('foo')
 
 
 def test_tag_init(impl):
