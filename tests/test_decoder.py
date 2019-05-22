@@ -38,6 +38,30 @@ def test_fp_attr(impl):
             del decoder.fp
 
 
+def test_tag_hook_attr(impl):
+    with BytesIO(b'foobar') as stream:
+        with pytest.raises(ValueError):
+            impl.CBORDecoder(stream, tag_hook='foo')
+        decoder = impl.CBORDecoder(stream)
+        tag_hook = lambda decoder, tag: None  # noqa: E731
+        decoder.tag_hook = tag_hook
+        assert decoder.tag_hook is tag_hook
+        with pytest.raises(AttributeError):
+            del decoder.tag_hook
+
+
+def test_object_hook_attr(impl):
+    with BytesIO(b'foobar') as stream:
+        with pytest.raises(ValueError):
+            impl.CBORDecoder(stream, object_hook='foo')
+        decoder = impl.CBORDecoder(stream)
+        object_hook = lambda decoder, data: None  # noqa: E731
+        decoder.object_hook = object_hook
+        assert decoder.object_hook is object_hook
+        with pytest.raises(AttributeError):
+            del decoder.object_hook
+
+
 def test_str_errors_attr(impl):
     with BytesIO(b'foobar') as stream:
         with pytest.raises(ValueError):

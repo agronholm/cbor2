@@ -6,7 +6,7 @@ import struct
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
 from functools import wraps
-from datetime import datetime, date, time
+from datetime import datetime, date, time, tzinfo
 from io import BytesIO
 from sys import modules
 
@@ -71,8 +71,9 @@ class CBOREncoder(object):
     """
 
     __slots__ = (
-        'datetime_as_timestamp', 'timezone', 'default', 'value_sharing',
-        'json_compatible', '_fp_write', '_shared_containers', '_encoders')
+        'datetime_as_timestamp', '_timezone', '_default', 'value_sharing',
+        'json_compatible', '_fp_write', '_shared_containers', '_encoders',
+        '_canonical')
 
     def __init__(self, fp, datetime_as_timestamp=False, timezone=None,
                  value_sharing=False, default=None, canonical=False):
@@ -81,6 +82,7 @@ class CBOREncoder(object):
         self.timezone = timezone
         self.value_sharing = value_sharing
         self.default = default
+        self._canonical = canonical
         self._shared_containers = {}  # indexes used for value sharing
         self._encoders = default_encoders.copy()
         if canonical:
@@ -118,6 +120,32 @@ class CBOREncoder(object):
         else:
             self._fp_write = value.write
 
+    @property
+    def timezone(self):
+        return self._timezone
+
+    @timezone.setter
+    def timezone(self, value):
+        if value is None or isinstance(value, tzinfo):
+            self._timezone = value
+        else:
+            raise ValueError('timezone must be None or a tzinfo instance')
+
+    @property
+    def default(self):
+        return self._default
+
+    @default.setter
+    def default(self, value):
+        if value is None or callable(value):
+            self._default = value
+        else:
+            raise ValueError('default must be None or a callable')
+
+    @property
+    def canonical(self):
+        return self._canonical
+
     @contextmanager
     def disable_value_sharing(self):
         """
@@ -149,7 +177,7 @@ class CBOREncoder(object):
         encoder = (
             self._encoders.get(obj_type) or
             self._find_encoder(obj_type) or
-            self.default
+            self._default
         )
         if not encoder:
             raise CBOREncodeError('cannot serialize type %s' % obj_type.__name__)
@@ -286,8 +314,8 @@ class CBOREncoder(object):
     def encode_datetime(self, value):
         # Semantic tag 0
         if not value.tzinfo:
-            if self.timezone:
-                value = value.replace(tzinfo=self.timezone)
+            if self._timezone:
+                value = value.replace(tzinfo=self._timezone)
             else:
                 raise CBOREncodeError(
                     'naive datetime {!r} encountered and no default timezone '

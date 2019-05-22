@@ -76,6 +76,28 @@ class CBORDecoder(object):
             self._fp_read = value.read
 
     @property
+    def tag_hook(self):
+        return self._tag_hook
+
+    @tag_hook.setter
+    def tag_hook(self, value):
+        if value is None or callable(value):
+            self._tag_hook = value
+        else:
+            raise ValueError('tag_hook must be None or a callable')
+
+    @property
+    def object_hook(self):
+        return self._object_hook
+
+    @object_hook.setter
+    def object_hook(self, value):
+        if value is None or callable(value):
+            self._object_hook = value
+        else:
+            raise ValueError('object_hook must be None or a callable')
+
+    @property
     def str_errors(self):
         return self._str_errors
 
@@ -294,8 +316,8 @@ class CBORDecoder(object):
                 key = self._decode(immutable=True, unshared=True)
                 dictionary[key] = self._decode(unshared=True)
 
-        if self.object_hook:
-            dictionary = self.object_hook(self, dictionary)
+        if self._object_hook:
+            dictionary = self._object_hook(self, dictionary)
             self.set_shareable(dictionary)
         elif self._immutable:
             dictionary = FrozenDict(dictionary)
@@ -312,8 +334,8 @@ class CBORDecoder(object):
             tag = CBORTag(tagnum, None)
             self.set_shareable(tag)
             tag.value = self._decode(unshared=True)
-            if self.tag_hook:
-                tag = self.tag_hook(self, tag)
+            if self._tag_hook:
+                tag = self._tag_hook(self, tag)
             return self.set_shareable(tag)
 
     def decode_special(self, subtype):
