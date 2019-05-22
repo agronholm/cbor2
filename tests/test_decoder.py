@@ -86,6 +86,24 @@ def test_read(impl):
             decoder.read(10)
 
 
+def test_decode_from_bytes(impl):
+    with BytesIO(b'foobar') as stream:
+        decoder = impl.CBORDecoder(stream)
+        assert decoder.decode_from_bytes(b'\x01') == 1
+        with pytest.raises(TypeError):
+            decoder.decode_from_bytes(u'foo')
+
+
+def test_load(impl):
+    with pytest.raises(TypeError):
+        impl.load()
+    with pytest.raises(TypeError):
+        impl.loads()
+    assert impl.loads(s=b'\x01') == 1
+    with BytesIO(b'\x01') as stream:
+        assert impl.load(fp=stream) == 1
+
+
 @pytest.mark.parametrize('payload, expected', [
     ('00', 0),
     ('01', 1),
@@ -233,6 +251,7 @@ def test_mixed_array_map(impl, payload, expected):
     ('bf61610161629f0203ffff', {'a': 1, 'b': [2, 3]}),
     ('826161bf61626163ff', ['a', {'b': 'c'}]),
     ('bf6346756ef563416d7421ff', {'Fun': True, 'Amt': -2}),
+    ('d901029f010203ff', {1, 2, 3}),
 ])
 def test_streaming(impl, payload, expected):
     decoded = impl.loads(unhexlify(payload))
