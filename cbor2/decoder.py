@@ -543,18 +543,18 @@ semantic_decoders = {
 }
 
 
-def loads(payload, **kwargs):
+def loads(s, **kwargs):
     """
     Deserialize an object from a bytestring.
 
-    :param bytes payload:
+    :param bytes s:
         the bytestring to deserialize
     :param kwargs:
         keyword arguments passed to :class:`CBORDecoder`
     :return:
         the deserialized object
     """
-    with BytesIO(payload) as fp:
+    with BytesIO(s) as fp:
         return CBORDecoder(fp, **kwargs).decode()
 
 
