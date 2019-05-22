@@ -327,32 +327,25 @@ CBOREncoder_encode_length(CBOREncoderObject *self, PyObject *args)
 }
 
 
-// Given a deferred type tuple (module-name, type-name), import the specified
-// module, get the specified type from within it and return it as a new
-// reference. Returns NULL and sets an appropriate error if the module cannot
-// be imported or the specified type cannot be found within it
+// Given a deferred type tuple (module-name, type-name), find the specified
+// module in sys.modules, get the specified type from within it and return it
+// as a new reference. Returns NULL without setting an error if the module
+// cannot be found (indicating it hasn't been loaded and therefore cannot be
+// the type we're looking for), or sets an error if the specified type cannot
+// be found within it
 static PyObject *
-load_type(PyObject *type_tuple)
+find_deferred(PyObject *type_tuple)
 {
-    PyObject *mod_name, *mod, *type_name, *type, *import_list;
+    PyObject *mod_name, *mod, *type_name;
 
     if (PyTuple_GET_SIZE(type_tuple) == 2) {
         mod_name = PyTuple_GET_ITEM(type_tuple, 0);
         type_name = PyTuple_GET_ITEM(type_tuple, 1);
         if (PyUnicode_Check(mod_name) && PyUnicode_Check(type_name)) {
-            import_list = PyList_New(1);
-            if (!import_list)
-                return NULL;
-            Py_INCREF(type_name);
-            PyList_SET_ITEM(import_list, 0, type_name); // steals ref
-            mod = PyImport_ImportModuleLevelObject(
-                mod_name, NULL, NULL, import_list, 0);
-            Py_DECREF(import_list);
+            mod = PyDict_GetItem(PyImport_GetModuleDict(), mod_name);
             if (!mod)
                 return NULL;
-            type = PyObject_GetAttr(mod, type_name);
-            Py_DECREF(mod);
-            return type;
+            return PyObject_GetAttr(mod, type_name);
         }
     }
     PyErr_Format(_CBOR2_CBOREncodeError,
@@ -364,29 +357,24 @@ load_type(PyObject *type_tuple)
 
 
 // Given a deferred type item tuple from the self->encoders dictionary, attempt
-// to load the specified type (by calling load_type) and replace the
-// entry in the dictionary with the loaded type, mapping to the same handler
+// to find the specified type (by calling find_deferred) and replace the entry
+// in the dictionary with the discovered type, mapping to the same handler
 static PyObject *
-replace_type(CBOREncoderObject *self, PyObject *item)
+replace_deferred(CBOREncoderObject *self, PyObject *item)
 {
     PyObject *enc_type, *encoder, *ret = NULL;
 
     enc_type = PyTuple_GET_ITEM(item, 0);
     encoder = PyTuple_GET_ITEM(item, 1);
-    // This function is unusual in that enc_type is a borrowed reference on
-    // entry, and the return value (a transformed enc_type) is also a borrowed
-    // reference; hence we have to INCREF enc_type to ensure it doesn't
-    // disappear when removing it from the encoders dict (which might be the
-    // only reference to it)
-    Py_INCREF(enc_type);
-    if (PyObject_DelItem(self->encoders, enc_type) == 0) {
-        ret = load_type(enc_type);
-        if (ret && PyObject_SetItem(self->encoders, ret, encoder) == 0)
-            // This DECREF might look unusual but at this point the encoders
-            // dict has a ref to the new enc_type, so we want "our" ref to
-            // enc_type to be borrowed just as the original was on entry
+    ret = find_deferred(enc_type);
+    if (ret) {
+        if (PyObject_DelItem(self->encoders, enc_type) == -1) {
             Py_DECREF(ret);
-        Py_DECREF(enc_type);
+            ret = NULL;
+        } else if (PyObject_SetItem(self->encoders, ret, encoder) == -1) {
+            Py_DECREF(ret);
+            ret = NULL;
+        }
     }
     return ret;
 }
@@ -408,8 +396,15 @@ CBOREncoder_find_encoder(CBOREncoderObject *self, PyObject *type)
                 while (!ret && (item = PyIter_Next(iter))) {
                     enc_type = PyTuple_GET_ITEM(item, 0);
 
-                    if (PyTuple_Check(enc_type))
-                        enc_type = replace_type(self, item);
+                    if (PyTuple_Check(enc_type)) {
+                        enc_type = replace_deferred(self, item);
+                        // This DECREF might look strange but at this point,
+                        // enc_type is a new reference rather than borrowed as
+                        // it was previously. However, we know a reference to
+                        // it must exist in the encoders dictionary so it's
+                        // safe to convert without it being destroyed
+                        Py_DECREF(enc_type);
+                    }
                     if (enc_type)
                         switch (PyObject_IsSubclass(type, enc_type)) {
                             case 1:
@@ -423,7 +418,11 @@ CBOREncoder_find_encoder(CBOREncoderObject *self, PyObject *type)
                                 break;
                         }
                     Py_DECREF(item);
-                    if (!enc_type)
+                    // We need to check PyErr_Occurred here as enc_type can be
+                    // NULL with no error in the case replace_deferred found
+                    // no loaded module with the specified name in which case
+                    // we should simply continue to the next entry
+                    if (!enc_type && PyErr_Occurred())
                         break;
                 }
                 Py_DECREF(iter);
