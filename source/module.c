@@ -331,7 +331,7 @@ CBOR2_load(PyObject *module, PyObject *args, PyObject *kwargs)
 static PyObject *
 CBOR2_loads(PyObject *module, PyObject *args, PyObject *kwargs)
 {
-    PyObject *new_args, *buf = NULL, *fp, *ret = NULL;
+    PyObject *new_args, *s = NULL, *fp, *ret = NULL;
     Py_ssize_t i;
 
     if (!_CBOR2_BytesIO && _CBOR2_init_BytesIO() == -1)
@@ -339,14 +339,14 @@ CBOR2_loads(PyObject *module, PyObject *args, PyObject *kwargs)
 
     if (PyTuple_GET_SIZE(args) == 0) {
         if (kwargs)
-            buf = PyDict_GetItem(kwargs, _CBOR2_str_buf);
-        if (!buf) {
+            s = PyDict_GetItem(kwargs, _CBOR2_str_s);
+        if (!s) {
             PyErr_SetString(PyExc_TypeError,
-                    "dump missing 1 required argument: 'buf'");
+                    "dump missing 1 required argument: 's'");
             return NULL;
         }
-        Py_INCREF(buf);
-        if (PyDict_DelItem(kwargs, _CBOR2_str_buf) == -1)
+        Py_INCREF(s);
+        if (PyDict_DelItem(kwargs, _CBOR2_str_s) == -1)
             goto error;
         new_args = PyTuple_New(PyTuple_GET_SIZE(args) + 1);
         if (!new_args)
@@ -357,8 +357,8 @@ CBOR2_loads(PyObject *module, PyObject *args, PyObject *kwargs)
             PyTuple_SET_ITEM(new_args, i + 1, PyTuple_GET_ITEM(args, i));
         }
     } else {
-        buf = PyTuple_GET_ITEM(args, 0);
-        Py_INCREF(buf);
+        s = PyTuple_GET_ITEM(args, 0);
+        Py_INCREF(s);
         new_args = PyTuple_New(PyTuple_GET_SIZE(args));
         if (!new_args)
             goto error;
@@ -369,7 +369,7 @@ CBOR2_loads(PyObject *module, PyObject *args, PyObject *kwargs)
         }
     }
 
-    fp = PyObject_CallFunctionObjArgs(_CBOR2_BytesIO, buf, NULL);
+    fp = PyObject_CallFunctionObjArgs(_CBOR2_BytesIO, s, NULL);
     if (fp) {
         PyTuple_SET_ITEM(new_args, 0, fp);
         ret = CBOR2_load(module, new_args, kwargs);
@@ -378,7 +378,7 @@ CBOR2_loads(PyObject *module, PyObject *args, PyObject *kwargs)
     Py_DECREF(new_args);
     return ret;
 error:
-    Py_DECREF(buf);
+    Py_DECREF(s);
     return NULL;
 }
 
@@ -591,7 +591,6 @@ PyObject *_CBOR2_empty_str = NULL;
 PyObject *_CBOR2_str_as_string = NULL;
 PyObject *_CBOR2_str_as_tuple = NULL;
 PyObject *_CBOR2_str_bit_length = NULL;
-PyObject *_CBOR2_str_buf = NULL;
 PyObject *_CBOR2_str_bytes = NULL;
 PyObject *_CBOR2_str_BytesIO = NULL;
 PyObject *_CBOR2_str_canonical_encoders = NULL;
@@ -622,6 +621,7 @@ PyObject *_CBOR2_str_parsestr = NULL;
 PyObject *_CBOR2_str_pattern = NULL;
 PyObject *_CBOR2_str_prefixlen = NULL;
 PyObject *_CBOR2_str_read = NULL;
+PyObject *_CBOR2_str_s = NULL;
 PyObject *_CBOR2_str_timestamp = NULL;
 PyObject *_CBOR2_str_timezone = NULL;
 PyObject *_CBOR2_str_update = NULL;
@@ -848,7 +848,6 @@ PyInit__cbor2(void)
     INTERN_STRING(as_string);
     INTERN_STRING(as_tuple);
     INTERN_STRING(bit_length);
-    INTERN_STRING(buf);
     INTERN_STRING(bytes);
     INTERN_STRING(BytesIO);
     INTERN_STRING(canonical_encoders);
@@ -878,6 +877,7 @@ PyInit__cbor2(void)
     INTERN_STRING(pattern);
     INTERN_STRING(prefixlen);
     INTERN_STRING(read);
+    INTERN_STRING(s);
     INTERN_STRING(timestamp);
     INTERN_STRING(timezone);
     INTERN_STRING(update);
