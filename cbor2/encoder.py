@@ -91,7 +91,13 @@ class CBOREncoder(object):
     def _find_encoder(self, obj_type):
         for type_, enc in list(iteritems(self._encoders)):
             if type(type_) is tuple:
-                modname, typename = type_
+                try:
+                    modname, typename = type_
+                except (TypeError, ValueError):
+                    raise CBOREncodeError(
+                        "invalid deferred encoder type {!r} (must be a "
+                        "2-tuple of module name and type name, e.g. "
+                        "('collections', 'defaultdict'))".format(type_))
                 imported_type = getattr(modules.get(modname), typename, None)
                 if imported_type is not None:
                     del self._encoders[type_]
