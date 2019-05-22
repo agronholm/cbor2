@@ -66,6 +66,26 @@ def test_write(impl):
             encoder.write(1)
 
 
+def test_encoders_load_type(impl):
+    with BytesIO() as stream:
+        encoder = impl.CBOREncoder(stream)
+        encoder._encoders[(1, 2, 3)] = lambda self, value: None
+        with pytest.raises(ValueError) as exc:
+            encoder.encode(object())
+            assert str(exc.value).endswith(
+                'invalid deferred encoder type (1, 2, 3) (must be a 2-tuple '
+                "of module name and type name, e.g. ('collections', "
+                "'defaultdict'))")
+
+
+def test_encode_length(impl):
+    # This test is purely for coverage in the C variant
+    with BytesIO() as stream:
+        encoder = impl.CBOREncoder(stream)
+        encoder.encode_length(0, 1)
+        assert stream.getvalue() == b'\x01'
+
+
 def test_canonical_attr(impl):
     # Another test purely for coverage in the C variant
     with BytesIO() as stream:
@@ -73,6 +93,17 @@ def test_canonical_attr(impl):
         assert not enc.canonical
         enc = impl.CBOREncoder(stream, canonical=True)
         assert enc.canonical
+
+
+def test_dump(impl):
+    with pytest.raises(TypeError):
+        impl.dump()
+    with pytest.raises(TypeError):
+        impl.dumps()
+    assert impl.dumps(obj=1) == b'\x01'
+    with BytesIO() as stream:
+        impl.dump(fp=stream, obj=1)
+        assert stream.getvalue() == b'\x01'
 
 
 @pytest.mark.parametrize('value, expected', [
@@ -378,6 +409,7 @@ def test_dump_to_file(impl, tmpdir):
 
 
 @pytest.mark.parametrize('value, expected', [
+    ({}, 'a0'),
     (OrderedDict([(b'a', b''), (b'b', b'')]), 'A2416140416240'),
     (OrderedDict([(b'b', b''), (b'a', b'')]), 'A2416140416240'),
     (OrderedDict([(u'a', u''), (u'b', u'')]), 'a2616160616260'),
@@ -385,7 +417,7 @@ def test_dump_to_file(impl, tmpdir):
     (OrderedDict([(b'00001', u''), (b'002', u'')]), 'A2433030326045303030303160'),
     (OrderedDict([(255, 0), (2, 0)]), 'a2020018ff00'),
     (FrozenDict([(b'a', b''), (b'b', b'')]), 'A2416140416240')
-], ids=['bytes in order', 'bytes out of order', 'text in order',
+], ids=['empty', 'bytes in order', 'bytes out of order', 'text in order',
         'text out of order', 'byte length', 'integer keys', 'frozendict'])
 def test_ordered_map(impl, value, expected):
     expected = unhexlify(expected)
