@@ -420,7 +420,8 @@ CBOREncoder_find_encoder(CBOREncoderObject *self, PyObject *type)
                         // it was previously. However, we know a reference to
                         // it must exist in the encoders dictionary so it's
                         // safe to convert without it being destroyed
-                        Py_DECREF(enc_type);
+                        if (enc_type)
+                            Py_DECREF(enc_type);
                     }
                     if (enc_type)
                         switch (PyObject_IsSubclass(type, enc_type)) {

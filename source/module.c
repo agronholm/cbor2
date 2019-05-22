@@ -218,12 +218,13 @@ CBORSimpleValue_richcompare(PyObject *a, PyObject *b, int op)
 static PyObject *
 CBOR2_dump(PyObject *module, PyObject *args, PyObject *kwargs)
 {
-    PyObject *obj, *ret = NULL;
+    PyObject *obj = NULL, *ret = NULL;
     CBOREncoderObject *self;
     bool decref_args = false;
 
     if (PyTuple_GET_SIZE(args) == 0) {
-        obj = PyDict_GetItem(kwargs, _CBOR2_str_obj);
+        if (kwargs)
+            obj = PyDict_GetItem(kwargs, _CBOR2_str_obj);
         if (!obj) {
             PyErr_SetString(PyExc_TypeError,
                     "dump missing 1 required argument: 'obj'");
@@ -260,7 +261,7 @@ CBOR2_dump(PyObject *module, PyObject *args, PyObject *kwargs)
 static PyObject *
 CBOR2_dumps(PyObject *module, PyObject *args, PyObject *kwargs)
 {
-    PyObject *new_args, *fp, *obj, *ret = NULL;
+    PyObject *new_args, *fp, *obj = NULL, *ret = NULL;
     Py_ssize_t i;
 
     if (!_CBOR2_BytesIO && _CBOR2_init_BytesIO() == -1)
@@ -269,7 +270,8 @@ CBOR2_dumps(PyObject *module, PyObject *args, PyObject *kwargs)
     fp = PyObject_CallFunctionObjArgs(_CBOR2_BytesIO, NULL);
     if (fp) {
         if (PyTuple_GET_SIZE(args) == 0) {
-            obj = PyDict_GetItem(kwargs, _CBOR2_str_obj);
+            if (kwargs)
+                obj = PyDict_GetItem(kwargs, _CBOR2_str_obj);
             if (!obj) {
                 PyErr_SetString(PyExc_TypeError,
                         "dumps missing required argument: 'obj'");
@@ -329,14 +331,15 @@ CBOR2_load(PyObject *module, PyObject *args, PyObject *kwargs)
 static PyObject *
 CBOR2_loads(PyObject *module, PyObject *args, PyObject *kwargs)
 {
-    PyObject *new_args, *buf, *fp, *ret = NULL;
+    PyObject *new_args, *buf = NULL, *fp, *ret = NULL;
     Py_ssize_t i;
 
     if (!_CBOR2_BytesIO && _CBOR2_init_BytesIO() == -1)
         return NULL;
 
     if (PyTuple_GET_SIZE(args) == 0) {
-        buf = PyDict_GetItem(kwargs, _CBOR2_str_buf);
+        if (kwargs)
+            buf = PyDict_GetItem(kwargs, _CBOR2_str_buf);
         if (!buf) {
             PyErr_SetString(PyExc_TypeError,
                     "dump missing 1 required argument: 'buf'");
