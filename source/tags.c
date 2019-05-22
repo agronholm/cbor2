@@ -75,7 +75,7 @@ CBORTag_repr(CBORTagObject *self)
     PyObject *ret = NULL;
 
     if (Py_ReprEnter((PyObject *)self))
-        ret = PyUnicode_FromString("CBORTag(...)");
+        ret = PyUnicode_FromString("...");
     else
         ret = PyUnicode_FromFormat("CBORTag(%llu, %R)", self->tag, self->value);
     Py_ReprLeave((PyObject *)self);
