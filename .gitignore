@@ -2,6 +2,7 @@
 .pydevproject
 .idea/
 .coverage
+coverage/
 .cache/
 .tox/
 .eggs/
