@@ -37,6 +37,26 @@ def test_fp_attr(impl):
             del encoder.fp
 
 
+def test_default_attr(impl):
+    with BytesIO() as stream:
+        encoder = impl.CBOREncoder(stream)
+        assert encoder.default is None
+        with pytest.raises(ValueError):
+            encoder.default = 1
+        with pytest.raises(AttributeError):
+            del encoder.default
+
+
+def test_timezone_attr(impl):
+    with BytesIO() as stream:
+        encoder = impl.CBOREncoder(stream)
+        assert encoder.timezone is None
+        with pytest.raises(ValueError):
+            encoder.timezone = 1
+        with pytest.raises(AttributeError):
+            del encoder.timezone
+
+
 def test_write(impl):
     with BytesIO() as stream:
         encoder = impl.CBOREncoder(stream)
@@ -44,6 +64,15 @@ def test_write(impl):
         assert stream.getvalue() == b'foo'
         with pytest.raises(TypeError):
             encoder.write(1)
+
+
+def test_canonical_attr(impl):
+    # Another test purely for coverage in the C variant
+    with BytesIO() as stream:
+        enc = impl.CBOREncoder(stream)
+        assert not enc.canonical
+        enc = impl.CBOREncoder(stream, canonical=True)
+        assert enc.canonical
 
 
 @pytest.mark.parametrize('value, expected', [

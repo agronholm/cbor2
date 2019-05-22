@@ -94,8 +94,8 @@ CBOREncoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 }
 
 
-// CBOREncoder.__init__(self, fp=None, default_handler=None,
-//                      timestamp_format=0, value_sharing=False)
+// CBOREncoder.__init__(self, fp=None, datetime_as_timestamp=0, timezone=None,
+//                      value_sharing=False, default=None, canonical=False)
 int
 CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
 {
@@ -202,12 +202,12 @@ _CBOREncoder_set_default(CBOREncoderObject *self, PyObject *value,
 
     if (!value) {
         PyErr_SetString(PyExc_AttributeError,
-                        "cannot delete default_handler attribute");
+                        "cannot delete default attribute");
         return -1;
     }
     if (value != Py_None && !PyCallable_Check(value)) {
         PyErr_Format(PyExc_ValueError,
-                        "invalid default_handler value %R (must be callable "
+                        "invalid default value %R (must be callable "
                         "or None)", value);
         return -1;
     }
@@ -252,6 +252,17 @@ _CBOREncoder_set_timezone(CBOREncoderObject *self, PyObject *value,
     self->timezone = value;
     Py_DECREF(tmp);
     return 0;
+}
+
+
+// CBOREncoder._get_canonical(self)
+static PyObject *
+_CBOREncoder_get_canonical(CBOREncoderObject *self, void *closure)
+{
+    if (self->enc_style)
+        Py_RETURN_TRUE;
+    else
+        Py_RETURN_FALSE;
 }
 
 
@@ -1838,12 +1849,12 @@ CBOREncoder_encode_to_bytes(CBOREncoderObject *self, PyObject *value)
 // Encoder class definition //////////////////////////////////////////////////
 
 static PyMemberDef CBOREncoder_members[] = {
-    {"encoders", T_OBJECT_EX, offsetof(CBOREncoderObject, encoders), READONLY,
+    {"_encoders", T_OBJECT_EX, offsetof(CBOREncoderObject, encoders), READONLY,
         "the ordered dict mapping types to encoder functions"},
     {"enc_style", T_UBYTE, offsetof(CBOREncoderObject, enc_style), 0,
         "the optimized encoder lookup to use (0=regular, 1=canonical, "
         "anything else is custom)"},
-    {"timestamp_format", T_BOOL, offsetof(CBOREncoderObject, timestamp_format), 0,
+    {"datetime_as_timestamp", T_BOOL, offsetof(CBOREncoderObject, timestamp_format), 0,
         "the sub-type to use when encoding datetime objects"},
     {"value_sharing", T_BOOL, offsetof(CBOREncoderObject, value_sharing), 0,
         "if True, then efficiently encode recursive structures"},
@@ -1854,12 +1865,15 @@ static PyGetSetDef CBOREncoder_getsetters[] = {
     {"fp",
         (getter) _CBOREncoder_get_fp, (setter) _CBOREncoder_set_fp,
         "output file-like object", NULL},
-    {"default_handler",
+    {"default",
         (getter) _CBOREncoder_get_default, (setter) _CBOREncoder_set_default,
         "default handler called when encoding unknown objects", NULL},
     {"timezone",
         (getter) _CBOREncoder_get_timezone, (setter) _CBOREncoder_set_timezone,
         "the timezone to use when encoding naive datetime objects", NULL},
+    {"canonical",
+        (getter) _CBOREncoder_get_canonical, NULL,
+        "if True, then CBOR canonical encoding will be generated", NULL},
     {NULL}
 };
 
