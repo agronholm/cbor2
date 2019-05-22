@@ -39,13 +39,15 @@ class CBORDecoder(object):
     """
 
     __slots__ = (
-        'tag_hook', 'object_hook', '_share_index', '_shareables', '_fp_read',
-        '_immutable')
+        '_tag_hook', '_object_hook', '_share_index', '_shareables', '_fp_read',
+        '_immutable', '_str_errors')
 
-    def __init__(self, fp, tag_hook=None, object_hook=None):
+    def __init__(self, fp, tag_hook=None, object_hook=None,
+                 str_errors='strict'):
         self.fp = fp
         self.tag_hook = tag_hook
         self.object_hook = object_hook
+        self.str_errors = str_errors
         self._share_index = None
         self._shareables = []
         self._immutable = False
@@ -72,6 +74,19 @@ class CBORDecoder(object):
             raise ValueError('fp object has no read method')
         else:
             self._fp_read = value.read
+
+    @property
+    def str_errors(self):
+        return self._str_errors
+
+    @str_errors.setter
+    def str_errors(self, value):
+        if value in ('strict', 'error', 'replace'):
+            self._str_errors = value
+        else:
+            raise ValueError(
+                "invalid str_errors value {!r} (must be one of 'strict', "
+                "'error', or 'replace')".format(value))
 
     def set_shareable(self, value):
         """
@@ -178,17 +193,51 @@ class CBORDecoder(object):
                 if initial_byte == 0xff:
                     result = b''.join(buf)
                     break
-                else:
+                elif initial_byte >> 5 == 2:
                     length = self._decode_length(initial_byte & 0x1f)
                     value = self.read(length)
                     buf.append(value)
+                else:
+                    raise CBORDecodeError(
+                        "non-bytestring found in indefinite length bytestring")
         else:
             result = self.read(length)
         return self.set_shareable(result)
 
     def decode_string(self, subtype):
         # Major tag 3
-        return self.set_shareable(self.decode_bytestring(subtype).decode('utf-8'))
+        length = self._decode_length(subtype, allow_indefinite=True)
+        if length is None:
+            # Indefinite length
+            # NOTE: It may seem redundant to repeat this code to handle UTF-8
+            # strings but there is a reason to do this separately to
+            # byte-strings. Specifically, the CBOR spec states (in sec. 2.2):
+            #
+            #     Text strings with indefinite lengths act the same as byte
+            #     strings with indefinite lengths, except that all their chunks
+            #     MUST be definite-length text strings.  Note that this implies
+            #     that the bytes of a single UTF-8 character cannot be spread
+            #     between chunks: a new chunk can only be started at a
+            #     character boundary.
+            #
+            # This precludes using the indefinite bytestring decoder above as
+            # that would happily ignore UTF-8 characters split across chunks.
+            buf = []
+            while True:
+                initial_byte = byte_as_integer(self.read(1))
+                if initial_byte == 0xff:
+                    result = ''.join(buf)
+                    break
+                elif initial_byte >> 5 == 3:
+                    length = self._decode_length(initial_byte & 0x1f)
+                    value = self.read(length).decode('utf-8', self._str_errors)
+                    buf.append(value)
+                else:
+                    raise CBORDecodeError(
+                        "non-string found in indefinite length string")
+        else:
+            result = self.read(length).decode('utf-8', self._str_errors)
+        return self.set_shareable(result)
 
     def decode_array(self, subtype):
         # Major tag 4

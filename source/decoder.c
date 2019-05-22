@@ -120,7 +120,8 @@ error:
 }
 
 
-// CBORDecoder.__init__(self, fp=None, tag_hook=None, object_hook=None)
+// CBORDecoder.__init__(self, fp=None, tag_hook=None, object_hook=None,
+//                      str_errors='strict')
 int
 CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
 {
@@ -297,7 +298,7 @@ _CBORDecoder_set_str_errors(CBORDecoderObject *self, PyObject *value,
     }
     PyErr_Format(PyExc_ValueError,
             "invalid str_errors value %R (must be one of 'strict', "
-            "'error', or 'replace'", value);
+            "'error', or 'replace')", value);
     return -1;
 }
 

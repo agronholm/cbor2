@@ -38,6 +38,19 @@ def test_fp_attr(impl):
             del decoder.fp
 
 
+def test_str_errors_attr(impl):
+    with BytesIO(b'foobar') as stream:
+        with pytest.raises(ValueError):
+            impl.CBORDecoder(stream, str_errors=False)
+        with pytest.raises(ValueError):
+            impl.CBORDecoder(stream, str_errors='foo')
+        decoder = impl.CBORDecoder(stream)
+        decoder.str_errors = 'replace'
+        assert decoder.str_errors == 'replace'
+        with pytest.raises(AttributeError):
+            del decoder.str_errors
+
+
 def test_read(impl):
     with BytesIO(b'foobar') as stream:
         decoder = impl.CBORDecoder(stream)
@@ -200,6 +213,17 @@ def test_mixed_array_map(impl, payload, expected):
 def test_streaming(impl, payload, expected):
     decoded = impl.loads(unhexlify(payload))
     assert decoded == expected
+
+
+@pytest.mark.parametrize('payload', [
+    '5f42010200',
+    '7f63737472a0',
+])
+def test_bad_streaming_strings(impl, payload):
+    with pytest.raises(impl.CBORDecodeError) as exc:
+        impl.loads(unhexlify(payload))
+        assert exc.match(
+            r"non-(byte)?string found in indefinite length \1string")
 
 
 @pytest.fixture(params=[
