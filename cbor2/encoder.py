@@ -1,3 +1,5 @@
+from __future__ import division
+
 import re
 import math
 import struct
@@ -293,7 +295,10 @@ class CBOREncoder(object):
 
         if self.datetime_as_timestamp:
             from calendar import timegm
-            timestamp = timegm(value.utctimetuple()) + value.microsecond // 1000000
+            if not value.microsecond:
+                timestamp = timegm(value.utctimetuple())
+            else:
+                timestamp = timegm(value.utctimetuple()) + value.microsecond / 1000000
             self.encode_semantic(CBORTag(1, timestamp))
         else:
             datestring = as_unicode(value.isoformat().replace('+00:00', 'Z'))
