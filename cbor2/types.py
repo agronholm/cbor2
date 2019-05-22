@@ -1,4 +1,5 @@
-from .compat import Mapping
+from .compat import Mapping, recursive_repr
+from functools import total_ordering
 
 
 class CBORError(ValueError):
@@ -13,6 +14,7 @@ class CBORDecodeError(CBORError):
     "Error class raised for exceptions occurring during CBOR decoding."
 
 
+@total_ordering
 class CBORTag(object):
     """
     Represents a CBOR semantic tag.
@@ -24,14 +26,22 @@ class CBORTag(object):
     __slots__ = 'tag', 'value'
 
     def __init__(self, tag, value):
+        if not isinstance(tag, int):
+            raise TypeError('CBORTag tags must be integer numbers')
         self.tag = tag
         self.value = value
 
     def __eq__(self, other):
         if isinstance(other, CBORTag):
-            return self.tag == other.tag and self.value == other.value
+            return (self.tag, self.value) == (other.tag, other.value)
         return NotImplemented
 
+    def __le__(self, other):
+        if isinstance(other, CBORTag):
+            return (self.tag, self.value) <= (other.tag, other.value)
+        return NotImplemented
+
+    @recursive_repr()
     def __repr__(self):
         return 'CBORTag({self.tag}, {self.value!r})'.format(self=self)
 
