@@ -110,7 +110,37 @@ class FrozenDict(Mapping):
 class UndefinedType(object):
     __slots__ = ()
 
+    def __new__(cls):
+        try:
+            return undefined
+        except NameError:
+            return super(UndefinedType, cls).__new__(cls)
+
+    def __repr__(self):
+        return "undefined"
+
+    def __bool__(self):
+        return False
+    __nonzero__ = __bool__  # Py2.7 compat
+
+
+class BreakMarkerType(object):
+    __slots__ = ()
+
+    def __new__(cls):
+        try:
+            return break_marker
+        except NameError:
+            return super(BreakMarkerType, cls).__new__(cls)
+
+    def __repr__(self):
+        return "break_marker"
+
+    def __bool__(self):
+        return True
+    __nonzero__ = __bool__  # Py2.7 compat
+
 
 #: Represents the "undefined" value.
 undefined = UndefinedType()
-break_marker = object()
+break_marker = BreakMarkerType()
