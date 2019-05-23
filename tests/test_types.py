@@ -66,6 +66,8 @@ def test_tag_compare(impl):
     assert tag3 < tag4
     assert tag3 <= tag4
     assert not tag1 == (1, 'foo')
+    with pytest.raises(TypeError):
+        tag1 <= (1, 'foo')
 
 
 def test_tag_recursive(impl):
