@@ -302,6 +302,17 @@ _CBORDecoder_set_str_errors(CBORDecoderObject *self, PyObject *value,
     return -1;
 }
 
+
+// CBORDecoder._get_immutable(self, value)
+static PyObject *
+_CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
+{
+    if (self->immutable)
+        Py_RETURN_TRUE;
+    else
+        Py_RETURN_FALSE;
+}
+
 
 // Utility functions /////////////////////////////////////////////////////////
 
@@ -1578,6 +1589,10 @@ static PyGetSetDef CBORDecoder_getsetters[] = {
     {"str_errors",
         (getter) _CBORDecoder_get_str_errors, (setter) _CBORDecoder_set_str_errors,
         "the error mode to use when decoding UTF-8 encoded strings"},
+    {"immutable",
+        (getter) _CBORDecoder_get_immutable, NULL,
+        "when True, the next item decoded should be made immutable (a "
+        "tuple instead of a list, a frozenset instead of a set, etc.)"},
     {NULL}
 };
 
