@@ -94,6 +94,17 @@ def test_decode_from_bytes(impl):
             decoder.decode_from_bytes(u'foo')
 
 
+def test_immutable_attr(impl):
+    with BytesIO(unhexlify('d917706548656c6c6f')) as stream:
+        decoder = impl.CBORDecoder(stream)
+        assert not decoder.immutable
+
+        def tag_hook(decoder, tag):
+            assert decoder.immutable
+            return tag.value
+        decoder.decode()
+
+
 def test_load(impl):
     with pytest.raises(TypeError):
         impl.load()
