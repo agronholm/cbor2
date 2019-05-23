@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from cbor2.types import FrozenDict
@@ -65,9 +67,14 @@ def test_tag_compare(impl):
     assert tag4 > tag3
     assert tag3 < tag4
     assert tag3 <= tag4
-    assert not tag1 == (1, 'foo')
+
+
+@pytest.mark.skipif(sys.version_info < (3, 0), reason="Types are comparable in Py2.x")
+def test_tag_compare_unimplemented(impl):
+    tag = impl.CBORTag(1, 'foo')
+    assert not tag == (1, 'foo')
     with pytest.raises(TypeError):
-        tag1 <= (1, 'foo')
+        tag <= (1, 'foo')
 
 
 def test_tag_recursive(impl):
