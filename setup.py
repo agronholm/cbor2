@@ -3,7 +3,10 @@ import platform
 from setuptools import setup, Extension
 
 
-if platform.python_implementation() == 'CPython' and sys.version_info >= (3, 3):
+if (
+        not sys.platform.startswith('win') and
+        platform.python_implementation() == 'CPython' and
+        sys.version_info >= (3, 3)):
     _cbor2 = Extension(
         '_cbor2',
         libraries=['m'],
