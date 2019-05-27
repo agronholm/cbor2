@@ -279,7 +279,7 @@ _CBOREncoder_get_canonical(CBOREncoderObject *self, void *closure)
 // Utility methods ///////////////////////////////////////////////////////////
 
 static int
-fp_write(CBOREncoderObject *self, const char *buf, const int length)
+fp_write(CBOREncoderObject *self, const char *buf, const Py_ssize_t length)
 {
     PyObject *bytes, *ret = NULL;
 
@@ -317,19 +317,19 @@ encode_length(CBOREncoderObject *self, const uint8_t major_tag,
     lead = (LeadByte*)buf;
     lead->major = major_tag;
     if (length < 24) {
-        lead->subtype = length;
+        lead->subtype = (uint8_t) length;
         return fp_write(self, buf, 1);
     } else if (length <= UCHAR_MAX) {
         lead->subtype = 24;
-        buf[1] = length;
+        buf[1] = (uint8_t) length;
         return fp_write(self, buf, sizeof(uint8_t) + 1);
     } else if (length <= USHRT_MAX) {
         lead->subtype = 25;
-        *((uint16_t*)(buf + 1)) = htobe16(length);
+        *((uint16_t*)(buf + 1)) = htobe16((uint16_t) length);
         return fp_write(self, buf, sizeof(uint16_t) + 1);
     } else if (length <= UINT_MAX) {
         lead->subtype = 26;
-        *((uint32_t*)(buf + 1)) = htobe32(length);
+        *((uint32_t*)(buf + 1)) = htobe32((uint32_t) length);
         return fp_write(self, buf, sizeof(uint32_t) + 1);
     } else {
         lead->subtype = 27;
@@ -632,7 +632,7 @@ static PyObject *
 CBOREncoder_encode_string(CBOREncoderObject *self, PyObject *value)
 {
     // major type 3
-    char *buf;
+    const char *buf;
     Py_ssize_t length;
 
     buf = PyUnicode_AsUTF8AndSize(value, &length);
@@ -805,7 +805,7 @@ CBOREncoder_encode_semantic(CBOREncoderObject *self, PyObject *value)
 static PyObject *
 encode_datestr(CBOREncoderObject *self, PyObject *datestr)
 {
-    char *buf;
+    const char *buf;
     Py_ssize_t length, match;
 
     match = PyUnicode_Tailmatch(
@@ -1496,7 +1496,7 @@ CBOREncoder_encode_minimal_float(CBOREncoderObject *self, PyObject *value)
             }
             break;
         default:
-            u_single.f = u_double.f;
+            u_single.f = (float) u_double.f;
             if (u_single.f == u_double.f) {
                 u_half.i = pack_float16(u_single.f);
                 if (unpack_float16(u_half.i) == u_single.f) {
