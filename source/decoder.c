@@ -697,11 +697,15 @@ decode_definite_array(CBORDecoderObject *self, uint64_t length)
     Py_ssize_t i;
     PyObject *array, *item, *ret = NULL;
 
+    if (length > PY_SSIZE_T_MAX) {
+        PyErr_Format(_CBOR2_CBORDecodeError, "excessive array size %llu", length);
+        return NULL;
+    }
     if (self->immutable) {
         array = PyTuple_New(length);
         if (array) {
             ret = array;
-            for (i = 0; i < length; ++i) {
+            for (i = 0; i < (Py_ssize_t) length; ++i) {
                 item = decode(self, DECODE_UNSHARED);
                 if (item)
                     PyTuple_SET_ITEM(array, i, item);
@@ -722,7 +726,7 @@ decode_definite_array(CBORDecoderObject *self, uint64_t length)
         if (array) {
             ret = array;
             set_shareable(self, array);
-            for (i = 0; i < length; ++i) {
+            for (i = 0; i < (Py_ssize_t) length; ++i) {
                 item = decode(self, DECODE_UNSHARED);
                 if (item)
                     PyList_SET_ITEM(array, i, item);
@@ -884,26 +888,33 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
 static PyObject *
 parse_datestr(CBORDecoderObject *self, PyObject *str)
 {
-    char *buf, *p;
+    const char* buf;
+    char *p;
     Py_ssize_t size;
     PyObject *tz, *delta, *ret = NULL;
     bool offset_sign;
-    uint16_t Y;
-    uint8_t m, d, H, M, S, offset_H, offset_M;
-    uint32_t uS;
+    unsigned long int Y, m, d, H, M, S, offset_H, offset_M, uS;
 
     if (!_CBOR2_timezone_utc && _CBOR2_init_timezone_utc() == -1)
         return NULL;
     buf = PyUnicode_AsUTF8AndSize(str, &size);
+    if (
+            size < 20 || buf[4] != '-' || buf[7] != '-' ||
+            buf[10] != 'T' || buf[13] != ':' || buf[16] != ':')
+    {
+        PyErr_Format(
+            _CBOR2_CBORDecodeError, "invalid datetime string %R", str);
+        return NULL;
+    }
     if (buf) {
-        Y = strtol(buf, NULL, 10);
-        m = strtol(buf + 5, NULL, 10);
-        d = strtol(buf + 8, NULL, 10);
-        H = strtol(buf + 11, NULL, 10);
-        M = strtol(buf + 14, NULL, 10);
-        S = strtol(buf + 17, &p, 10);
+        Y = strtoul(buf, NULL, 10);
+        m = strtoul(buf + 5, NULL, 10);
+        d = strtoul(buf + 8, NULL, 10);
+        H = strtoul(buf + 11, NULL, 10);
+        M = strtoul(buf + 14, NULL, 10);
+        S = strtoul(buf + 17, &p, 10);
         if (*p == '.') {
-            uS = strtol(buf + 20, &p, 10);
+            uS = strtoul(buf + 20, &p, 10);
             switch (p - (buf + 20)) {
                 case 1: uS *= 100000; break;
                 case 2: uS *= 10000; break;
@@ -918,23 +929,27 @@ parse_datestr(CBORDecoderObject *self, PyObject *str)
             Py_INCREF(_CBOR2_timezone_utc);
             tz = _CBOR2_timezone_utc;
         } else {
+            tz = NULL;
             offset_sign = *p == '-';
-            offset_H = strtol(p, &p, 10);
-            offset_M = strtol(p + 1, &p, 10);
-            delta = PyDelta_FromDSU(0,
+            if (offset_sign || *p == '+') {
+                p++;
+                offset_H = strtoul(p, &p, 10);
+                offset_M = strtoul(p + 1, &p, 10);
+                delta = PyDelta_FromDSU(0,
                     (offset_sign ? -1 : 1) *
                     (offset_H * 3600 + offset_M * 60), 0);
-            if (delta) {
+                if (delta) {
 #if PY_VERSION_HEX >= 0x03070000
-                tz = PyTimeZone_FromOffset(delta);
+                    tz = PyTimeZone_FromOffset(delta);
 #else
-                tz = PyObject_CallFunctionObjArgs(
+                    tz = PyObject_CallFunctionObjArgs(
                         _CBOR2_timezone, delta, NULL);
 #endif
-                Py_DECREF(delta);
-            } else {
-                tz = NULL;
-            }
+                    Py_DECREF(delta);
+                }
+            } else
+                PyErr_Format(
+                    _CBOR2_CBORDecodeError, "invalid datetime string %R", str);
         }
         if (tz) {
             ret = PyDateTimeAPI->DateTime_FromDateAndTime(
@@ -1124,7 +1139,7 @@ static PyObject *
 CBORDecoder_decode_shareable(CBORDecoderObject *self)
 {
     // semantic type 28
-    int32_t old_index;
+    Py_ssize_t old_index;
     PyObject *ret = NULL;
 
     old_index = self->shared_index;
@@ -1495,7 +1510,7 @@ PyObject *
 decode(CBORDecoderObject *self, DecodeOptions options)
 {
     bool old_immutable;
-    int32_t old_index;
+    Py_ssize_t old_index;
     PyObject *ret = NULL;
     LeadByte lead;
 
@@ -1572,7 +1587,7 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
     static PyObject *                                                        \
     CBORDecoder_decode_##type(CBORDecoderObject *self, PyObject *subtype)    \
     {                                                                        \
-        return decode_##type(self, PyLong_AsUnsignedLong(subtype));          \
+        return decode_##type(self, (uint8_t) PyLong_AsUnsignedLong(subtype));\
     }
 
 PUBLIC_MAJOR(uint);

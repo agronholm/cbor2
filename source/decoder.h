@@ -11,7 +11,7 @@ typedef struct {
     PyObject *shareables;
     PyObject *str_errors;
     bool immutable;
-    int32_t shared_index;
+    Py_ssize_t shared_index;
 } CBORDecoderObject;
 
 PyTypeObject CBORDecoderType;
