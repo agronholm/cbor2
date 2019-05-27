@@ -3,7 +3,11 @@
 #include <string.h>
 #include <stdbool.h>
 #include <limits.h>
+#if __FreeBSD__
+#include <sys/endian.h>
+#elif ! _WIN32
 #include <endian.h>
+#endif
 #include <stdint.h>
 #include <math.h>
 #include <structmember.h>
@@ -13,6 +17,12 @@
 #include "tags.h"
 #include "decoder.h"
 
+#ifdef _WIN32
+// All windows platforms are (currently) little-endian so byteswap is required
+#define be16toh _byteswap_ushort
+#define be32toh _byteswap_ulong
+#define be64toh _byteswap_uint64
+#endif
 
 enum DecodeOption {
     DECODE_NORMAL = 0,

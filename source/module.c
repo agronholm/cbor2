@@ -78,7 +78,7 @@ static PyNumberMethods break_marker_as_number = {
 };
 
 PyTypeObject break_marker_type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "break_marker_type",
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_new = break_marker_new,
@@ -129,7 +129,7 @@ static PyNumberMethods undefined_as_number = {
 };
 
 PyTypeObject undefined_type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "undefined_type",
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_new = undefined_new,
@@ -770,6 +770,10 @@ PyInit__cbor2(void)
     if (!PyDateTimeAPI)
         return NULL;
 
+    if (PyType_Ready(&break_marker_type) < 0)
+        return NULL;
+    if (PyType_Ready(&undefined_type) < 0)
+        return NULL;
     if (PyType_Ready(&CBORTagType) < 0)
         return NULL;
     if (PyType_Ready(&CBOREncoderType) < 0)

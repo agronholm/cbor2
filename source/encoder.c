@@ -2,7 +2,11 @@
 #include <Python.h>
 #include <stdbool.h>
 #include <limits.h>
+#if __FreeBSD__
+#include <sys/endian.h>
+#elif ! _WIN32
 #include <endian.h>
+#endif
 #include <stdint.h>
 #include <math.h>
 #include <structmember.h>
@@ -12,6 +16,12 @@
 #include "tags.h"
 #include "encoder.h"
 
+#ifdef _WIN32
+// All windows platforms are (currently) little-endian so byteswap is required
+#define htobe16 _byteswap_ushort
+#define htobe32 _byteswap_ulong
+#define htobe64 _byteswap_uint64
+#endif
 
 typedef PyObject * (EncodeFunction)(CBOREncoderObject *, PyObject *);
 

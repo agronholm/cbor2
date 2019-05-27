@@ -1,9 +1,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <math.h>
+#if __FreeBSD__
+#include <sys/endian.h>
+#elif ! _WIN32
 #include <endian.h>
+#endif
 #include "halffloat.h"
 
+#ifdef _WIN32
+// All windows platforms are (currently) little-endian so byteswap is required
+#define be16toh _byteswap_ushort
+#define htobe16 _byteswap_ushort
+#endif
 
 // Based upon ftp://ftp.fox-toolkit.org/pub/fasthalffloatconversion.pdf ("Fast
 // Half Float Conversions") referenced by the Wikipedia article on
