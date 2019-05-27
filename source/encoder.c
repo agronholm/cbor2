@@ -529,8 +529,8 @@ encode_larger_int(CBOREncoderObject *self, PyObject *value)
                         long length = PyLong_AsLong(bits);
                         if (!PyErr_Occurred()) {
                             buf = PyObject_CallMethod(
-                                    value, "to_bytes", "ls#",
-                                    (length + 7) / 8, "big", 3);
+                                    value, "to_bytes", "ls",
+                                    (length + 7) / 8, "big");
                             if (buf) {
                                 if (encode_semantic(self, major_tag, buf) == 0) {
                                     Py_INCREF(Py_None);

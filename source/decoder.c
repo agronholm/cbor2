@@ -1033,7 +1033,7 @@ CBORDecoder_decode_positive_bignum(CBORDecoderObject *self)
     if (bytes) {
         if (PyBytes_CheckExact(bytes))
             ret = PyObject_CallMethod(
-                (PyObject*) &PyLong_Type, "from_bytes", "Os#", bytes, "big", 3);
+                (PyObject*) &PyLong_Type, "from_bytes", "Os", bytes, "big");
         else
             PyErr_Format(
                 _CBOR2_CBORDecodeError, "invalid bignum value %R", bytes);
