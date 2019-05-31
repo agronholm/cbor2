@@ -14,7 +14,7 @@ typedef struct {
     PyObject *encoders;
     PyObject *default_handler;
     PyObject *shared;
-    PyObject *timezone;
+    PyObject *tz;       // renamed from timezone to avoid Python issue #24643
     PyObject *shared_handler;
     uint8_t enc_style;  // 0=regular, 1=canonical, 2=custom
     bool timestamp_format;
