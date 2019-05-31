@@ -46,7 +46,7 @@ CBOREncoder_traverse(CBOREncoderObject *self, visitproc visit, void *arg)
     Py_VISIT(self->encoders);
     Py_VISIT(self->default_handler);
     Py_VISIT(self->shared);
-    Py_VISIT(self->timezone);
+    Py_VISIT(self->tz);
     Py_VISIT(self->shared_handler);
     return 0;
 }
@@ -58,7 +58,7 @@ CBOREncoder_clear(CBOREncoderObject *self)
     Py_CLEAR(self->encoders);
     Py_CLEAR(self->default_handler);
     Py_CLEAR(self->shared);
-    Py_CLEAR(self->timezone);
+    Py_CLEAR(self->tz);
     Py_CLEAR(self->shared_handler);
     return 0;
 }
@@ -94,7 +94,7 @@ CBOREncoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         Py_INCREF(Py_None);
         self->default_handler = Py_None;
         Py_INCREF(Py_None);
-        self->timezone = Py_None;
+        self->tz = Py_None;
         self->enc_style = 0;
         self->timestamp_format = false;
         self->value_sharing = false;
@@ -113,10 +113,10 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
         "fp", "datetime_as_timestamp", "timezone", "value_sharing", "default",
         "canonical", NULL
     };
-    PyObject *tmp, *fp = NULL, *default_handler = NULL, *timezone = NULL;
+    PyObject *tmp, *fp = NULL, *default_handler = NULL, *tz = NULL;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOB", keywords,
-                &fp, &self->timestamp_format, &timezone, &self->value_sharing,
+                &fp, &self->timestamp_format, &tz, &self->value_sharing,
                 &default_handler, &self->enc_style))
         return -1;
 
@@ -124,7 +124,7 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
         return -1;
     if (default_handler && _CBOREncoder_set_default(self, default_handler, NULL) == -1)
         return -1;
-    if (timezone && _CBOREncoder_set_timezone(self, timezone, NULL) == -1)
+    if (tz && _CBOREncoder_set_timezone(self, tz, NULL) == -1)
         return -1;
 
     self->shared = PyDict_New();
@@ -234,8 +234,8 @@ _CBOREncoder_set_default(CBOREncoderObject *self, PyObject *value,
 static PyObject *
 _CBOREncoder_get_timezone(CBOREncoderObject *self, void *closure)
 {
-    Py_INCREF(self->timezone);
-    return self->timezone;
+    Py_INCREF(self->tz);
+    return self->tz;
 }
 
 
@@ -257,9 +257,9 @@ _CBOREncoder_set_timezone(CBOREncoderObject *self, PyObject *value,
                         "or None)", value);
         return -1;
     }
-    tmp = self->timezone;
+    tmp = self->tz;
     Py_INCREF(value);
-    self->timezone = value;
+    self->tz = value;
     Py_DECREF(tmp);
     return 0;
 }
@@ -862,7 +862,7 @@ CBOREncoder_encode_datetime(CBOREncoderObject *self, PyObject *value)
 
     if (PyDateTime_Check(value)) {
         if (!((PyDateTime_DateTime*)value)->hastzinfo) {
-            if (self->timezone != Py_None) {
+            if (self->tz != Py_None) {
                 value = PyDateTimeAPI->DateTime_FromDateAndTime(
                         PyDateTime_GET_YEAR(value),
                         PyDateTime_GET_MONTH(value),
@@ -871,7 +871,7 @@ CBOREncoder_encode_datetime(CBOREncoderObject *self, PyObject *value)
                         PyDateTime_DATE_GET_MINUTE(value),
                         PyDateTime_DATE_GET_SECOND(value),
                         PyDateTime_DATE_GET_MICROSECOND(value),
-                        self->timezone,
+                        self->tz,
                         PyDateTimeAPI->DateTimeType);
             } else {
                 PyErr_Format(_CBOR2_CBOREncodeError,
@@ -916,7 +916,7 @@ CBOREncoder_encode_date(CBOREncoderObject *self, PyObject *value)
                 PyDateTime_GET_YEAR(value),
                 PyDateTime_GET_MONTH(value),
                 PyDateTime_GET_DAY(value),
-                0, 0, 0, 0, self->timezone,
+                0, 0, 0, 0, self->tz,
                 PyDateTimeAPI->DateTimeType);
         if (datetime) {
             ret = CBOREncoder_encode_datetime(self, datetime);
