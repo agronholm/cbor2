@@ -1,0 +1,98 @@
+# Python package
+# Create and test a Python package on multiple Python versions.
+# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+
+trigger:
+- master
+- c_module
+
+strategy:
+  matrix:
+    linux-py27:
+      python.version: '2.7'
+      image.name: 'ubuntu-16.04'
+    linux-py34:
+      python.version: '3.4'
+      image.name: 'ubuntu-16.04'
+    linux-py35:
+      python.version: '3.5'
+      image.name: 'ubuntu-16.04'
+    linux-py36:
+      python.version: '3.6'
+      image.name: 'ubuntu-16.04'
+    linux-py37:
+      python.version: '3.7'
+      image.name: 'ubuntu-16.04'
+    linux-pypy2:
+      python.version: 'pypy2'
+      image.name: 'ubuntu-16.04'
+    linux-pypy3:
+      python.version: 'pypy3'
+      image.name: 'ubuntu-16.04'
+    macos-py27:
+      python.version: '2.7'
+      image.name: 'macOS-10.14'
+    macos-py35:
+      python.version: '3.5'
+      image.name: 'macOS-10.14'
+    macos-py36:
+      python.version: '3.6'
+      image.name: 'macOS-10.14'
+    macos-py37:
+      python.version: '3.7'
+      image.name: 'macOS-10.14'
+    macos-pypy2:
+      python.version: 'pypy2'
+      image.name: 'macOS-10.14'
+    macos-pypy3:
+      python.version: 'pypy3'
+      image.name: 'macOS-10.14'
+    windows-py27-2017:
+      python.version: '2.7'
+      image.name: 'vs2017-win2016'
+    windows-py35-2017:
+      python.version: '3.5'
+      image.name: 'vs2017-win2016'
+    windows-py36-2017:
+      python.version: '3.6'
+      image.name: 'vs2017-win2016'
+    windows-py37-2017:
+      python.version: '3.7'
+      image.name: 'vs2017-win2016'
+    windows-py27-2019:
+      python.version: '2.7'
+      image.name: 'windows-2019'
+    windows-py36-2019:
+      python.version: '3.6'
+      image.name: 'windows-2019'
+    windows-py37-2019:
+      python.version: '3.7'
+      image.name: 'windows-2019'
+  maxParallel: 10
+
+pool:
+  vmImage: $(image.name)
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: $(python.version)
+  displayName: 'Use Python $(python.version)'
+
+- script: |
+    python -m pip install --upgrade setuptools pip wheel
+    pip install -e .[test]
+  displayName: 'Install dependencies'
+
+- script: |
+    pip install pytest pytest-azurepipelines
+    pytest --junitxml=test-results.xml --cov-report=term
+  displayName: 'Run tests'
+
+- task: PublishTestResults@2
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFiles: '**/test-results.xml'
+    testRunTitle: 'Publish test results for Python $(python.version)'
+  displayName: 'Publish test results'
