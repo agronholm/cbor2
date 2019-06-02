@@ -1,5 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <stdint.h>
 
 typedef struct {
     PyObject_HEAD
