@@ -4,6 +4,8 @@
 #include <limits.h>
 #if __FreeBSD__
 #include <sys/endian.h>
+#elif __APPLE__
+#include <libkern/OSByteOrder.h>
 #elif ! _WIN32
 #include <endian.h>
 #endif
@@ -16,11 +18,15 @@
 #include "tags.h"
 #include "encoder.h"
 
-#ifdef _WIN32
+#if __APPLE__
+#define htobe16(x) OSSwapHostToBigInt16(x)
+#define htobe32(x) OSSwapHostToBigInt32(x)
+#define htobe64(x) OSSwapHostToBigInt64(x)
+#elif _WIN32
 // All windows platforms are (currently) little-endian so byteswap is required
-#define htobe16 _byteswap_ushort
-#define htobe32 _byteswap_ulong
-#define htobe64 _byteswap_uint64
+#define htobe16(x) _byteswap_ushort(x)
+#define htobe32(x) _byteswap_ulong(x)
+#define htobe64(x) _byteswap_uint64(x)
 #endif
 
 typedef PyObject * (EncodeFunction)(CBOREncoderObject *, PyObject *);

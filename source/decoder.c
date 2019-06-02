@@ -5,6 +5,8 @@
 #include <limits.h>
 #if __FreeBSD__
 #include <sys/endian.h>
+#elif __APPLE__
+#include <libkern/OSByteOrder.h>
 #elif ! _WIN32
 #include <endian.h>
 #endif
@@ -17,11 +19,15 @@
 #include "tags.h"
 #include "decoder.h"
 
-#ifdef _WIN32
+#if __APPLE__
+#define be16toh(x) OSSwapBigToHostInt16(x)
+#define be32toh(x) OSSwapBigToHostInt32(x)
+#define be64toh(x) OSSwapBigToHostInt64(x)
+#elif _WIN32
 // All windows platforms are (currently) little-endian so byteswap is required
-#define be16toh _byteswap_ushort
-#define be32toh _byteswap_ulong
-#define be64toh _byteswap_uint64
+#define be16toh(x) _byteswap_ushort(x)
+#define be32toh(x) _byteswap_ulong(x)
+#define be64toh(x) _byteswap_uint64(x)
 #endif
 
 enum DecodeOption {
