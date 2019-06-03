@@ -1,6 +1,20 @@
-from .compat import Mapping
+from .compat import Mapping, recursive_repr
+from functools import total_ordering
 
 
+class CBORError(ValueError):
+    "Base class for errors that occur during CBOR encoding or decoding."
+
+
+class CBOREncodeError(CBORError):
+    "Error class raised for exceptions occurring during CBOR encoding."
+
+
+class CBORDecodeError(CBORError):
+    "Error class raised for exceptions occurring during CBOR decoding."
+
+
+@total_ordering
 class CBORTag(object):
     """
     Represents a CBOR semantic tag.
@@ -12,14 +26,22 @@ class CBORTag(object):
     __slots__ = 'tag', 'value'
 
     def __init__(self, tag, value):
+        if not isinstance(tag, int):
+            raise TypeError('CBORTag tags must be integer numbers')
         self.tag = tag
         self.value = value
 
     def __eq__(self, other):
         if isinstance(other, CBORTag):
-            return self.tag == other.tag and self.value == other.value
+            return (self.tag, self.value) == (other.tag, other.value)
         return NotImplemented
 
+    def __le__(self, other):
+        if isinstance(other, CBORTag):
+            return (self.tag, self.value) <= (other.tag, other.value)
+        return NotImplemented
+
+    @recursive_repr()
     def __repr__(self):
         return 'CBORTag({self.tag}, {self.value!r})'.format(self=self)
 
@@ -35,7 +57,7 @@ class CBORSimpleValue(object):
 
     def __init__(self, value):
         if value < 0 or value > 255:
-            raise TypeError('simple value too big')
+            raise TypeError('simple value out of range (0..255)')
         self.value = value
 
     def __eq__(self, other):
@@ -45,8 +67,15 @@ class CBORSimpleValue(object):
             return self.value == other
         return NotImplemented
 
+    def __ne__(self, other):
+        if isinstance(other, CBORSimpleValue):
+            return self.value != other.value
+        elif isinstance(other, int):
+            return self.value != other
+        return NotImplemented
+
     def __repr__(self):
-        return 'CBORSimpleValue({self.value})'.format(self=self)
+        return 'CBORSimpleValue(value={self.value})'.format(self=self)
 
 
 class FrozenDict(Mapping):
@@ -81,7 +110,37 @@ class FrozenDict(Mapping):
 class UndefinedType(object):
     __slots__ = ()
 
+    def __new__(cls):
+        try:
+            return undefined
+        except NameError:
+            return super(UndefinedType, cls).__new__(cls)
+
+    def __repr__(self):
+        return "undefined"
+
+    def __bool__(self):
+        return False
+    __nonzero__ = __bool__  # Py2.7 compat
+
+
+class BreakMarkerType(object):
+    __slots__ = ()
+
+    def __new__(cls):
+        try:
+            return break_marker
+        except NameError:
+            return super(BreakMarkerType, cls).__new__(cls)
+
+    def __repr__(self):
+        return "break_marker"
+
+    def __bool__(self):
+        return True
+    __nonzero__ = __bool__  # Py2.7 compat
+
 
 #: Represents the "undefined" value.
 undefined = UndefinedType()
-break_marker = object()
+break_marker = BreakMarkerType()

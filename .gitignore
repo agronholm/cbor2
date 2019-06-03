@@ -2,12 +2,16 @@
 .pydevproject
 .idea/
 .coverage
+coverage/
 .cache/
 .tox/
 .eggs/
 *.egg-info/
 *.pyc
+*.pyd
+*.so
 dist/
 docs/_build/
 build/
 virtualenv/
+.vs
