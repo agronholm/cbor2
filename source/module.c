@@ -601,6 +601,7 @@ PyObject *_CBOR2_str_datestr_re = NULL;
 PyObject *_CBOR2_str_Decimal = NULL;
 PyObject *_CBOR2_str_default_encoders = NULL;
 PyObject *_CBOR2_str_denominator = NULL;
+PyObject *_CBOR2_str_encode_date = NULL;
 PyObject *_CBOR2_str_Fraction = NULL;
 PyObject *_CBOR2_str_fromtimestamp = NULL;
 PyObject *_CBOR2_str_FrozenDict = NULL;
@@ -861,6 +862,7 @@ PyInit__cbor2(void)
     INTERN_STRING(Decimal);
     INTERN_STRING(default_encoders);
     INTERN_STRING(denominator);
+    INTERN_STRING(encode_date);
     INTERN_STRING(Fraction);
     INTERN_STRING(fromtimestamp);
     INTERN_STRING(FrozenDict);
