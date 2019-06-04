@@ -33,14 +33,35 @@ if sys.version_info.major < 3:
         pad = ('', '0')[n & 1]
         return unhexlify(pad + hexstr)
 
+    def recursive_repr(fillvalue='...'):
+        # Back-ported from Python 3.2
+        from thread import get_ident
+
+        def decorating_function(user_function):
+            repr_running = set()
+
+            def wrapper(self):
+                key = id(self), get_ident()
+                if key in repr_running:
+                    return fillvalue
+                repr_running.add(key)
+                try:
+                    result = user_function(self)
+                finally:
+                    repr_running.discard(key)
+                return result
+            return wrapper
+        return decorating_function
+
     byte_as_integer = ord
     timezone.utc = timezone(timedelta(0))
-    xrange = xrange  # noqa: F821
+    range = xrange  # noqa: F821
     long = long  # noqa: F821
     unicode = unicode  # noqa: F821
 else:
     from collections.abc import Mapping  # noqa: F401
     from datetime import timezone
+    from reprlib import recursive_repr  # noqa: F401
 
     def byte_as_integer(bytestr):
         return bytestr[0]
@@ -55,7 +76,7 @@ else:
         bits = i.bit_length()
         return i.to_bytes((bits + 7) // 8, 'big')
 
-    xrange = range
+    range = range
     long = int
     unicode = str
 
