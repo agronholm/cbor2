@@ -1,11 +1,16 @@
-# Python package
-# Create and test a Python package on multiple Python versions.
-# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+# Run CI for commits to the master branch, and PRs against the master branch;
+# other branches can be included or excluded here (see Concepts / Triggers in
+# Azure Pipelines docs for more details).
 
 trigger:
 - master
-- c_module
+
+pr:
+- master
+
+
+# Run CI against Linux, Mac OS X, and Windows, and a variety of Python
+# interpreters under each.
 
 strategy:
   matrix:
@@ -69,10 +74,18 @@ strategy:
     windows-py37-2019:
       python.version: '3.7'
       image.name: 'windows-2019'
-  maxParallel: 10
+  maxParallel: 10  # maximum for free usage
 
 pool:
   vmImage: $(image.name)
+
+
+# The following steps are executed in the order given. The UsePythonVersion
+# task sets up the Python interpreter with the specified version. Then pip and
+# pytest are used to install the package and execute tests. Finally, the
+# PublishTestResults task is used to publish the results to Azure. Coveralls
+# configuration should probably be added to the pytest script (or to a separate
+# one afterward).
 
 steps:
 - task: UsePythonVersion@0
