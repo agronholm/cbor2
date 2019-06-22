@@ -261,7 +261,7 @@ CBOR2_dump(PyObject *module, PyObject *args, PyObject *kwargs)
 static PyObject *
 CBOR2_dumps(PyObject *module, PyObject *args, PyObject *kwargs)
 {
-    PyObject *new_args, *fp, *obj = NULL, *ret = NULL;
+    PyObject *fp, *result, *new_args = NULL, *obj = NULL, *ret = NULL;
     Py_ssize_t i;
 
     if (!_CBOR2_BytesIO && _CBOR2_init_BytesIO() == -1)
@@ -272,38 +272,35 @@ CBOR2_dumps(PyObject *module, PyObject *args, PyObject *kwargs)
         if (PyTuple_GET_SIZE(args) == 0) {
             if (kwargs)
                 obj = PyDict_GetItem(kwargs, _CBOR2_str_obj);
-            if (!obj) {
+            if (obj) {
+                if (PyDict_DelItem(kwargs, _CBOR2_str_obj) == 0)
+                    new_args = PyTuple_Pack(2, obj, fp);
+            } else {
                 PyErr_SetString(PyExc_TypeError,
                         "dumps missing required argument: 'obj'");
-                return NULL;
             }
-            Py_INCREF(obj);
-            if (PyDict_DelItem(kwargs, _CBOR2_str_obj) == -1) {
-                Py_DECREF(obj);
-                return NULL;
-            }
-            new_args = PyTuple_Pack(2, obj, fp);
-            if (!new_args)
-                return NULL;
         } else {
             obj = PyTuple_GET_ITEM(args, 0);
             new_args = PyTuple_New(PyTuple_GET_SIZE(args) + 1);
-            if (!new_args)
-                return NULL;
-            Py_INCREF(obj);
-            Py_INCREF(fp);
-            PyTuple_SET_ITEM(new_args, 0, obj);  // steals ref
-            PyTuple_SET_ITEM(new_args, 1, fp);  // steals ref
-            for (i = 1; i < PyTuple_GET_SIZE(args); ++i) {
-                Py_INCREF(PyTuple_GET_ITEM(args, i));
-                PyTuple_SET_ITEM(new_args, i + 1, PyTuple_GET_ITEM(args, i));
+            if (new_args) {
+                Py_INCREF(obj);
+                Py_INCREF(fp);
+                PyTuple_SET_ITEM(new_args, 0, obj);  // steals ref
+                PyTuple_SET_ITEM(new_args, 1, fp);  // steals ref
+                for (i = 1; i < PyTuple_GET_SIZE(args); ++i) {
+                    Py_INCREF(PyTuple_GET_ITEM(args, i));
+                    PyTuple_SET_ITEM(new_args, i + 1, PyTuple_GET_ITEM(args, i));
+                }
             }
         }
-        ret = CBOR2_dump(module, new_args, kwargs);
-        Py_DECREF(new_args);
-        if (ret) {
-            Py_DECREF(ret);
-            ret = PyObject_CallMethodObjArgs(fp, _CBOR2_str_getvalue, NULL);
+
+        if (new_args) {
+            result = CBOR2_dump(module, new_args, kwargs);
+            if (result) {
+                ret = PyObject_CallMethodObjArgs(fp, _CBOR2_str_getvalue, NULL);
+                Py_DECREF(result);
+            }
+            Py_DECREF(new_args);
         }
         Py_DECREF(fp);
     }
@@ -331,55 +328,51 @@ CBOR2_load(PyObject *module, PyObject *args, PyObject *kwargs)
 static PyObject *
 CBOR2_loads(PyObject *module, PyObject *args, PyObject *kwargs)
 {
-    PyObject *new_args, *s = NULL, *fp, *ret = NULL;
+    PyObject *fp, *new_args = NULL, *s = NULL, *ret = NULL;
     Py_ssize_t i;
 
     if (!_CBOR2_BytesIO && _CBOR2_init_BytesIO() == -1)
         return NULL;
 
     if (PyTuple_GET_SIZE(args) == 0) {
-        if (kwargs)
-            s = PyDict_GetItem(kwargs, _CBOR2_str_s);
-        if (!s) {
+        if (kwargs) {
+            new_args = PyTuple_New(1);
+            if (new_args) {
+                s = PyDict_GetItem(kwargs, _CBOR2_str_s);
+                Py_INCREF(s);
+                if (PyDict_DelItem(kwargs, _CBOR2_str_s) == -1) {
+                    Py_DECREF(s);
+                    Py_CLEAR(new_args);
+                }
+            }
+        } else {
             PyErr_SetString(PyExc_TypeError,
                     "dump missing 1 required argument: 's'");
-            return NULL;
-        }
-        Py_INCREF(s);
-        if (PyDict_DelItem(kwargs, _CBOR2_str_s) == -1)
-            goto error;
-        new_args = PyTuple_New(PyTuple_GET_SIZE(args) + 1);
-        if (!new_args)
-            goto error;
-        for (i = 0; i < PyTuple_GET_SIZE(args); ++i) {
-            // inc. ref because PyTuple_SET_ITEM steals a ref
-            Py_INCREF(PyTuple_GET_ITEM(args, i));
-            PyTuple_SET_ITEM(new_args, i + 1, PyTuple_GET_ITEM(args, i));
         }
     } else {
-        s = PyTuple_GET_ITEM(args, 0);
-        Py_INCREF(s);
         new_args = PyTuple_New(PyTuple_GET_SIZE(args));
-        if (!new_args)
-            goto error;
-        for (i = 1; i < PyTuple_GET_SIZE(args); ++i) {
-            // inc. ref because PyTuple_SET_ITEM steals a ref
-            Py_INCREF(PyTuple_GET_ITEM(args, i));
-            PyTuple_SET_ITEM(new_args, i, PyTuple_GET_ITEM(args, i));
+        if (new_args) {
+            s = PyTuple_GET_ITEM(args, 0);
+            Py_INCREF(s);
+            for (i = 1; i < PyTuple_GET_SIZE(args); ++i) {
+                // inc. ref because PyTuple_SET_ITEM steals a ref
+                Py_INCREF(PyTuple_GET_ITEM(args, i));
+                PyTuple_SET_ITEM(new_args, i, PyTuple_GET_ITEM(args, i));
+            }
         }
     }
 
-    fp = PyObject_CallFunctionObjArgs(_CBOR2_BytesIO, s, NULL);
-    if (fp) {
-        PyTuple_SET_ITEM(new_args, 0, fp);
-        ret = CBOR2_load(module, new_args, kwargs);
-        // no need to dec. ref fp here because SET_ITEM above stole the ref
+    if (new_args) {
+        fp = PyObject_CallFunctionObjArgs(_CBOR2_BytesIO, s, NULL);
+        if (fp) {
+            PyTuple_SET_ITEM(new_args, 0, fp);
+            ret = CBOR2_load(module, new_args, kwargs);
+            // no need to dec. ref fp here because SET_ITEM above stole the ref
+        }
+        Py_DECREF(s);
+        Py_DECREF(new_args);
     }
-    Py_DECREF(new_args);
     return ret;
-error:
-    Py_DECREF(s);
-    return NULL;
 }
 
 
