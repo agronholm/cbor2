@@ -194,7 +194,7 @@ allocations are quite normal.
 In the case of a ref-leak of an object that can reference others (lists, sets,
 dicts, or anything with a __dict__), expect to see 100s or 1000s of "objs"
 leaked. In the case of a ref-leak of a simple object (int, str, bytes, etc.),
-expect to see a few hundred Kb of bytes allocated.
+expect to see a few hundred Kb allocated.
 
 If leaks occur across the board, it's likely to be in something universal like
 dump/load. If it's restricted to a type, check the encoding and decoding
