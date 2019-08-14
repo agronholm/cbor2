@@ -22,7 +22,7 @@ typedef struct {
     bool value_sharing;
 } CBOREncoderObject;
 
-PyTypeObject CBOREncoderType;
+extern PyTypeObject CBOREncoderType;
 
 PyObject * CBOREncoder_new(PyTypeObject *, PyObject *, PyObject *);
 int CBOREncoder_init(CBOREncoderObject *, PyObject *, PyObject *);
