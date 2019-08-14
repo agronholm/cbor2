@@ -8,7 +8,7 @@ typedef struct {
     PyObject *value;
 } CBORTagObject;
 
-PyTypeObject CBORTagType;
+extern PyTypeObject CBORTagType;
 
 PyObject * CBORTag_New(uint64_t);
 int CBORTag_SetValue(PyObject *, PyObject *);
