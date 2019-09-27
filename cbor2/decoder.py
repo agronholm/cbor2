@@ -570,3 +570,49 @@ def load(fp, **kwargs):
         the deserialized object
     """
     return CBORDecoder(fp, **kwargs).decode()
+
+
+def loadMultiples(s, **kwargs):
+    """
+    Deserialize multiple objects from a bytestring.
+
+    :param bytes s:
+        the bytestring to deserialize
+    :param kwargs:
+        keyword arguments passed to :class:`CBORDecoder`
+    :return:
+        array/list of deserialized objects
+    """
+    result=[]
+    with BytesIO(s) as fp:
+        decObj = CBORDecoder(fp, **kwargs)
+        while True:
+            try:
+                obj = decObj.decode()
+                result.append(obj)
+            except:
+                break
+
+    return result
+
+def loadMultiple(fp, **kwargs):
+    """
+    Deserialize multiple objects from an open file
+
+    :param bytes s:
+        the bytestring to deserialize
+    :param kwargs:
+        keyword arguments passed to :class:`CBORDecoder`
+    :return:
+        array/list of deserialized objects
+    """
+    result=[]
+    decObj = CBORDecoder(fp, **kwargs)
+    while True:
+        try:
+            obj = decObj.decode()
+            result.append(obj)
+        except:
+            break
+
+    return result
