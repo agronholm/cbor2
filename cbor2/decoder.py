@@ -583,7 +583,7 @@ def loadMultiples(s, **kwargs):
     :return:
         array/list of deserialized objects
     """
-    result =[]
+    result = []
     with BytesIO(s) as fp:
         decObj = CBORDecoder(fp, **kwargs)
         while True:
