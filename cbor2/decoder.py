@@ -583,17 +583,18 @@ def loadMultiples(s, **kwargs):
     :return:
         array/list of deserialized objects
     """
-    result=[]
+    result =[]
     with BytesIO(s) as fp:
         decObj = CBORDecoder(fp, **kwargs)
         while True:
             try:
                 obj = decObj.decode()
                 result.append(obj)
-            except:
+            except CBORDecodeError:
                 break
 
     return result
+
 
 def loadMultiple(fp, **kwargs):
     """
@@ -606,13 +607,13 @@ def loadMultiple(fp, **kwargs):
     :return:
         array/list of deserialized objects
     """
-    result=[]
+    result = []
     decObj = CBORDecoder(fp, **kwargs)
     while True:
         try:
             obj = decObj.decode()
             result.append(obj)
-        except:
+        except CBORDecodeError:
             break
 
     return result
