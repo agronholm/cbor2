@@ -1,4 +1,4 @@
-from .decoder import load, loads, loadMultiple, loadMultiples, CBORDecoder  # noqa
+from .decoder import load, loads, CBORDecoder  # noqa
 from .encoder import dump, dumps, CBOREncoder, shareable_encoder  # noqa
 from .types import (  # noqa
     CBORError,

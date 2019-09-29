@@ -543,77 +543,48 @@ semantic_decoders = {
 }
 
 
-def loads(s, **kwargs):
+def loads(s, sequence=False, **kwargs):
     """
     Deserialize an object from a bytestring.
 
     :param bytes s:
         the bytestring to deserialize
+    :param bool sequence:
+        set to ``False`` to indicate it is not a CBOR Sequence
+        if set to ``True``, loads will decode multiple CBOR Objects and
+        return a list of decoded objects
     :param kwargs:
         keyword arguments passed to :class:`CBORDecoder`
     :return:
         the deserialized object
     """
     with BytesIO(s) as fp:
-        return CBORDecoder(fp, **kwargs).decode()
+        return load(fp, sequence, **kwargs)
 
 
-def load(fp, **kwargs):
+def load(fp, sequence=False, **kwargs):
     """
     Deserialize an object from an open file.
 
     :param fp:
         the input file (any file-like object)
+    :param bool sequence:
+        set to ``False`` to indicate it is not a CBOR Sequence
+        if set to ``True``, loads will decode multiple CBOR Objects and
+        return a list of decoded objects
     :param kwargs:
         keyword arguments passed to :class:`CBORDecoder`
     :return:
         the deserialized object
     """
-    return CBORDecoder(fp, **kwargs).decode()
-
-
-def loadMultiples(s, **kwargs):
-    """
-    Deserialize multiple objects from a bytestring.
-
-    :param bytes s:
-        the bytestring to deserialize
-    :param kwargs:
-        keyword arguments passed to :class:`CBORDecoder`
-    :return:
-        array/list of deserialized objects
-    """
-    result = []
-    with BytesIO(s) as fp:
-        decObj = CBORDecoder(fp, **kwargs)
-        while True:
-            try:
-                obj = decObj.decode()
-                result.append(obj)
-            except CBORDecodeError:
-                break
-
-    return result
-
-
-def loadMultiple(fp, **kwargs):
-    """
-    Deserialize multiple objects from an open file
-
-    :param bytes s:
-        the bytestring to deserialize
-    :param kwargs:
-        keyword arguments passed to :class:`CBORDecoder`
-    :return:
-        array/list of deserialized objects
-    """
-    result = []
     decObj = CBORDecoder(fp, **kwargs)
-    while True:
-        try:
-            obj = decObj.decode()
-            result.append(obj)
-        except CBORDecodeError:
-            break
+    if not sequence:
+        return decObj.decode()
+
+    result = []
+    while fp.read(1) != '':
+        fp.seek(-1, 1)
+        obj = decObj.decode()
+        result.append(obj)
 
     return result
