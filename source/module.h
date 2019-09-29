@@ -72,6 +72,7 @@ extern PyObject *_CBOR2_str_utc;
 extern PyObject *_CBOR2_str_utc_suffix;
 extern PyObject *_CBOR2_str_UUID;
 extern PyObject *_CBOR2_str_write;
+extern PyObject *_CBOR2_str_sequence;
 
 // Exception classes
 extern PyObject *_CBOR2_CBORError;

@@ -554,8 +554,7 @@ def test_immutable_keys(impl, payload, expected):
 @pytest.mark.parametrize('payload, expected', [
     ('0001', [0, 1]),
     ('a20102030400', [{1: 2, 3: 4}, 0]),
-    ('a201020304a202010405', [{1: 2, 3: 4}, {2: 1, 4: 5}])
-
+    ('a201020304a202010405', [{1: 2, 3: 4}, {2: 1, 4: 5}]),
 ])
 def test_sequence(impl, payload, expected):
     decoded = impl.loads(unhexlify(payload), sequence=True)

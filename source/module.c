@@ -316,11 +316,31 @@ CBOR2_load(PyObject *module, PyObject *args, PyObject *kwargs)
 {
     PyObject *ret = NULL;
     CBORDecoderObject *self;
+    bool isSeq = false;
+    PyObject *new_args = args;
 
+    if (kwargs) {
+        PyObject *s = PyDict_GetItem(kwargs, _CBOR2_str_sequence);
+        if (s) {
+            if (PyObject_IsTrue(s))
+                isSeq = true;
+            PyDict_DelItem(kwargs, _CBOR2_str_sequence);
+        }
+    }
     self = (CBORDecoderObject *)CBORDecoder_new(&CBORDecoderType, NULL, NULL);
     if (self) {
-        if (CBORDecoder_init(self, args, kwargs) == 0) {
-            ret = CBORDecoder_decode(self);
+        if (CBORDecoder_init(self, new_args, kwargs) == 0) {
+            if (!isSeq)
+                ret = CBORDecoder_decode(self);
+            else {
+                ret = PyList_New(0);
+                PyObject *item;
+                while (item = CBORDecoder_decode(self)) {
+                    PyList_Append(ret, item);
+                    Py_DECREF(item);
+                }
+                Py_DECREF(ret);
+            }
         }
         Py_DECREF(self);
     }
@@ -630,6 +650,7 @@ PyObject *_CBOR2_str_utc = NULL;
 PyObject *_CBOR2_str_utc_suffix = NULL;
 PyObject *_CBOR2_str_UUID = NULL;
 PyObject *_CBOR2_str_write = NULL;
+PyObject *_CBOR2_str_sequence = NULL;
 
 PyObject *_CBOR2_CBORError = NULL;
 PyObject *_CBOR2_CBOREncodeError = NULL;
@@ -889,6 +910,7 @@ PyInit__cbor2(void)
     INTERN_STRING(utc);
     INTERN_STRING(UUID);
     INTERN_STRING(write);
+    INTERN_STRING(sequence);
 
 #undef INTERN_STRING
 
