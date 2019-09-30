@@ -16,6 +16,8 @@ typedef struct {
 
 PyTypeObject CBORDecoderType;
 
+int fp_read(CBORDecoderObject *, char *, const uint64_t);
 PyObject * CBORDecoder_new(PyTypeObject *, PyObject *, PyObject *);
 int CBORDecoder_init(CBORDecoderObject *, PyObject *, PyObject *);
 PyObject * CBORDecoder_decode(CBORDecoderObject *);
+PyObject * decode_with_lead_byte(CBORDecoderObject *, LeadByte);

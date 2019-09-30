@@ -316,6 +316,7 @@ CBOR2_load(PyObject *module, PyObject *args, PyObject *kwargs)
 {
     PyObject *ret = NULL;
     CBORDecoderObject *self;
+    LeadByte lead;
     PyObject *sequence = NULL;
 
     if (kwargs) {
@@ -330,11 +331,16 @@ CBOR2_load(PyObject *module, PyObject *args, PyObject *kwargs)
             if (sequence && PyObject_IsTrue(sequence)) {
                 ret = PyList_New(0);
                 PyObject *item;
-                while (item = CBORDecoder_decode(self)) {
+                while (fp_read(self, &lead.byte, 1) == 0) {
+                    item = decode_with_lead_byte(self, lead);
+                    if (!item) {
+                        Py_DECREF(ret);
+                        return NULL;
+                    }
                     PyList_Append(ret, item);
                     Py_DECREF(item);
                 }
-                Py_DECREF(ret);
+                PyErr_Clear();
             } else {
                 ret = CBORDecoder_decode(self);
             }
