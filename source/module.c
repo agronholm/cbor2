@@ -316,30 +316,33 @@ CBOR2_load(PyObject *module, PyObject *args, PyObject *kwargs)
 {
     PyObject *ret = NULL;
     CBORDecoderObject *self;
-    bool isSeq = false;
-    PyObject *new_args = args;
+    LeadByte lead;
+    PyObject *sequence = NULL;
 
     if (kwargs) {
-        PyObject *s = PyDict_GetItem(kwargs, _CBOR2_str_sequence);
-        if (s) {
-            if (PyObject_IsTrue(s))
-                isSeq = true;
+        sequence = PyDict_GetItem(kwargs, _CBOR2_str_sequence);
+        if (sequence) {
             PyDict_DelItem(kwargs, _CBOR2_str_sequence);
         }
     }
     self = (CBORDecoderObject *)CBORDecoder_new(&CBORDecoderType, NULL, NULL);
     if (self) {
-        if (CBORDecoder_init(self, new_args, kwargs) == 0) {
-            if (!isSeq)
-                ret = CBORDecoder_decode(self);
-            else {
+        if (CBORDecoder_init(self, args, kwargs) == 0) {
+            if (sequence && PyObject_IsTrue(sequence)) {
                 ret = PyList_New(0);
                 PyObject *item;
-                while (item = CBORDecoder_decode(self)) {
+                while (fp_read(self, &lead.byte, 1) == 0) {
+                    item = decode_with_lead_byte(self, lead);
+                    if (!item) {
+                        Py_DECREF(ret);
+                        return NULL;
+                    }
                     PyList_Append(ret, item);
                     Py_DECREF(item);
                 }
-                Py_DECREF(ret);
+                PyErr_Clear();
+            } else {
+                ret = CBORDecoder_decode(self);
             }
         }
         Py_DECREF(self);

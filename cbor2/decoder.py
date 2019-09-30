@@ -144,16 +144,19 @@ class CBORDecoder(object):
             old_index = self._share_index
             self._share_index = None
         try:
-            initial_byte = byte_as_integer(self.read(1))
-            major_type = initial_byte >> 5
-            subtype = initial_byte & 31
-            decoder = major_decoders[major_type]
-            return decoder(self, subtype)
+            return self._decode_with_lead_byte(self.read(1))
         finally:
             if immutable:
                 self._immutable = old_immutable
             if unshared:
                 self._share_index = old_index
+
+    def _decode_with_lead_byte(self, initial_byte):
+        initial_byte = byte_as_integer(initial_byte)
+        major_type = initial_byte >> 5
+        subtype = initial_byte & 31
+        decoder = major_decoders[major_type]
+        return decoder(self, subtype)
 
     def decode(self):
         """
@@ -582,9 +585,10 @@ def load(fp, sequence=False, **kwargs):
         return decObj.decode()
 
     result = []
-    while fp.read(1) != '':
-        fp.seek(-1, 1)
-        obj = decObj.decode()
+    initial_byte = fp.read(1)
+    while initial_byte:
+        obj = decObj._decode_with_lead_byte(initial_byte)
         result.append(obj)
+        initial_byte = fp.read(1)
 
     return result

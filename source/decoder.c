@@ -332,7 +332,7 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
 
 // Utility functions /////////////////////////////////////////////////////////
 
-static int
+int
 fp_read(CBORDecoderObject *self, char *buf, const uint64_t size)
 {
     PyObject *obj, *size_obj;
@@ -1513,6 +1513,31 @@ CBORDecoder_decode_float64(CBORDecoderObject *self)
 
 
 PyObject *
+decode_with_lead_byte(CBORDecoderObject *self, LeadByte lead)
+{
+    PyObject *ret = NULL;
+
+    if (Py_EnterRecursiveCall(" in CBORDecoder.decode"))
+        return NULL;
+
+    switch (lead.major) {
+        case 0: ret = decode_uint(self, lead.subtype);       break;
+        case 1: ret = decode_negint(self, lead.subtype);     break;
+        case 2: ret = decode_bytestring(self, lead.subtype); break;
+        case 3: ret = decode_string(self, lead.subtype);     break;
+        case 4: ret = decode_array(self, lead.subtype);      break;
+        case 5: ret = decode_map(self, lead.subtype);        break;
+        case 6: ret = decode_semantic(self, lead.subtype);   break;
+        case 7: ret = decode_special(self, lead.subtype);    break;
+        default: assert(0);
+    }
+
+    Py_LeaveRecursiveCall();
+    return ret;
+}
+
+
+PyObject *
 decode(CBORDecoderObject *self, DecodeOptions options)
 {
     bool old_immutable;
@@ -1529,24 +1554,10 @@ decode(CBORDecoderObject *self, DecodeOptions options)
         self->shared_index = -1;
     }
 
-    if (Py_EnterRecursiveCall(" in CBORDecoder.decode"))
-        return NULL;
-
     if (fp_read(self, &lead.byte, 1) == 0) {
-        switch (lead.major) {
-            case 0: ret = decode_uint(self, lead.subtype);       break;
-            case 1: ret = decode_negint(self, lead.subtype);     break;
-            case 2: ret = decode_bytestring(self, lead.subtype); break;
-            case 3: ret = decode_string(self, lead.subtype);     break;
-            case 4: ret = decode_array(self, lead.subtype);      break;
-            case 5: ret = decode_map(self, lead.subtype);        break;
-            case 6: ret = decode_semantic(self, lead.subtype);   break;
-            case 7: ret = decode_special(self, lead.subtype);    break;
-            default: assert(0);
-        }
+        ret = decode_with_lead_byte(self, lead);
     }
 
-    Py_LeaveRecursiveCall();
     if (options & DECODE_IMMUTABLE)
         self->immutable = old_immutable;
     if (options & DECODE_UNSHARED)
