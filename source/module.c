@@ -316,23 +316,18 @@ CBOR2_load(PyObject *module, PyObject *args, PyObject *kwargs)
 {
     PyObject *ret = NULL;
     CBORDecoderObject *self;
-    bool isSeq = false;
-    PyObject *new_args = args;
+    PyObject *sequence = NULL;
 
     if (kwargs) {
-        PyObject *s = PyDict_GetItem(kwargs, _CBOR2_str_sequence);
-        if (s) {
-            if (PyObject_IsTrue(s))
-                isSeq = true;
+        sequence = PyDict_GetItem(kwargs, _CBOR2_str_sequence);
+        if (sequence) {
             PyDict_DelItem(kwargs, _CBOR2_str_sequence);
         }
     }
     self = (CBORDecoderObject *)CBORDecoder_new(&CBORDecoderType, NULL, NULL);
     if (self) {
-        if (CBORDecoder_init(self, new_args, kwargs) == 0) {
-            if (!isSeq)
-                ret = CBORDecoder_decode(self);
-            else {
+        if (CBORDecoder_init(self, args, kwargs) == 0) {
+            if (sequence && PyObject_IsTrue(sequence)) {
                 ret = PyList_New(0);
                 PyObject *item;
                 while (item = CBORDecoder_decode(self)) {
@@ -340,6 +335,8 @@ CBOR2_load(PyObject *module, PyObject *args, PyObject *kwargs)
                     Py_DECREF(item);
                 }
                 Py_DECREF(ret);
+            } else {
+                ret = CBORDecoder_decode(self);
             }
         }
         Py_DECREF(self);
