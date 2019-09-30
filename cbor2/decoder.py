@@ -582,7 +582,7 @@ def load(fp, sequence=False, **kwargs):
         return decObj.decode()
 
     result = []
-    while fp.read(1) != '':
+    while fp.read(1):
         fp.seek(-1, 1)
         obj = decObj.decode()
         result.append(obj)
