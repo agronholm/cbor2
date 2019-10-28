@@ -111,19 +111,21 @@ CBOREncoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 
 
 // CBOREncoder.__init__(self, fp=None, datetime_as_timestamp=0, timezone=None,
-//                      value_sharing=False, default=None, canonical=False)
+//                      value_sharing=False, default=None, canonical=False,
+//                      date_as_datetime=False)
 int
 CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {
         "fp", "datetime_as_timestamp", "timezone", "value_sharing", "default",
-        "canonical", NULL
+        "canonical", "date_as_datetime", NULL
     };
-    PyObject *tmp, *fp = NULL, *default_handler = NULL, *tz = NULL;
+    PyObject *tmp, *fp = NULL, *default_handler = NULL, *tz = NULL,
+    *date_as_datetime = NULL;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOB", keywords,
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOBO", keywords,
                 &fp, &self->timestamp_format, &tz, &self->value_sharing,
-                &default_handler, &self->enc_style))
+                &default_handler, &self->enc_style, &date_as_datetime))
         return -1;
 
     if (_CBOREncoder_set_fp(self, fp, NULL) == -1)
@@ -152,6 +154,15 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
         if (!PyObject_CallMethodObjArgs(self->encoders,
                     _CBOR2_str_update, _CBOR2_canonical_encoders, NULL))
             return -1;
+    }
+    if (date_as_datetime) {
+        PyObject *encode_date = PyObject_GetAttr((PyObject *) &CBOREncoderType, _CBOR2_str_encode_date);
+        if (!encode_date)
+            return -1;
+        PyObject *datetime_class = PyDateTimeAPI->DateType;
+        if (PyObject_SetItem(self->encoders, datetime_class, encode_date) == -1)
+            return -1;
+        Py_DECREF(encode_date);
     }
 
     return 0;

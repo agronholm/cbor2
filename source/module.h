@@ -43,6 +43,7 @@ extern PyObject *_CBOR2_str_datestr_re;
 extern PyObject *_CBOR2_str_Decimal;
 extern PyObject *_CBOR2_str_default_encoders;
 extern PyObject *_CBOR2_str_denominator;
+extern PyObject *_CBOR2_str_encode_date;
 extern PyObject *_CBOR2_str_Fraction;
 extern PyObject *_CBOR2_str_fromtimestamp;
 extern PyObject *_CBOR2_str_FrozenDict;

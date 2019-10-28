@@ -92,7 +92,7 @@ class CBOREncoder(object):
         if canonical:
             self._encoders.update(canonical_encoders)
         if date_as_datetime:
-            self._encoders[date] = self.encode_date
+            self._encoders[date] = CBOREncoder.encode_date
 
     def _find_encoder(self, obj_type):
         for type_, enc in list(iteritems(self._encoders)):
