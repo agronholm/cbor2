@@ -17,4 +17,5 @@ On cPython>=3.3 cbor2 can use a built in C module for performance similar to how
 wraps the ``_pickle`` C module in the Python Standard Library. On Windows, this is restricted to cPython>=3.5.
 
 On PyPy, cbor2 runs with almost identical performance to the C backend.
+
 .. _RFC 7049: https://tools.ietf.org/html/rfc7049
