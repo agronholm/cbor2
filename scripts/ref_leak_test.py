@@ -14,6 +14,7 @@ no extra objects existed. The ideal output is obviously "-" in all rows.
 
 import sys
 import objgraph
+import tracemalloc
 from datetime import datetime, timezone, timedelta
 from fractions import Fraction
 from decimal import Decimal
@@ -73,8 +74,9 @@ TEST_VALUES = [
      [{'name': 'Foo', 'species': 'cat', 'dob': datetime(2013, 5, 20), 'weight': 4.1}] * 100),
 ]
 
-Leaks = namedtuple('Leaks', ('count', 'leaks'))
-Result = namedtuple('Result', ('encoding', 'decoding'))
+Leaks = namedtuple('Leaks', ('count', 'comparison'))
+Tests = namedtuple('Test', ('objgraph', 'malloc'))
+Result = namedtuple('Result', ('encoding', 'decoding', 'roundtrip'))
 
 
 peak = {}
@@ -82,9 +84,37 @@ def growth():
     return objgraph.growth(limit=None, peak_stats=peak)
 
 
-def test(op):
+def test_malloc(op):
     count = 0
     start = datetime.now()
+    # NOTE: Filter pointing to the op() line in the loop below, because we're
+    # only interested in memory allocated by that line. Naturally, if this file
+    # is edited, the lineno parameter below must be adjusted!
+    only_op = tracemalloc.Filter(True, __file__, lineno=102, all_frames=True)
+    tracemalloc.start(10)
+    try:
+        # Perform a pre-run of op so that any one-time memory allocation
+        # (module imports, etc.) don't affect the later diffs
+        op()
+        before = tracemalloc.take_snapshot().filter_traces([only_op])
+        while True:
+            count += 1
+            op()
+            if datetime.now() - start > timedelta(seconds=0.2):
+                break
+        after = tracemalloc.take_snapshot().filter_traces([only_op])
+        diff = after.compare_to(before, 'traceback')
+        diff = [entry for entry in diff if entry.size_diff > 0]
+        return count, diff
+    finally:
+        tracemalloc.stop()
+
+
+def test_objgraph(op):
+    count = 0
+    start = datetime.now()
+    # See notes above
+    op()
     growth()
     while True:
         count += 1
@@ -94,23 +124,35 @@ def test(op):
     return count, growth()
 
 
+def test(op):
+    return Tests(Leaks(*test_objgraph(op)), Leaks(*test_malloc(op)))
+
+
 def format_leaks(result):
-    if result.leaks:
-        return '%d (%d)' % (
-            sum(leak[-1] for leak in result.leaks),
-            result.count)
+    if result.objgraph.comparison:
+        return '%d objs (/%d)' % (
+            sum(leak[-1] for leak in result.objgraph.comparison),
+            result.objgraph.count)
+    elif result.malloc.comparison and (
+            result.malloc.count < result.malloc.comparison[0].size_diff):
+        # Running the loop always results in *some* memory allocation, but as
+        # long as the bytes allocated are less than the number of loops it's
+        # unlikely to be an actual leak
+        return '%d bytes (/%d)' % (
+            result.malloc.comparison[0].size_diff, result.malloc.count)
     else:
         return '-'
 
 
 def output_table(results):
     # Build table content
-    head = ('Test', 'Encoding', 'Decoding')
+    head = ('Test', 'Encoding', 'Decoding', 'Round-trip')
     rows = [head] + [
         (
             label,
             format_leaks(result.encoding),
             format_leaks(result.decoding),
+            format_leaks(result.roundtrip),
         )
         for label, result in results.items()
     ]
@@ -143,6 +185,21 @@ def output_table(results):
             ' |',
         )))
     print(sep)
+    print()
+    print("""\
+There *will* be false positives in the table above. Ignore leaks involving a
+tiny number of objects (e.g. 1) or a small number of bytes (e.g. < 8Kb) as such
+allocations are quite normal.
+
+In the case of a ref-leak of an object that can reference others (lists, sets,
+dicts, or anything with a __dict__), expect to see 100s or 1000s of "objs"
+leaked. In the case of a ref-leak of a simple object (int, str, bytes, etc.),
+expect to see a few hundred Kb allocated.
+
+If leaks occur across the board, it's likely to be in something universal like
+dump/load. If it's restricted to a type, check the encoding and decoding
+methods for that type.
+""")
 
 
 def main():
@@ -152,14 +209,16 @@ def main():
     for name, kwargs, value in TEST_VALUES:
         encoded = py_cbor2.dumps(value, **kwargs)
         results[name] = Result(
-            encoding=Leaks(*test(lambda: c_cbor2.dumps(value, **kwargs))),
-            decoding=Leaks(*test(lambda: c_cbor2.loads(encoded)))
+            encoding=test(lambda: c_cbor2.dumps(value, **kwargs)),
+            decoding=test(lambda: c_cbor2.loads(encoded)),
+            roundtrip=test(lambda: c_cbor2.loads(c_cbor2.dumps(value, **kwargs))),
         )
         sys.stderr.write(".")
         sys.stderr.flush()
     sys.stderr.write("\n")
     sys.stderr.write("\n")
     output_table(results)
+    sys.stderr.write("\n")
 
 
 if __name__ == '__main__':
