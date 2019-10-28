@@ -3,6 +3,13 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**4.2** (Unreleased)
+
+- Optional Pure C implementation by waveform80 that functions identically to the pure Python
+  implementation
+- **BACKWARD INCOMPATIBLE** CBOR does not have a bare DATE type, encoding dates as datetimes
+  is disabled by default (PR by Changaco)
+
 **4.1.2** (2018-12-10)
 
 - Fixed bigint encoding taking quadratic time

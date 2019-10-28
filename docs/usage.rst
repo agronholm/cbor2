@@ -41,6 +41,18 @@ optimize the data stream size by passing ``datetime_as_timestamp=False`` to
 :func:`~cbor2.encoder.dump`/:func:`~cbor2.encoder.dumps`, but this causes the timezone offset
 information to be lost.
 
+In versions prior to 4.2 the encoder would convert a ``datetime.date`` object into a
+``datetime.datetime`` prior to writing. This can cause confusion on decoding so this has been
+disabled by default in the next version. The behaviour can be re-enabled as follows::
+
+    from cbor2 import dumps
+    from datetime import date, timezone
+
+    # Serialize dates as datetimes
+    encoded = dumps(date(2019, 10, 28), timezone=timezone.utc, date_as_datetime=True)
+
+A default timezone offset must be provided also.
+
 Cyclic (recursive) data structures
 ----------------------------------
 

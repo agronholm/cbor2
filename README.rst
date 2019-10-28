@@ -11,10 +11,10 @@
 This library provides encoding and decoding for the Concise Binary Object Representation (CBOR)
 (`RFC 7049`_) serialization format. `Read the docs <https://cbor2.readthedocs.io/>`_ to learn more.
 
-There exists another Python CBOR implementation (cbor) which is faster on CPython due to its C
-extensions. On PyPy, cbor2 and cbor are almost identical in performance. The other implementation
-also lacks documentation and a comprehensive test suite, does not support most standard extension
-tags and is known to crash (segfault) when passed a cyclic structure (say, a list containing
-itself).
+It is implemented in pure python with an optional C backend and is compatible with versions 2.7 through to 3.7.
 
+On cPython>=3.3 cbor2 can use a built in C module for performance similar to how ``pickle``
+wraps the ``_pickle`` C module in the Python Standard Library. On Windows, this is restricted to cPython>=3.5.
+
+On PyPy, cbor2 runs with almost identical performance to the C backend.
 .. _RFC 7049: https://tools.ietf.org/html/rfc7049
