@@ -6,9 +6,11 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 **4.2** (Unreleased)
 
 - Optional Pure C implementation by waveform80 that functions identically to the pure Python
-  implementation
+  implementation.
+  With further contributions to the C implementation from: toravir, jonashoechst, Changaco
 - **BACKWARD INCOMPATIBLE** CBOR does not have a bare DATE type, encoding dates as datetimes
   is disabled by default (PR by Changaco)
+- Drop Python 3.4 support from the build process, it should still work if built from source
 
 **4.1.2** (2018-12-10)
 
