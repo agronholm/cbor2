@@ -234,6 +234,7 @@ def test_datetime(impl, value, as_timestamp, expected):
     expected = unhexlify(expected)
     assert impl.dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc) == expected
 
+
 @pytest.mark.parametrize('tz', [None, timezone.utc], ids=['no timezone', 'utc'])
 def test_date_fails(impl, tz):
     encoder = impl.CBOREncoder(BytesIO(b''), timezone=tz, date_as_datetime=False)

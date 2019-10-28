@@ -11,7 +11,7 @@ from io import BytesIO
 from sys import modules
 
 from .compat import (
-    iteritems, timezone, long, int2bytes, unicode, as_unicode, pack_float16,
+    iteritems, long, int2bytes, unicode, as_unicode, pack_float16,
     unpack_float16)
 from .types import (
     CBOREncodeError, CBORTag, undefined, CBORSimpleValue, FrozenDict)
