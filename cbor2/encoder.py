@@ -345,7 +345,7 @@ class CBOREncoder(object):
             self.encode_semantic(CBORTag(0, datestring))
 
     def encode_date(self, value):
-        value = datetime.combine(value, time()).replace(tzinfo=timezone.utc)
+        value = datetime.combine(value, time()).replace(tzinfo=self._timezone)
         self.encode_datetime(value)
 
     def encode_decimal(self, value):

@@ -123,7 +123,7 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
     PyObject *tmp, *fp = NULL, *default_handler = NULL, *tz = NULL,
     *date_as_datetime = NULL;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOBO", keywords,
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOpp", keywords,
                 &fp, &self->timestamp_format, &tz, &self->value_sharing,
                 &default_handler, &self->enc_style, &date_as_datetime))
         return -1;
@@ -1805,8 +1805,6 @@ encode(CBOREncoderObject *self, PyObject *value)
                 return CBOREncoder_encode_map(self, value);
             else if (PyDateTime_CheckExact(value))
                 return CBOREncoder_encode_datetime(self, value);
-            else if (PyDate_CheckExact(value))
-                return CBOREncoder_encode_date(self, value);
             else if (PyAnySet_CheckExact(value))
                 return CBOREncoder_encode_set(self, value);
             // fall-thru

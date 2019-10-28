@@ -234,10 +234,12 @@ def test_datetime(impl, value, as_timestamp, expected):
     expected = unhexlify(expected)
     assert impl.dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc) == expected
 
-
-def test_date(impl):
+@pytest.mark.parametrize('tz', [None, timezone.utc], ids=['no timezone', 'utc'])
+def test_date_fails(impl, tz):
+    encoder = impl.CBOREncoder(BytesIO(b''), timezone=tz, date_as_datetime=False)
+    assert date not in encoder._encoders
     with pytest.raises(impl.CBOREncodeError):
-        impl.dumps(date(2013, 3, 21))
+        encoder.encode(date(2013, 3, 21))
 
 
 def test_date_as_datetime(impl):
