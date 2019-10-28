@@ -14,7 +14,7 @@ typedef struct {
     Py_ssize_t shared_index;
 } CBORDecoderObject;
 
-PyTypeObject CBORDecoderType;
+extern PyTypeObject CBORDecoderType;
 
 PyObject * CBORDecoder_new(PyTypeObject *, PyObject *, PyObject *);
 int CBORDecoder_init(CBORDecoderObject *, PyObject *, PyObject *);
