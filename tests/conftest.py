@@ -50,4 +50,3 @@ def stream_decoder(request):
     else:
         cbor2.decoder.CBORStreamDecoder._decoder_class = cbor2.decoder.CBORDecoder
     return cbor2.decoder.CBORStreamDecoder
-

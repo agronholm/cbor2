@@ -555,6 +555,5 @@ def test_context_manager_streaming(stream_decoder):
     expected = [False, True, None]
     with BytesIO(unhexlify('f4f5f6')) as fp:
         with stream_decoder(fp) as cursor:
-            result = list( item for item in cursor )
+            result = list(item for item in cursor)
             assert result == expected
-

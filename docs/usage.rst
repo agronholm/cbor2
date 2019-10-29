@@ -92,6 +92,21 @@ Tag Semantics                                Python type(s)
 
 Arbitary tags can be represented with the :class:`~cbor2.types.CBORTag` class.
 
+Streaming support
+-----------------
+
+In order to support reading multiple objects concatenated in a file stream with low overhead you can
+use `~cbor2.decoder.CBORStreamDecoder` which is a context manager wrapper for the decoder that yields
+decoded items indefinitely::
+
+    from cbor2 import CBORStreamDecoder
+
+    with open('myfile.cbor', 'rb') as f:
+        with CBORStreamDecoder(f) as cursor:
+            for item in cursor:
+                print(item)
+
+This will raise an exception if any item fails to decode but ends gracefully when the stream ends.
 
 Use Cases
 ---------

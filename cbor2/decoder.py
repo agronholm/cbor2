@@ -52,7 +52,6 @@ class CBORDecoder(object):
         self._shareables = []
         self._immutable = False
 
-
     @property
     def immutable(self):
         """
@@ -543,8 +542,15 @@ semantic_decoders = {
     261: CBORDecoder.decode_ipnetwork,
 }
 
+
 class CBORStreamDecoder(object):
+    """
+    Context manager which enables iteration over a file stream of
+    concatenated objects
+    """
+
     _decoder_class = CBORDecoder
+
     def __init__(self, fp, *args, **kwargs):
         fp = BufferedReader(fp)
         self.decoder = self._decoder_class(fp, *args, **kwargs)
@@ -557,6 +563,7 @@ class CBORStreamDecoder(object):
 
     def __exit__(self, *args):
         return False
+
 
 def loads(s, **kwargs):
     """
