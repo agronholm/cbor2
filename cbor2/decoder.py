@@ -2,7 +2,7 @@ import re
 import struct
 from collections import Mapping
 from datetime import datetime, timedelta
-from io import BytesIO
+from io import BytesIO, BufferedReader
 
 from .compat import timezone, range, byte_as_integer, unpack_float16
 from .types import (
@@ -51,6 +51,7 @@ class CBORDecoder(object):
         self._share_index = None
         self._shareables = []
         self._immutable = False
+
 
     @property
     def immutable(self):
@@ -542,6 +543,20 @@ semantic_decoders = {
     261: CBORDecoder.decode_ipnetwork,
 }
 
+class CBORStreamDecoder(object):
+    _decoder_class = CBORDecoder
+    def __init__(self, fp, *args, **kwargs):
+        fp = BufferedReader(fp)
+        self.decoder = self._decoder_class(fp, *args, **kwargs)
+
+    def __enter__(self):
+        def cursor():
+            while self.decoder.fp.peek(1) != b'':
+                yield self.decoder.decode()
+        return cursor()
+
+    def __exit__(self, *args):
+        return False
 
 def loads(s, **kwargs):
     """

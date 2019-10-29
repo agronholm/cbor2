@@ -38,3 +38,16 @@ def impl(request):
             for name in dir(source):
                 setattr(module, name, getattr(source, name))
         return module
+
+
+@pytest.fixture(params=[
+    pytest.param('c', marks=cpython33),
+    'python'
+], scope='session')
+def stream_decoder(request):
+    if request.param == 'c':
+        cbor2.decoder.CBORStreamDecoder._decoder_class = _cbor2.CBORDecoder
+    else:
+        cbor2.decoder.CBORStreamDecoder._decoder_class = cbor2.decoder.CBORDecoder
+    return cbor2.decoder.CBORStreamDecoder
+
