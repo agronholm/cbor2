@@ -10,7 +10,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   With further contributions to the C implementation from: toravir, jonashoechst, Changaco
 - **BACKWARD INCOMPATIBLE** CBOR does not have a bare DATE type, encoding dates as datetimes
   is disabled by default (PR by Changaco)
-- Drop Python 3.4 support from the build process, it should still work if built from source
+- Drop Python 3.3 and 3.4 support from the build process, it should still work if built from source
 
 **4.1.2** (2018-12-10)
 
