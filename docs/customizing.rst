@@ -15,16 +15,6 @@ for any newly decoded ``dict`` objects, and is mostly useful for implementing a 
 custom type serialization scheme. Unless your requirements restrict you to JSON compatible types
 only, it is recommended to use ``tag_hook`` for this purpose.
 
-JSON compatibility
-------------------
-
-In certain applications, it may be desirable to limit the supported types to the same ones
-serializable as JSON: (unicode) string, integer, float, boolean, null, array and object (dict).
-This can be done by passing the ``json_compatible`` option to the encoder. When incompatible types
-are encountered, a :class:`~cbor2.encoder.CBOREncodeError` is then raised.
-
-For the decoder, there is no support for detecting incoming incompatible types yet.
-
 Using the CBOR tags for custom types
 ------------------------------------
 

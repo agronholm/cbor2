@@ -75,8 +75,7 @@ class CBOREncoder(object):
 
     __slots__ = (
         'datetime_as_timestamp', '_timezone', '_default', 'value_sharing',
-        'json_compatible', '_fp_write', '_shared_containers', '_encoders',
-        '_canonical')
+        '_fp_write', '_shared_containers', '_encoders', '_canonical')
 
     def __init__(self, fp, datetime_as_timestamp=False, timezone=None,
                  value_sharing=False, default=None, canonical=False,
