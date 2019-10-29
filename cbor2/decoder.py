@@ -552,7 +552,8 @@ class CBORStreamDecoder(object):
     _decoder_class = CBORDecoder
 
     def __init__(self, fp, *args, **kwargs):
-        fp = BufferedReader(fp)
+        if not hasattr(fp, 'peek'):
+            fp = BufferedReader(fp)
         self.decoder = self._decoder_class(fp, *args, **kwargs)
 
     def __enter__(self):
