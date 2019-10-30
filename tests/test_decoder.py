@@ -551,9 +551,15 @@ def test_immutable_keys(impl, payload, expected):
     assert value == expected
 
 
-def test_context_manager_streaming(stream_decoder):
+def test_context_manager_streaming(stream_decoder, tmpdir):
+    raw_data = unhexlify('f4f5f6')
     expected = [False, True, None]
-    with BytesIO(unhexlify('f4f5f6')) as fp:
-        with stream_decoder(fp) as cursor:
+    path = tmpdir.join('streamtest.cbor')
+    path.write_binary(raw_data)
+    with path.open('rb') as fp:
+        with stream_decoder(fp=fp) as cursor:
             result = list(item for item in cursor)
             assert result == expected
+    with stream_decoder(filename=str(path)) as cursor:
+        result = list(item for item in cursor)
+        assert result == expected

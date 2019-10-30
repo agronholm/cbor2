@@ -46,7 +46,7 @@ def impl(request):
 ], scope='session')
 def stream_decoder(request):
     if request.param == 'c':
-        cbor2.decoder.CBORStreamDecoder._decoder_class = _cbor2.CBORDecoder
+        cbor2.decoder.StreamDecoder._decoder_class = _cbor2.CBORDecoder
     else:
-        cbor2.decoder.CBORStreamDecoder._decoder_class = cbor2.decoder.CBORDecoder
-    return cbor2.decoder.CBORStreamDecoder
+        cbor2.decoder.StreamDecoder._decoder_class = cbor2.decoder.CBORDecoder
+    return cbor2.decoder.StreamDecoder

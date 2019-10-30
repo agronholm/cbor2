@@ -1,4 +1,4 @@
-from .decoder import load, loads, CBORDecoder, CBORStreamDecoder  # noqa
+from .decoder import load, loads, CBORDecoder, StreamDecoder  # noqa
 from .encoder import dump, dumps, CBOREncoder, shareable_encoder  # noqa
 from .types import (  # noqa
     CBORError,
@@ -43,6 +43,6 @@ else:
             ), getattr(_cbor2.CBOREncoder, method.__name__))
             for type_, method in canonical_encoders.items()
         ])
-        CBORStreamDecoder._decoder_class = _cbor2.CBORDecoder
+        StreamDecoder._decoder_class = _cbor2.CBORDecoder
     _init_cbor2()
     del _init_cbor2

@@ -543,17 +543,26 @@ semantic_decoders = {
 }
 
 
-class CBORStreamDecoder(object):
+class StreamDecoder(object):
     """
-    Context manager which enables iteration over a file stream of
+    Context manager which enables iteration over a stream of
     concatenated objects
     """
 
     _decoder_class = CBORDecoder
+    _close_on_exit = False
 
-    def __init__(self, fp, *args, **kwargs):
-        if not hasattr(fp, 'peek'):
-            fp = BufferedReader(fp)
+    def __init__(self, *args, fp=None, filename=None, sock=None, **kwargs):
+        if fp is not None:
+            if not hasattr(fp, 'peek'):
+                fp = BufferedReader(fp)
+        elif filename is not None:
+            self._close_on_exit = True
+            fp = open(filename, 'rb')
+        elif socket is not None and hasattr(socket, 'makefile'):
+            fp = sock.makefile('rb')
+        else:
+            raise ValueError("Need at least one of a file object, filename or socket")
         self.decoder = self._decoder_class(fp, *args, **kwargs)
 
     def __enter__(self):
@@ -563,6 +572,8 @@ class CBORStreamDecoder(object):
         return cursor()
 
     def __exit__(self, *args):
+        if self._close_on_exit:
+            self.decoder.fp.close()
         return False
 
 
