@@ -77,7 +77,11 @@ extern PyObject *_CBOR2_str_write;
 // Exception classes
 extern PyObject *_CBOR2_CBORError;
 extern PyObject *_CBOR2_CBOREncodeError;
+extern PyObject *_CBOR2_CBOREncodeTypeError;
+extern PyObject *_CBOR2_CBOREncodeValueError;
 extern PyObject *_CBOR2_CBORDecodeError;
+extern PyObject *_CBOR2_CBORDecodeValueError;
+extern PyObject *_CBOR2_CBORDecodeEOF;
 
 // Global references (initialized by functions declared below)
 extern PyObject *_CBOR2_timezone;

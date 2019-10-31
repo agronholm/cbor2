@@ -3,7 +3,11 @@ from .encoder import dump, dumps, CBOREncoder, shareable_encoder  # noqa
 from .types import (  # noqa
     CBORError,
     CBOREncodeError,
+    CBOREncodeTypeError,
+    CBOREncodeValueError,
     CBORDecodeError,
+    CBORDecodeValueError,
+    CBORDecodeEOF,
     CBORTag,
     CBORSimpleValue,
     undefined

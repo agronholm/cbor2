@@ -392,7 +392,7 @@ find_deferred(PyObject *type_tuple)
             return PyObject_GetAttr(mod, type_name);
         }
     }
-    PyErr_Format(_CBOR2_CBOREncodeError,
+    PyErr_Format(_CBOR2_CBOREncodeValueError,
             "invalid deferred encoder type %R (must be a 2-tuple of module "
             "name and type name, e.g. ('collections', 'defaultdict'))",
             type_tuple);
@@ -631,7 +631,7 @@ CBOREncoder_encode_bytearray(CBOREncoderObject *self, PyObject *value)
     Py_ssize_t length;
 
     if (!PyByteArray_Check(value)) {
-        PyErr_Format(_CBOR2_CBOREncodeError,
+        PyErr_Format(_CBOR2_CBOREncodeValueError,
                 "invalid bytearray value %R", value);
         return NULL;
     }
@@ -891,7 +891,7 @@ CBOREncoder_encode_datetime(CBOREncoderObject *self, PyObject *value)
                         self->tz,
                         PyDateTimeAPI->DateTimeType);
             } else {
-                PyErr_Format(_CBOR2_CBOREncodeError,
+                PyErr_Format(_CBOR2_CBOREncodeValueError,
                                 "naive datetime %R encountered and no default "
                                 "timezone has been set", value);
                 value = NULL;
@@ -1118,7 +1118,7 @@ encode_shared(CBOREncoderObject *self, EncodeFunction *encoder,
         } else {
             if (tuple) {
                 PyErr_SetString(
-                    _CBOR2_CBOREncodeError,
+                    _CBOR2_CBOREncodeValueError,
                     "cyclic data structure detected but value sharing is "
                     "disabled");
             } else {
@@ -1146,7 +1146,7 @@ shared_callback(CBOREncoderObject *self, PyObject *value)
                 self->shared_handler, self, value, NULL);
     } else {
         PyErr_Format(
-            _CBOR2_CBOREncodeError,
+            _CBOR2_CBOREncodeTypeError,
             "non-callable passed as shared encoding method");
         return NULL;
     }
@@ -1820,7 +1820,7 @@ encode(CBOREncoderObject *self, PyObject *value)
                             self->default_handler, self, value, NULL);
                 else
                     PyErr_Format(
-                        _CBOR2_CBOREncodeError,
+                        _CBOR2_CBOREncodeTypeError,
                         "cannot serialize type %R", (PyObject *)Py_TYPE(value));
                 Py_DECREF(encoder);
             }

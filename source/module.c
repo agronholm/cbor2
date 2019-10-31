@@ -627,7 +627,11 @@ PyObject *_CBOR2_str_write = NULL;
 
 PyObject *_CBOR2_CBORError = NULL;
 PyObject *_CBOR2_CBOREncodeError = NULL;
+PyObject *_CBOR2_CBOREncodeTypeError = NULL;
+PyObject *_CBOR2_CBOREncodeValueError = NULL;
 PyObject *_CBOR2_CBORDecodeError = NULL;
+PyObject *_CBOR2_CBORDecodeValueError = NULL;
+PyObject *_CBOR2_CBORDecodeEOF = NULL;
 
 PyObject *_CBOR2_timezone = NULL;
 PyObject *_CBOR2_timezone_utc = NULL;
@@ -660,7 +664,11 @@ cbor2_free(PyObject *m)
     Py_CLEAR(_CBOR2_ip_address);
     Py_CLEAR(_CBOR2_ip_network);
     Py_CLEAR(_CBOR2_CBOREncodeError);
+    Py_CLEAR(_CBOR2_CBOREncodeTypeError);
+    Py_CLEAR(_CBOR2_CBOREncodeValueError);
     Py_CLEAR(_CBOR2_CBORDecodeError);
+    Py_CLEAR(_CBOR2_CBORDecodeValueError);
+    Py_CLEAR(_CBOR2_CBORDecodeEOF);
     Py_CLEAR(_CBOR2_CBORError);
     Py_CLEAR(_CBOR2_default_encoders);
     Py_CLEAR(_CBOR2_canonical_encoders);
@@ -681,22 +689,38 @@ static PyMethodDef _cbor2methods[] = {
 PyDoc_STRVAR(_cbor2__doc__,
 "The _cbor2 module is the C-extension backing the cbor2 Python module. It\n"
 "defines the base :exc:`CBORError`, :exc:`CBOREncodeError`,\n"
-":exc:`CBORDecodeError`, :class:`CBOREncoder`, :class:`CBORDecoder`,\n"
-":class:`CBORTag`, and undefined types which are operational in and of\n"
-"themselves."
+":exc:`CBOREncodeTypeError`, :exc:`CBOREncodeValueError`,\n"
+":exc:`CBORDecodeError`, :exc:`CBORDecodeValueError`, :exc:`CBORDecodeEOF`,\n"
+":class:`CBOREncoder`, :class:`CBORDecoder`, :class:`CBORTag`, and undefined\n"
+"types which are operational in and of themselves."
 );
 
 PyDoc_STRVAR(_cbor2_CBORError__doc__,
-"The base class for all CBOR encoding or decoding errors. Derives from\n"
-":exc:`ValueError`"
+"Base class for errors that occur during CBOR encoding or decoding."
 );
 
 PyDoc_STRVAR(_cbor2_CBOREncodeError__doc__,
-"The exception class raised during any kind of encoding error"
+"Raised for exceptions occurring during CBOR encoding."
+);
+
+PyDoc_STRVAR(_cbor2_CBOREncodeTypeError__doc__,
+"Raised when attempting to encode a type that cannot be serialized."
+);
+
+PyDoc_STRVAR(_cbor2_CBOREncodeValueError__doc__,
+"Raised when the CBOR encoder encounters an invalid value."
 );
 
 PyDoc_STRVAR(_cbor2_CBORDecodeError__doc__,
-"The exception class raised during any kind of decoding error"
+"Raised for exceptions occurring during CBOR decoding."
+);
+
+PyDoc_STRVAR(_cbor2_CBORDecodeValueError__doc__,
+"Raised when the CBOR stream being decoded contains an invalid value."
+);
+
+PyDoc_STRVAR(_cbor2_CBORDecodeEOF__doc__,
+"Raised when decoding unexpectedly reaches EOF."
 );
 
 static struct PyModuleDef _cbor2module = {
@@ -759,7 +783,7 @@ init_canonical_encoders(void)
 PyMODINIT_FUNC
 PyInit__cbor2(void)
 {
-    PyObject *module;
+    PyObject *module, *base;
 
     PyDateTime_IMPORT;
     if (!PyDateTimeAPI)
@@ -781,8 +805,7 @@ PyInit__cbor2(void)
         return NULL;
 
     _CBOR2_CBORError = PyErr_NewExceptionWithDoc(
-            "_cbor2.CBORError", _cbor2_CBORError__doc__,
-            PyExc_ValueError, NULL);
+            "_cbor2.CBORError", _cbor2_CBORError__doc__, NULL, NULL);
     if (!_CBOR2_CBORError)
         goto error;
     if (PyModule_AddObject(module, "CBORError", _CBOR2_CBORError) == -1)
@@ -796,12 +819,52 @@ PyInit__cbor2(void)
     if (PyModule_AddObject(module, "CBOREncodeError", _CBOR2_CBOREncodeError) == -1)
         goto error;
 
+    base = PyTuple_Pack(2, _CBOR2_CBOREncodeError, PyExc_TypeError);
+    _CBOR2_CBOREncodeTypeError = PyErr_NewExceptionWithDoc(
+            "_cbor2.CBOREncodeTypeError", _cbor2_CBOREncodeTypeError__doc__,
+            base, NULL);
+    Py_DECREF(base);
+    if (!_CBOR2_CBOREncodeTypeError)
+        goto error;
+    if (PyModule_AddObject(module, "CBOREncodeTypeError", _CBOR2_CBOREncodeTypeError) == -1)
+        goto error;
+
+    base = PyTuple_Pack(2, _CBOR2_CBOREncodeError, PyExc_ValueError);
+    _CBOR2_CBOREncodeValueError = PyErr_NewExceptionWithDoc(
+            "_cbor2.CBOREncodeValueError", _cbor2_CBOREncodeValueError__doc__,
+            base, NULL);
+    Py_DECREF(base);
+    if (!_CBOR2_CBOREncodeValueError)
+        goto error;
+    if (PyModule_AddObject(module, "CBOREncodeValueError", _CBOR2_CBOREncodeValueError) == -1)
+        goto error;
+
     _CBOR2_CBORDecodeError = PyErr_NewExceptionWithDoc(
             "_cbor2.CBORDecodeError", _cbor2_CBORDecodeError__doc__,
             _CBOR2_CBORError, NULL);
     if (!_CBOR2_CBORDecodeError)
         goto error;
     if (PyModule_AddObject(module, "CBORDecodeError", _CBOR2_CBORDecodeError) == -1)
+        goto error;
+
+    base = PyTuple_Pack(2, _CBOR2_CBORDecodeError, PyExc_ValueError);
+    _CBOR2_CBORDecodeValueError = PyErr_NewExceptionWithDoc(
+            "_cbor2.CBORDecodeValueError", _cbor2_CBORDecodeValueError__doc__,
+            base, NULL);
+    Py_DECREF(base);
+    if (!_CBOR2_CBORDecodeValueError)
+        goto error;
+    if (PyModule_AddObject(module, "CBORDecodeValueError", _CBOR2_CBORDecodeValueError) == -1)
+        goto error;
+
+    base = PyTuple_Pack(2, _CBOR2_CBORDecodeError, PyExc_EOFError);
+    _CBOR2_CBORDecodeEOF = PyErr_NewExceptionWithDoc(
+            "_cbor2.CBORDecodeEOF", _cbor2_CBORDecodeEOF__doc__,
+            base, NULL);
+    Py_DECREF(base);
+    if (!_CBOR2_CBORDecodeEOF)
+        goto error;
+    if (PyModule_AddObject(module, "CBORDecodeEOF", _CBOR2_CBORDecodeEOF) == -1)
         goto error;
 
 #if PY_VERSION_HEX >= 0x03040000
