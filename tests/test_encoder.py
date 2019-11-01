@@ -239,8 +239,9 @@ def test_datetime(impl, value, as_timestamp, expected):
 def test_date_fails(impl, tz):
     encoder = impl.CBOREncoder(BytesIO(b''), timezone=tz, date_as_datetime=False)
     assert date not in encoder._encoders
-    with pytest.raises(impl.CBOREncodeError):
+    with pytest.raises(impl.CBOREncodeError) as exc:
         encoder.encode(date(2013, 3, 21))
+        assert isinstance(exc, ValueError)
 
 
 def test_date_as_datetime(impl):
@@ -254,6 +255,7 @@ def test_naive_datetime(impl):
         impl.dumps(datetime(2013, 3, 21))
         exc.match('naive datetime datetime.datetime(2013, 3, 21) encountered '
                   'and no default timezone has been set')
+        assert isinstance(exc, ValueError)
 
 
 @pytest.mark.parametrize('value, expected', [
@@ -339,6 +341,7 @@ def test_cyclic_array_nosharing(impl):
     with pytest.raises(impl.CBOREncodeError) as exc:
         impl.dumps(a)
         exc.match('cyclic data structure detected but value sharing is disabled')
+        assert isinstance(exc, ValueError)
 
 
 def test_cyclic_map(impl):
@@ -356,6 +359,7 @@ def test_cyclic_map_nosharing(impl):
     with pytest.raises(impl.CBOREncodeError) as exc:
         impl.dumps(a)
         exc.match('cyclic data structure detected but value sharing is disabled')
+        assert isinstance(exc, ValueError)
 
 
 @pytest.mark.parametrize('value_sharing, expected', [
@@ -374,6 +378,7 @@ def test_unsupported_type(impl):
     with pytest.raises(impl.CBOREncodeError) as exc:
         impl.dumps(lambda: None)
         exc.match('cannot serialize type function')
+        assert isinstance(exc, TypeError)
 
 
 def test_default(impl):
