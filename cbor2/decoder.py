@@ -6,8 +6,8 @@ from io import BytesIO
 
 from .compat import timezone, range, byte_as_integer, unpack_float16
 from .types import (
-    CBORDecodeError, CBORTag, undefined, break_marker, CBORSimpleValue,
-    FrozenDict)
+    CBORDecodeValueError, CBORDecodeEOF, CBORTag, undefined, break_marker,
+    CBORSimpleValue, FrozenDict)
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')
@@ -130,7 +130,7 @@ class CBORDecoder(object):
         """
         data = self._fp_read(amount)
         if len(data) < amount:
-            raise CBORDecodeError(
+            raise CBORDecodeEOF(
                 'premature end of stream (expected to read {} bytes, got {} '
                 'instead)'.format(amount, len(data)))
 
@@ -193,7 +193,7 @@ class CBORDecoder(object):
         elif subtype == 31 and allow_indefinite:
             return None
         else:
-            raise CBORDecodeError(
+            raise CBORDecodeValueError(
                 'unknown unsigned integer subtype 0x%x' % subtype)
 
     def decode_uint(self, subtype):
@@ -220,7 +220,7 @@ class CBORDecoder(object):
                     value = self.read(length)
                     buf.append(value)
                 else:
-                    raise CBORDecodeError(
+                    raise CBORDecodeValueError(
                         "non-bytestring found in indefinite length bytestring")
         else:
             result = self.read(length)
@@ -255,7 +255,7 @@ class CBORDecoder(object):
                     value = self.read(length).decode('utf-8', self._str_errors)
                     buf.append(value)
                 else:
-                    raise CBORDecodeError(
+                    raise CBORDecodeValueError(
                         "non-string found in indefinite length string")
         else:
             result = self.read(length).decode('utf-8', self._str_errors)
@@ -376,7 +376,8 @@ class CBORDecoder(object):
                 int(year), int(month), int(day),
                 int(hour), int(minute), int(second), int(micro or 0), tz))
         else:
-            raise CBORDecodeError('invalid datetime string: {!r}'.format(value))
+            raise CBORDecodeValueError(
+                'invalid datetime string: {!r}'.format(value))
 
     def decode_epoch_datetime(self):
         # Semantic tag 1
@@ -421,10 +422,11 @@ class CBORDecoder(object):
         try:
             shared = self._shareables[value]
         except IndexError:
-            raise CBORDecodeError('shared reference %d not found' % value)
+            raise CBORDecodeValueError('shared reference %d not found' % value)
 
         if shared is None:
-            raise CBORDecodeError('shared value %d has not been initialized' % value)
+            raise CBORDecodeValueError(
+                'shared value %d has not been initialized' % value)
         else:
             return shared
 
@@ -459,7 +461,7 @@ class CBORDecoder(object):
         from ipaddress import ip_address
         buf = self.decode()
         if not isinstance(buf, bytes) or len(buf) not in (4, 6, 16):
-            raise CBORDecodeError("invalid ipaddress value %r" % buf)
+            raise CBORDecodeValueError("invalid ipaddress value %r" % buf)
         elif len(buf) in (4, 16):
             return self.set_shareable(ip_address(buf))
         elif len(buf) == 6:
@@ -476,7 +478,7 @@ class CBORDecoder(object):
                     return self.set_shareable(ip_network(net, strict=False))
                 except (TypeError, ValueError):
                     break
-        raise CBORDecodeError("invalid ipnetwork value %r" % net_map)
+        raise CBORDecodeValueError("invalid ipnetwork value %r" % net_map)
 
     #
     # Special decoders (major tag 7)

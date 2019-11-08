@@ -14,7 +14,8 @@ from .compat import (
     iteritems, long, int2bytes, unicode, as_unicode, pack_float16,
     unpack_float16)
 from .types import (
-    CBOREncodeError, CBORTag, undefined, CBORSimpleValue, FrozenDict)
+    CBOREncodeTypeError, CBOREncodeValueError, CBORTag, undefined,
+    CBORSimpleValue, FrozenDict)
 
 
 def shareable_encoder(func):
@@ -99,7 +100,7 @@ class CBOREncoder(object):
                 try:
                     modname, typename = type_
                 except (TypeError, ValueError):
-                    raise CBOREncodeError(
+                    raise CBOREncodeValueError(
                         "invalid deferred encoder type {!r} (must be a "
                         "2-tuple of module name and type name, e.g. "
                         "('collections', 'defaultdict'))".format(type_))
@@ -191,7 +192,8 @@ class CBOREncoder(object):
             self._default
         )
         if not encoder:
-            raise CBOREncodeError('cannot serialize type %s' % obj_type.__name__)
+            raise CBOREncodeTypeError(
+                'cannot serialize type %s' % obj_type.__name__)
 
         encoder(self, obj)
 
@@ -235,7 +237,7 @@ class CBOREncoder(object):
                 self.encode_length(6, 0x1d)
                 self.encode_int(index)
             else:
-                raise CBOREncodeError(
+                raise CBOREncodeValueError(
                     'cyclic data structure detected but value sharing is '
                     'disabled')
 
@@ -328,7 +330,7 @@ class CBOREncoder(object):
             if self._timezone:
                 value = value.replace(tzinfo=self._timezone)
             else:
-                raise CBOREncodeError(
+                raise CBOREncodeValueError(
                     'naive datetime {!r} encountered and no default timezone '
                     'has been set'.format(value))
 

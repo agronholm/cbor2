@@ -2,16 +2,32 @@ from .compat import Mapping, recursive_repr
 from functools import total_ordering
 
 
-class CBORError(ValueError):
+class CBORError(Exception):
     "Base class for errors that occur during CBOR encoding or decoding."
 
 
 class CBOREncodeError(CBORError):
-    "Error class raised for exceptions occurring during CBOR encoding."
+    "Raised for exceptions occurring during CBOR encoding."
+
+
+class CBOREncodeTypeError(CBOREncodeError, TypeError):
+    "Raised when attempting to encode a type that cannot be serialized."
+
+
+class CBOREncodeValueError(CBOREncodeError, ValueError):
+    "Raised when the CBOR encoder encounters an invalid value."
 
 
 class CBORDecodeError(CBORError):
-    "Error class raised for exceptions occurring during CBOR decoding."
+    "Raised for exceptions occurring during CBOR decoding."
+
+
+class CBORDecodeValueError(CBORDecodeError, ValueError):
+    "Raised when the CBOR stream being decoded contains an invalid value."
+
+
+class CBORDecodeEOF(CBORDecodeError, EOFError):
+    "Raised when decoding unexpectedly reaches EOF."
 
 
 @total_ordering

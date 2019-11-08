@@ -350,7 +350,7 @@ fp_read(CBORDecoderObject *self, char *buf, const uint64_t size)
                 ret = 0;
             } else {
                 PyErr_Format(
-                    _CBOR2_CBORDecodeError,
+                    _CBOR2_CBORDecodeEOF,
                     "premature end of stream (expected to read %llu bytes, "
                     "got %lld instead)", size, PyBytes_GET_SIZE(obj));
             }
@@ -446,7 +446,7 @@ decode_length(CBORDecoderObject *self, uint8_t subtype,
         return 0;
     } else {
         PyErr_Format(
-            _CBOR2_CBORDecodeError,
+            _CBOR2_CBORDecodeValueError,
             "unknown unsigned integer subtype 0x%x", subtype);
         return -1;
     }
@@ -537,7 +537,7 @@ decode_indefinite_bytestrings(CBORDecoderObject *self)
                 break;
             } else {
                 PyErr_SetString(
-                    _CBOR2_CBORDecodeError,
+                    _CBOR2_CBORDecodeValueError,
                     "non-bytestring found in indefinite length bytestring");
                 break;
             }
@@ -625,7 +625,7 @@ decode_indefinite_strings(CBORDecoderObject *self)
                 break;
             } else {
                 PyErr_SetString(
-                    _CBOR2_CBORDecodeError,
+                    _CBOR2_CBORDecodeValueError,
                     "non-string found in indefinite length string");
                 break;
             }
@@ -704,7 +704,9 @@ decode_definite_array(CBORDecoderObject *self, uint64_t length)
     PyObject *array, *item, *ret = NULL;
 
     if (length > PY_SSIZE_T_MAX) {
-        PyErr_Format(_CBOR2_CBORDecodeError, "excessive array size %llu", length);
+        PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                "excessive array size %llu", length);
         return NULL;
     }
     if (self->immutable) {
@@ -909,7 +911,7 @@ parse_datestr(CBORDecoderObject *self, PyObject *str)
             buf[10] != 'T' || buf[13] != ':' || buf[16] != ':')
     {
         PyErr_Format(
-            _CBOR2_CBORDecodeError, "invalid datetime string %R", str);
+            _CBOR2_CBORDecodeValueError, "invalid datetime string %R", str);
         return NULL;
     }
     if (buf) {
@@ -955,7 +957,8 @@ parse_datestr(CBORDecoderObject *self, PyObject *str)
                 }
             } else
                 PyErr_Format(
-                    _CBOR2_CBORDecodeError, "invalid datetime string %R", str);
+                    _CBOR2_CBORDecodeValueError,
+                    "invalid datetime string %R", str);
         }
         if (tz) {
             ret = PyDateTimeAPI->DateTime_FromDateAndTime(
@@ -986,13 +989,13 @@ CBORDecoder_decode_datetime_string(CBORDecoderObject *self)
                     ret = parse_datestr(self, str);
                 else
                     PyErr_Format(
-                        _CBOR2_CBORDecodeError,
+                        _CBOR2_CBORDecodeValueError,
                         "invalid datetime string: %R", str);
                 Py_DECREF(match);
             }
         } else
             PyErr_Format(
-                _CBOR2_CBORDecodeError, "invalid datetime value: %R", str);
+                _CBOR2_CBORDecodeValueError, "invalid datetime value: %R", str);
         Py_DECREF(str);
     }
     set_shareable(self, ret);
@@ -1019,7 +1022,7 @@ CBORDecoder_decode_epoch_datetime(CBORDecoderObject *self)
             }
         } else {
             PyErr_Format(
-                _CBOR2_CBORDecodeError, "invalid timestamp value %R", num);
+                _CBOR2_CBORDecodeValueError, "invalid timestamp value %R", num);
         }
         Py_DECREF(num);
     }
@@ -1042,7 +1045,7 @@ CBORDecoder_decode_positive_bignum(CBORDecoderObject *self)
                 (PyObject*) &PyLong_Type, "from_bytes", "Os", bytes, "big");
         else
             PyErr_Format(
-                _CBOR2_CBORDecodeError, "invalid bignum value %R", bytes);
+                _CBOR2_CBORDecodeValueError, "invalid bignum value %R", bytes);
         Py_DECREF(bytes);
     }
     set_shareable(self, ret);
@@ -1171,7 +1174,7 @@ CBORDecoder_decode_sharedref(CBORDecoderObject *self)
             if (ret) {
                 if (ret == Py_None) {
                     PyErr_Format(
-                        _CBOR2_CBORDecodeError,
+                        _CBOR2_CBORDecodeValueError,
                         "shared value %R has not been initialized", index);
                     ret = NULL;
                 } else {
@@ -1180,12 +1183,13 @@ CBORDecoder_decode_sharedref(CBORDecoderObject *self)
                 }
             } else {
                 PyErr_Format(
-                    _CBOR2_CBORDecodeError,
+                    _CBOR2_CBORDecodeValueError,
                     "shared reference %R not found", index);
             }
         } else {
             PyErr_Format(
-                _CBOR2_CBORDecodeError, "invalid shared reference %R", index);
+                _CBOR2_CBORDecodeValueError,
+                "invalid shared reference %R", index);
         }
         Py_DECREF(index);
     }
@@ -1296,7 +1300,8 @@ CBORDecoder_decode_set(CBORDecoderObject *self)
             else
                 ret = PySet_New(array);
         } else
-            PyErr_Format(_CBOR2_CBORDecodeError, "invalid set array %R", array);
+            PyErr_Format(
+                _CBOR2_CBORDecodeValueError, "invalid set array %R", array);
         Py_DECREF(array);
     }
     // This can be done after construction of the set/frozenset because,
@@ -1339,10 +1344,12 @@ CBORDecoder_decode_ipaddress(CBORDecoderObject *self)
                 }
             } else
                 PyErr_Format(
-                    _CBOR2_CBORDecodeError, "invalid ipaddress value %R", bytes);
+                    _CBOR2_CBORDecodeValueError,
+                    "invalid ipaddress value %R", bytes);
         } else
             PyErr_Format(
-                _CBOR2_CBORDecodeError, "invalid ipaddress value %R", bytes);
+                _CBOR2_CBORDecodeValueError,
+                "invalid ipaddress value %R", bytes);
         Py_DECREF(bytes);
     }
     set_shareable(self, ret);
@@ -1377,7 +1384,7 @@ CBORDecoder_decode_ipnetwork(CBORDecoderObject *self)
                     }
                 } else
                     PyErr_Format(
-                        _CBOR2_CBORDecodeError,
+                        _CBOR2_CBORDecodeValueError,
                         "invalid ipnetwork value %R", map);
             } else
                 // We've already checked the size is 1 so this shouldn't be
@@ -1385,7 +1392,8 @@ CBORDecoder_decode_ipnetwork(CBORDecoderObject *self)
                 assert(0);
         } else
             PyErr_Format(
-                _CBOR2_CBORDecodeError, "invalid ipnetwork value %R", map);
+                _CBOR2_CBORDecodeValueError,
+                "invalid ipnetwork value %R", map);
         Py_DECREF(map);
     }
     set_shareable(self, ret);
