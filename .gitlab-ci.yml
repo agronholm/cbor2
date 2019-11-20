@@ -3,7 +3,7 @@ stages:
 
 test:
     stage: test
-    image: python3:latest
+    image: python:3.7
     before_script:
        - pip3 install tox
     script:
