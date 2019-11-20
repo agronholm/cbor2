@@ -1,0 +1,11 @@
+stages:
+    - test
+
+test:
+    stage: test
+    image: python3:latest
+    before_script:
+       - pip3 install tox
+    script:
+       - tox
+
