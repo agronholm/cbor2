@@ -1,16 +1,28 @@
 Version history
 ===============
 
+.. currentmodule:: cbor2
+
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**4.2** (Unreleased)
+**4.2.0** (2020-01-10)
 
-- Optional Pure C implementation by waveform80 that functions identically to the pure Python
-  implementation.
-  With further contributions to the C implementation from: toravir, jonashoechst, Changaco
 - **BACKWARD INCOMPATIBLE** CBOR does not have a bare DATE type, encoding dates as datetimes
   is disabled by default (PR by Changaco)
-- Drop Python 3.3 and 3.4 support from the build process, it should still work if built from source
+- **BACKWARD INCOMPATIBLE** :meth:`~CBORDecoder.set_shareable` only takes the instance to share, not
+  the shareable's index
+- **BACKWARD INCOMPATIBLE** :exc:`CBORError` now descends from :exc:`Exception` rather than
+  :exc:`ValueError`; however, subordinate exceptions now descend from :exc:`ValueError` (where
+  appropriate) so most users should notice no difference
+- **BACKWARD INCOMPATIBLE** :class:`CBORDecoder` can now raise :exc:`CBORDecodeEOF` which descends
+  from :exc:`EOFError` supporting streaming applications
+- Optional Pure C implementation by waveform80 that functions identically to the pure Python
+  implementation with further contributions from: toravir, jonashoechst, Changaco
+- Drop Python 3.3 and 3.4 support from the build process; they should still work if built from
+  source but are no longer officially supported
+- Added support for encoding and decoding :class:`ipaddress.IPv4Address`,
+  :class:`ipaddress.IPv6Address`, :class:`ipaddress.IPv4Network`, and :class:`ipaddress.IPv6Network`
+  (semantic tags 260 and 261)
 
 **4.1.2** (2018-12-10)
 
@@ -21,36 +33,37 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
 **4.1.1** (2018-10-14)
 
-- Fixed encoding of negative ``Decimal`` instances (PR by Sekenre)
+- Fixed encoding of negative :class:`decimal.Decimal` instances (PR by Sekenre)
 
 **4.1.0** (2018-05-27)
 
 - Added canonical encoding (via ``canonical=True``) (PR by Sekenre)
 - Added support for encoding/decoding sets (semantic tag 258) (PR by Sekenre)
-- Added support for encoding ``FrozenDict`` (hashable dict) as map keys or set elements
-  (PR by Sekenre)
+- Added support for encoding `FrozenDict` (hashable dict) as map keys or set elements (PR by
+  Sekenre)
 
 **4.0.1** (2017-08-21)
 
 - Fixed silent truncation of decoded data if there are not enough bytes in the stream for an exact
-  read (``CBORDecodeError`` is now raised instead)
+  read (:exc:`CBORDecodeError` is now raised instead)
 
 **4.0.0** (2017-04-24)
 
 - **BACKWARD INCOMPATIBLE** Value sharing has been disabled by default, for better compatibility
   with other implementations and better performance (since it is rarely needed)
-- **BACKWARD INCOMPATIBLE** Replaced the ``semantic_decoders`` decoder option with the ``tag_hook``
-  option
-- **BACKWARD INCOMPATIBLE** Replaced the ``encoders`` encoder option with the ``default`` option
+- **BACKWARD INCOMPATIBLE** Replaced the ``semantic_decoders`` decoder option with the
+  :attr:`CBORDecoder.tag_hook` option
+- **BACKWARD INCOMPATIBLE** Replaced the ``encoders`` encoder option with the
+  :attr:`CBOREncoder.default` option
 - **BACKWARD INCOMPATIBLE** Factored out the file object argument (``fp``) from all callbacks
 - **BACKWARD INCOMPATIBLE** The encoder no longer supports every imaginable type implementing the
   ``Sequence`` or ``Map`` interface, as they turned out to be too broad
-- Added the ``object_hook`` option for decoding dicts into complex objects
-  (intended for situations where JSON compatibility is required and semantic tags cannot be used)
-- Added encoding and decoding of simple values (``CBORSimpleValue``)
-  (contributed by Jerry Lundström)
+- Added the :attr:`CBORDecoder.object_hook` option for decoding dicts into complex objects (intended
+  for situations where JSON compatibility is required and semantic tags cannot be used)
+- Added encoding and decoding of simple values (:class:`CBORSimpleValue`) (contributed by Jerry
+  Lundström)
 - Replaced the decoder for bignums with a simpler and faster version (contributed by orent)
-- Made all relevant classes and functions available directly in the ``cbor2`` namespace
+- Made all relevant classes and functions available directly in the :mod:`cbor2` namespace
 - Added proper documentation
 
 **3.0.4** (2016-09-24)
@@ -79,15 +92,15 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   instance, the primitive value, a file-like object and the shareable index for the decoded value.
   Decoders that support value sharing must now set the raw value at the given index in
   ``decoder.shareables``.
-- **BACKWARD INCOMPATIBLE** Removed support for iterative encoding (``CBOREncoder.encode()`` is no
-  longer a generator function and always returns ``None``)
+- **BACKWARD INCOMPATIBLE** Removed support for iterative encoding (:meth:`CBOREncoder.encode` is no
+  longer a generator function and always returns :data:`None`)
 - Significantly improved performance (encoder ~30 % faster, decoder ~60 % faster)
-- Fixed serialization round-trip for ``undefined`` (simple type #23)
+- Fixed serialization round-trip for :data:`undefined` (simple type 23)
 - Added proper support for value sharing in callbacks
 
 **2.0.0** (2016-06-11)
 
-- **BACKWARD INCOMPATIBLE** Deserialize unknown tags as ``CBORTag`` objects so as not to lose
+- **BACKWARD INCOMPATIBLE** Deserialize unknown tags as :class:`CBORTag` objects so as not to lose
   information
 - Fixed error messages coming from nested structures
 
