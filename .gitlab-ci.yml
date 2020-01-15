@@ -3,13 +3,12 @@ stages:
 
 .toxjob: &toxjob
     stage: test
-    artifacts:
-      paths:
-        - .tox/dist/
     before_script:
       - pip install tox pytest-cov
     script:
       - tox
+    after_script:
+      - ls -lh .tox/distshare
 
 test36:
     <<: *toxjob
