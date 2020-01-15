@@ -29,7 +29,7 @@ test37:
   stage: deploy
   image: quay.io/pypa/manylinux2010_x86_64
   script:
-    - ${PYBIN}/pip wheel . -w wheelhouse/
+    - /opt/python/${PYBIN}/bin/pip wheel . -w wheelhouse/
     - auditwheel repair wheelhouse/*.whl --plat manylinux2010_x86_64 -w /io/wheelhouse
   after_script:
     - ls -lh /io/wheelhouse/
@@ -37,4 +37,4 @@ test37:
 deploy36:
   <<: *mydeploy
   variables:
-    PYBIN: /opt/python/cp36-cp36mu
+    PYBIN: cp36-cp36m
