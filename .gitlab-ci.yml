@@ -1,5 +1,10 @@
 stages:
     - test
+    - deploy
+
+cache:
+  paths: 
+    - /io/wheelhouse/
 
 .toxjob: &toxjob
     stage: test
@@ -7,8 +12,6 @@ stages:
       - pip install tox pytest-cov
     script:
       - tox
-    after_script:
-      - ls -lh .tox/distshare
 
 test36:
     <<: *toxjob
@@ -22,3 +25,16 @@ test37:
     variables:
       TOXENV: py37
 
+.deploy_template: &mydeploy
+  stage: deploy
+  image: quay.io/pypa/manylinux2010_x86_64
+  script:
+    - ${PYBIN}/pip wheel . -w wheelhouse/
+    - auditwheel repair wheelhouse/*.whl --plat manylinux2010_x86_64 -w /io/wheelhouse
+  after_script:
+    - ls -lh /io/wheelhouse/
+
+deploy36:
+  <<: *mydeploy
+  variables:
+    PYBIN: /opt/python/cp36-cp36mu
