@@ -12,6 +12,7 @@ if cpython and (min_unix_version or min_win_version):
         '_cbor2',
         # math.h routines are built-in to MSVCRT
         libraries=['m'] if not windows else [],
+        extra_compile_args=['-std=c99'],
         sources=[
             'source/module.c',
             'source/encoder.c',

@@ -14,13 +14,13 @@ cache:
     script:
       - tox
 
-test27:
+.test27:
   <<: *toxjob
   image: python:2.7
   variables:
     TOXENV: py27
 
-test36:
+.test36:
     <<: *toxjob
     image: python:3.6
     variables:
@@ -32,7 +32,7 @@ test361:
     variables:
       TOXENV: py36
 
-test37:
+.test37:
     <<: *toxjob
     image: python:3.7
     variables:
