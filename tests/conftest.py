@@ -6,15 +6,18 @@ import pytest
 import cbor2.types
 import cbor2.encoder
 import cbor2.decoder
+
 try:
     import _cbor2
-except ImportError:
+except ImportError as e:
     _cbor2 = None
 
+is_glibc = platform.libc_ver()[0] == 'glibc'
+glibc_old = is_glibc and platform.libc_ver()[1] < '2.9'
 
 cpython33 = pytest.mark.skipif(
-    platform.python_implementation() != 'CPython' or sys.version_info < (3, 3),
-    reason="requires CPython 3.3+")
+    platform.python_implementation() != 'CPython' or sys.version_info < (3, 3) or glibc_old,
+    reason="requires CPython 3.3+ and glibc 2.9+")
 
 
 class Module(object):

@@ -20,9 +20,9 @@ cache:
   variables:
     TOXENV: py27
 
-.test36:
+test36:
     <<: *toxjob
-    image: python:3.6
+    image: python:3.6-alpine
     variables:
       TOXENV: py36
 
