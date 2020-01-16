@@ -24,7 +24,9 @@ test36:
     <<: *toxjob
     image: python:3.6-alpine
     before_script:
-      - apk install git
+      - apk add git
+      - pip install --upgrade pip setuptools setuptools-scm
+      - pip install tox pytest-cov
     variables:
       TOXENV: py36
 
