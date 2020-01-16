@@ -23,6 +23,8 @@ cache:
 test36:
     <<: *toxjob
     image: python:3.6-alpine
+    before_script:
+      - apk install git
     variables:
       TOXENV: py36
 
