@@ -7,11 +7,6 @@ import cbor2.types
 import cbor2.encoder
 import cbor2.decoder
 
-try:
-    import _cbor2
-except ImportError as e:
-    _cbor2 = None
-
 is_glibc = platform.libc_ver()[0] == 'glibc'
 glibc_old = is_glibc and platform.libc_ver()[1] < '2.9'
 
@@ -24,6 +19,12 @@ class Module(object):
     # Mock module class
     pass
 
+try:
+    import _cbor2
+except ImportError as e:
+    _cbor2 = Module()
+    _cbor2.exc_info = e
+
 
 @pytest.fixture(params=[
     pytest.param('c', marks=cpython33),
@@ -31,6 +32,8 @@ class Module(object):
 ], scope='session')
 def impl(request):
     if request.param == 'c':
+        if hasattr(_cbor2, 'exc_info'):
+            raise _cbor2.exc_info
         return _cbor2
     else:
         # Make a mock module of cbor2 which always contains the pure Python
