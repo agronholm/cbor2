@@ -22,7 +22,7 @@ cache:
 
 test36:
     <<: *toxjob
-    image: python:3.6-alpine
+    image: python:3.6-alpine3.11
     before_script:
       - apk add --no-cache git gcc musl-dev
       - pip install --upgrade pip setuptools setuptools-scm
