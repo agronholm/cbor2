@@ -4,11 +4,12 @@ stages:
 
 cache:
   paths: 
-    - /io/wheelhouse/*.whl
+    - wheelhouse/
 
 .toxjob: &toxjob
     stage: test
     before_script:
+      - pip install pip
       - pip install tox pytest-cov
     script:
       - tox
@@ -25,6 +26,12 @@ test36:
     variables:
       TOXENV: py36
 
+test361:
+    <<: *toxjob
+    image: python:3.6.1
+    variables:
+      TOXENV: py36
+
 test37:
     <<: *toxjob
     image: python:3.7
@@ -38,9 +45,9 @@ test37:
     - tags
   script:
     - /opt/python/${PYBIN}/bin/pip wheel . -w wheelhouse/
-    - auditwheel repair wheelhouse/*.whl --plat manylinux2010_x86_64 -w /io/wheelhouse
+    - auditwheel repair wheelhouse/*.whl --plat manylinux2010_x86_64
   after_script:
-    - ls -lh /io/wheelhouse/
+    - ls -lh wheelhouse/
 
 deploy27:
   <<: *mydeploy
