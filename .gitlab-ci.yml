@@ -9,7 +9,7 @@ cache:
 .toxjob: &toxjob
     stage: test
     before_script:
-      - pip install pip setuptools setuptools-scm
+      - pip install --upgrade pip setuptools setuptools-scm
       - pip install tox pytest-cov
     script:
       - tox
