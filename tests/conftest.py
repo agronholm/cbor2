@@ -6,15 +6,18 @@ import pytest
 import cbor2.types
 import cbor2.encoder
 import cbor2.decoder
+
 try:
     import _cbor2
 except ImportError:
     _cbor2 = None
 
-
 cpython33 = pytest.mark.skipif(
-    platform.python_implementation() != 'CPython' or sys.version_info < (3, 3),
-    reason="requires CPython 3.3+")
+    platform.python_implementation() != "CPython"
+    or sys.version_info < (3, 3)
+    or _cbor2 is None,
+    reason="requires CPython 3.3+ and glibc 2.9+",
+)
 
 
 class Module(object):
@@ -22,12 +25,9 @@ class Module(object):
     pass
 
 
-@pytest.fixture(params=[
-    pytest.param('c', marks=cpython33),
-    'python'
-], scope='session')
+@pytest.fixture(params=[pytest.param("c", marks=cpython33), "python"], scope="session")
 def impl(request):
-    if request.param == 'c':
+    if request.param == "c":
         return _cbor2
     else:
         # Make a mock module of cbor2 which always contains the pure Python

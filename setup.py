@@ -3,15 +3,18 @@ import platform
 from setuptools import setup, Extension
 
 cpython = platform.python_implementation() == 'CPython'
+is_glibc = platform.libc_ver()[0] == 'glibc'
+libc_ok = is_glibc and platform.libc_ver()[1] >= '2.9'
 windows = sys.platform.startswith('win')
 min_win_version = windows and sys.version_info >= (3, 5)
 min_unix_version = not windows and sys.version_info >= (3, 3)
 
-if cpython and (min_unix_version or min_win_version):
+if cpython and ((min_unix_version and libc_ok) or min_win_version):
     _cbor2 = Extension(
         '_cbor2',
         # math.h routines are built-in to MSVCRT
         libraries=['m'] if not windows else [],
+        extra_compile_args=['-std=c99'],
         sources=[
             'source/module.c',
             'source/encoder.c',
