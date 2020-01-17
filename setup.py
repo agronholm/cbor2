@@ -4,7 +4,12 @@ from setuptools import setup, Extension
 
 cpython = platform.python_implementation() == 'CPython'
 is_glibc = platform.libc_ver()[0] == 'glibc'
-libc_ok = is_glibc and platform.libc_ver()[1] >= '2.9'
+if is_glibc:
+    glibc_ver = platform.libc_ver()[1]
+    libc_numeric = tuple(int(x) for x in glibc_ver.split('.') if x.isdigit())
+    libc_ok = libc_numeric >= (2, 9)
+else:
+    libc_ok = False
 windows = sys.platform.startswith('win')
 min_win_version = windows and sys.version_info >= (3, 5)
 min_unix_version = not windows and sys.version_info >= (3, 3)
