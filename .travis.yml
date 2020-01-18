@@ -57,7 +57,9 @@ jobs:
 
 install: pip install tox
 
-script: tox -vv
+script:
+  - python -c "from __future__ import print_function; import platform; print(platform.libc_ver())"
+  - tox -vv
 
 after_success:
   - pip install coveralls
