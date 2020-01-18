@@ -7,16 +7,19 @@ import cbor2.types
 import cbor2.encoder
 import cbor2.decoder
 
+load_exc = ''
 try:
     import _cbor2
-except ImportError:
+except ImportError as e:
+    if not str(e).startswith('No module'):
+        load_exc = str(e)
     _cbor2 = None
 
 cpython33 = pytest.mark.skipif(
     platform.python_implementation() != "CPython"
     or sys.version_info < (3, 3)
     or _cbor2 is None,
-    reason="requires CPython 3.3+ and glibc 2.9+",
+    reason=(load_exc or "requires CPython 3.3+"),
 )
 
 
