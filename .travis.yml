@@ -57,7 +57,7 @@ jobs:
 
 install: pip install tox
 
-script: tox
+script: tox -vv
 
 after_success:
   - pip install coveralls

@@ -5,12 +5,12 @@ from setuptools import setup, Extension
 
 cpython = platform.python_implementation() == 'CPython'
 is_glibc = platform.libc_ver()[0] == 'glibc'
+windows = sys.platform.startswith('win')
 if is_glibc:
     glibc_ver = platform.libc_ver()[1]
     libc_ok = parse_version(glibc_ver) >= parse_version('2.9')
 else:
     libc_ok = not windows
-windows = sys.platform.startswith('win')
 min_win_version = windows and sys.version_info >= (3, 5)
 min_unix_version = not windows and sys.version_info >= (3, 3)
 
