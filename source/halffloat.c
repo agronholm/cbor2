@@ -5,7 +5,7 @@
 #include <sys/endian.h>
 #elif __APPLE__
 #include <libkern/OSByteOrder.h>
-#elif ! _WIN32
+#elif _GNU_SOURCE
 #include <endian.h>
 #endif
 #include "halffloat.h"
