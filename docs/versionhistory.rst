@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**4.2.0** (2020-01-10)
+**5.0.0** (2020-01-20)
 
 - **BACKWARD INCOMPATIBLE** CBOR does not have a bare DATE type, encoding dates as datetimes
   is disabled by default (PR by Changaco)
@@ -23,6 +23,10 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 - Added support for encoding and decoding :class:`ipaddress.IPv4Address`,
   :class:`ipaddress.IPv6Address`, :class:`ipaddress.IPv4Network`, and :class:`ipaddress.IPv6Network`
   (semantic tags 260 and 261)
+
+**4.2.0** (2020-01-10)
+
+- **BROKEN BUILD** Removed
 
 **4.1.2** (2018-12-10)
 
