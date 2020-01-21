@@ -88,6 +88,8 @@ Tag Semantics                                Python type(s)
 36  MIME message                             email.message.Message
 37  Binary UUID                              uuid.UUID
 258 Set of unique items                      set
+260 Network address                          :class:`ipaddress.IPv4Address` (or IPv6)
+261 Network prefix                           :class:`ipaddress.IPv4Network` (or IPv6)
 === ======================================== ====================================================
 
 Arbitary tags can be represented with the :class:`~cbor2.types.CBORTag` class.

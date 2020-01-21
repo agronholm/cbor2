@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**5.0.1** (2020-01-21)
+
+- Fix deprecation warning on python 3.7, 3.8 (mariano54)
+- Minor documentation tweaks
+
 **5.0.0** (2020-01-20)
 
 - **BACKWARD INCOMPATIBLE** CBOR does not have a bare DATE type, encoding dates as datetimes
