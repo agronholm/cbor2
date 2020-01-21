@@ -1,6 +1,6 @@
 import re
 import struct
-from collections import Mapping
+from .compat import Mapping
 from datetime import datetime, timedelta
 from io import BytesIO
 
