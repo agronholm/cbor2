@@ -9,8 +9,10 @@ class DefEncoder(json.JSONEncoder):
     def default(self, v):
         if isinstance(v, bytes):
             return base64.b64encode(v).decode('ascii')
-        if isinstance(v, CBORTag):
+        elif isinstance(v, CBORTag):
             return {'tag': v.tag, 'value': v.value }
+        elif isinstance(v, set):
+            return list(v)
         return json.JSONEncoder.default(self, v)
 
 def iterdecode(f):
@@ -19,7 +21,7 @@ def iterdecode(f):
         try:
             yield decoder.decode()
         except EOFError:
-            raise StopIteration
+            return
 
 
 def main():
