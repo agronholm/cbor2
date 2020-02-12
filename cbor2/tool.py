@@ -3,16 +3,39 @@ import json
 import sys
 import base64
 import io
-from . import load, CBORDecoder, CBORTag
+from datetime import datetime
+from collections import OrderedDict
+from . import load, CBORDecoder
+from .types import *
+
+import decimal, fractions, uuid, ipaddress
+
+default_encoders = OrderedDict([
+    (bytes,                         lambda x: base64.b64encode(x).decode('ascii')),
+    (decimal.Decimal,               lambda x: str(x)),
+    (FrozenDict,                    lambda x: str(dict(x))),
+    (type(undefined),               lambda x: 'cbor:undef'),
+    (datetime,                      lambda x: x.isoformat()),
+    (fractions.Fraction,            lambda x: str(x)),
+    (uuid.UUID,              lambda x: x.urn),
+    (ipaddress.IPv4Address,  lambda x: str(x)),
+    (ipaddress.IPv6Address,  lambda x: str(x)),
+    (ipaddress.IPv4Network,  lambda x: str(x)),
+    (ipaddress.IPv6Network,  lambda x: str(x)),
+    (CBORSimpleValue,               lambda x: "cbor_simple:{:d}".format(x.value)),
+    (CBORTag,                       lambda x: 'cbor_tag:{:d}:{}'.format( x.tag, x.value )),
+    (set,                           lambda x: list(x)),
+    (frozenset,                     lambda x: str(x)),
+])
 
 class DefEncoder(json.JSONEncoder):
     def default(self, v):
-        if isinstance(v, bytes):
-            return base64.b64encode(v).decode('ascii')
-        elif isinstance(v, CBORTag):
-            return {'tag': v.tag, 'value': v.value }
-        elif isinstance(v, set):
-            return list(v)
+        obj_type = v.__class__
+        encoder = default_encoders.get(obj_type)
+        if encoder:
+            return encoder(v)
+        else:
+            return str(v)
         return json.JSONEncoder.default(self, v)
 
 def iterdecode(f):
