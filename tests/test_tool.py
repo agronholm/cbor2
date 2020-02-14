@@ -35,6 +35,16 @@ def test_self_referencing(payload):
         cbor2.tool.key_to_str(decoded)
 
 
+def test_nonrecursive_ref():
+    payload = 'd81c83d81ca26162d81ca16161016163d81d02d81d01d81d01'
+    decoded = cbor2.loads(binascii.unhexlify(payload))
+    result = cbor2.tool.key_to_str(decoded)
+    expected = json.loads(
+        '[{"b": {"a": 1}, "c": {"a": 1}}, {"b": {"a": 1}, "c": {"a": 1}}, {"b": {"a": 1}, "c": {"a": 1}}]'
+    )
+    assert result == expected
+
+
 def test_stdin(monkeypatch, tmpdir):
     f = tmpdir.join('outfile')
     argv = ['-o', str(f)]
