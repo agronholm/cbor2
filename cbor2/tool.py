@@ -73,6 +73,10 @@ def key_to_str(d, dict_ids=None):
             v = 'cbor_simple:{:d}'.format(d.value)
             return v
         if isinstance(d, (tuple, list, set)):
+            if id(d) in dict_ids:
+                raise ValueError("Cannot convert self-referential data to JSON")
+            else:
+                dict_ids.add(id(d))
             v = [key_to_str(x, dict_ids) for x in d]
             return v
         else:
