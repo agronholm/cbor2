@@ -62,7 +62,9 @@ def test_embed_bytes(monkeypatch, tmpdir):
         assert f.read() == expected
 
 
-@pytest.mark.skipif(sys.version_info < (3, 6), reason="No ipaddress module and simple value is unhashable")
+@pytest.mark.skipif(
+    sys.version_info < (3, 6), reason="No ipaddress module and simple value is unhashable"
+)
 def test_dtypes_from_file(monkeypatch, tmpdir):
     infile = 'tests/examples.cbor.b64'
     outfile = tmpdir.join('outfile.json')
