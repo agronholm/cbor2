@@ -19,12 +19,15 @@ except ImportError:
 
 try:
     import ipaddress
-    extra_encoders = OrderedDict([
-        (ipaddress.IPv4Address, lambda x: str(x)),
-        (ipaddress.IPv6Address, lambda x: str(x)),
-        (ipaddress.IPv4Network, lambda x: str(x)),
-        (ipaddress.IPv6Network, lambda x: str(x)),
-        ])
+
+    extra_encoders = OrderedDict(
+        [
+            (ipaddress.IPv4Address, lambda x: str(x)),
+            (ipaddress.IPv6Address, lambda x: str(x)),
+            (ipaddress.IPv4Network, lambda x: str(x)),
+            (ipaddress.IPv6Network, lambda x: str(x)),
+        ]
+    )
 except ImportError:
     extra_encoders = OrderedDict()
 
@@ -66,7 +69,7 @@ def iterdecode(f):
 
 
 def key_to_str(d, dict_ids=None):
-    dict_ids = dict_ids if dict_ids is not None else set()
+    dict_ids = set(dict_ids or [])
     rval = {}
     if not isinstance(d, dict):
         if isinstance(d, CBORSimpleValue):
@@ -78,6 +81,7 @@ def key_to_str(d, dict_ids=None):
             else:
                 dict_ids.add(id(d))
             v = [key_to_str(x, dict_ids) for x in d]
+            dict_ids.remove(id(d))
             return v
         else:
             return d
@@ -110,11 +114,7 @@ def main():
     )
     parser = argparse.ArgumentParser(prog=prog, description=description)
     parser.add_argument(
-        '-o',
-        '--outfile',
-        type=argparse.FileType('w'),
-        help='output file',
-        default=sys.stdout,
+        '-o', '--outfile', type=argparse.FileType('w'), help='output file', default=sys.stdout
     )
     parser.add_argument(
         'infiles',
