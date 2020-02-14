@@ -65,17 +65,23 @@ def iterdecode(f):
             return
 
 
-def key_to_str(d):
+def key_to_str(d, dict_ids=None):
+    dict_ids = dict_ids if dict_ids is not None else set()
     rval = {}
     if not isinstance(d, dict):
         if isinstance(d, CBORSimpleValue):
             v = 'cbor_simple:{:d}'.format(d.value)
             return v
         if isinstance(d, (tuple, list, set)):
-            v = [key_to_str(x) for x in d]
+            v = [key_to_str(x, dict_ids) for x in d]
             return v
         else:
             return d
+
+    if id(d) in dict_ids:
+        raise ValueError("Cannot convert self-referential data to JSON")
+    else:
+        dict_ids.add(id(d))
 
     for k, v in d.items():
         if isinstance(k, bytes):
@@ -85,9 +91,9 @@ def key_to_str(d):
         if isinstance(k, (FrozenDict, frozenset, tuple)):
             k = str(k)
         if isinstance(v, dict):
-            v = key_to_str(v)
+            v = key_to_str(v, dict_ids)
         elif isinstance(v, (tuple, list, set)):
-            v = [key_to_str(x) for x in v]
+            v = [key_to_str(x, dict_ids) for x in v]
         rval[k] = v
     return rval
 
@@ -161,9 +167,9 @@ def main():
                             cls=DefEncoder,
                         )
                         outfile.write('\n')
-                except ValueError as e:
+                except (ValueError, EOFError) as e:  # pragma: no cover
                     raise SystemExit(e)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     main()
