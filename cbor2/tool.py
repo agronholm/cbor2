@@ -4,35 +4,40 @@ import sys
 import base64
 import io
 import re
+import decimal
+import fractions
+import uuid
+import ipaddress
 from datetime import datetime
 from collections import OrderedDict
 from . import load, CBORDecoder
-from .types import FrozenDict, CBORTag, undefined, CBORSimpleValue
-
-import decimal, fractions, uuid, ipaddress
+from .types import FrozenDict
 
 try:
     from _cbor2 import CBORTag, undefined, CBORSimpleValue
 except ImportError:
-    pass
+    from .types import CBORTag, undefined, CBORSimpleValue
 
-default_encoders = OrderedDict([
-    (bytes,                         lambda x: base64.b64encode(x).decode('ascii')),
-    (decimal.Decimal,               lambda x: str(x)),
-    (FrozenDict,                    lambda x: str(dict(x))),
-    (CBORSimpleValue,               lambda x: 'cbor_simple:{:d}'.format(x.value)),
-    (type(undefined),               lambda x: 'cbor:undef'),
-    (datetime,                      lambda x: x.isoformat()),
-    (fractions.Fraction,            lambda x: str(x)),
-    (uuid.UUID,              lambda x: x.urn),
-    (ipaddress.IPv4Address,  lambda x: str(x)),
-    (ipaddress.IPv6Address,  lambda x: str(x)),
-    (ipaddress.IPv4Network,  lambda x: str(x)),
-    (ipaddress.IPv6Network,  lambda x: str(x)),
-    (CBORTag,                       lambda x: { 'CBORTag:{:d}'.format(x.tag):  x.value }),
-    (set,                           lambda x: list(x)),
-    (re.compile('').__class__,                     lambda x: str(x)),
-])
+default_encoders = OrderedDict(
+    [
+        (bytes, lambda x: base64.b64encode(x).decode('ascii')),
+        (decimal.Decimal, lambda x: str(x)),
+        (FrozenDict, lambda x: str(dict(x))),
+        (CBORSimpleValue, lambda x: 'cbor_simple:{:d}'.format(x.value)),
+        (type(undefined), lambda x: 'cbor:undef'),
+        (datetime, lambda x: x.isoformat()),
+        (fractions.Fraction, lambda x: str(x)),
+        (uuid.UUID, lambda x: x.urn),
+        (ipaddress.IPv4Address, lambda x: str(x)),
+        (ipaddress.IPv6Address, lambda x: str(x)),
+        (ipaddress.IPv4Network, lambda x: str(x)),
+        (ipaddress.IPv6Network, lambda x: str(x)),
+        (CBORTag, lambda x: {'CBORTag:{:d}'.format(x.tag): x.value}),
+        (set, lambda x: list(x)),
+        (re.compile('').__class__, lambda x: str(x)),
+    ]
+)
+
 
 class DefEncoder(json.JSONEncoder):
     def default(self, v):
@@ -42,6 +47,7 @@ class DefEncoder(json.JSONEncoder):
             return encoder(v)
         return json.JSONEncoder.default(self, v)
 
+
 def iterdecode(f):
     decoder = CBORDecoder(f)
     while True:
@@ -50,52 +56,76 @@ def iterdecode(f):
         except EOFError:
             return
 
+
 def key_to_str(d):
     rval = {}
     if not isinstance(d, dict):
         if isinstance(d, CBORSimpleValue):
             v = 'cbor_simple:{:d}'.format(d.value)
             return v
-        if isinstance(d,(tuple,list,set)):
+        if isinstance(d, (tuple, list, set)):
             v = [key_to_str(x) for x in d]
             return v
         else:
             return d
 
-    for k,v in d.items():
-        if isinstance(k,bytes):
+    for k, v in d.items():
+        if isinstance(k, bytes):
             k = base64.b64encode(k).decode('ascii')
         if isinstance(k, CBORSimpleValue):
             k = 'cbor_simple:{:d}'.format(k.value)
         if isinstance(k, (FrozenDict, frozenset, tuple)):
             k = str(k)
-        if isinstance(v,dict):
+        if isinstance(v, dict):
             v = key_to_str(v)
-        elif isinstance(v,(tuple,list,set)):
+        elif isinstance(v, (tuple, list, set)):
             v = [key_to_str(x) for x in v]
         rval[k] = v
     return rval
 
+
 def main():
     prog = 'python -m cbor2.tool'
-    description = ('A simple command line interface for cbor2 module '
-                   'to validate and pretty-print CBOR objects.')
+    description = (
+        'A simple command line interface for cbor2 module '
+        'to validate and pretty-print CBOR objects.'
+    )
     parser = argparse.ArgumentParser(prog=prog, description=description)
-    parser.add_argument('-o', '--outfile',
-                        type=argparse.FileType('w', encoding="utf-8"),
-                        help='output file',
-                        default=sys.stdout)
-    parser.add_argument('infiles', nargs='*',
-                        type=argparse.FileType('rb'),
-                        help='Collection of CBOR files to process or - for stdin')
-    parser.add_argument('--sort-keys', action='store_true', default=False,
-                        help='sort the output of dictionaries alphabetically by key')
-    parser.add_argument('--pretty', action='store_true', default=False,
-                        help='indent the output to look good')
-    parser.add_argument('--sequence', action='store_true', default=False,
-                        help='Parse a sequence of concatenated CBOR items')
-    parser.add_argument('-d', '--decode', action='store_true', default=False,
-                        help='CBOR data is base64 encoded (handy for stdin)')
+    parser.add_argument(
+        '-o',
+        '--outfile',
+        type=argparse.FileType('w', encoding="utf-8"),
+        help='output file',
+        default=sys.stdout,
+    )
+    parser.add_argument(
+        'infiles',
+        nargs='*',
+        type=argparse.FileType('rb'),
+        help='Collection of CBOR files to process or - for stdin',
+    )
+    parser.add_argument(
+        '--sort-keys',
+        action='store_true',
+        default=False,
+        help='sort the output of dictionaries alphabetically by key',
+    )
+    parser.add_argument(
+        '--pretty', action='store_true', default=False, help='indent the output to look good'
+    )
+    parser.add_argument(
+        '--sequence',
+        action='store_true',
+        default=False,
+        help='Parse a sequence of concatenated CBOR items',
+    )
+    parser.add_argument(
+        '-d',
+        '--decode',
+        action='store_true',
+        default=False,
+        help='CBOR data is base64 encoded (handy for stdin)',
+    )
     options = parser.parse_args()
 
     outfile = options.outfile
@@ -113,9 +143,15 @@ def main():
                     if sequence:
                         objs = iterdecode(infile)
                     else:
-                        objs = (load(infile), )
+                        objs = (load(infile),)
                     for obj in objs:
-                        json.dump(key_to_str(obj), outfile, sort_keys=sort_keys, indent=(None, 4)[pretty], cls=DefEncoder)
+                        json.dump(
+                            key_to_str(obj),
+                            outfile,
+                            sort_keys=sort_keys,
+                            indent=(None, 4)[pretty],
+                            cls=DefEncoder,
+                        )
                         outfile.write('\n')
                 except ValueError as e:
                     raise SystemExit(e)
@@ -123,4 +159,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
