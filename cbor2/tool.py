@@ -1,3 +1,36 @@
+r"""Command-line tool for CBOR diagnostics and testing
+
+It converts CBOR data in raw binary or base64 encoding into a representation
+that allows printing as JSON. This is a lossy transformation as each
+datatype is converted into something that can be represented as a JSON
+value.
+
+Usage::
+
+    $ echo a16568656c6c6f65776f726c64 | xxd -r -ps | python -m cbor2.tool --pretty
+    {
+        "hello": "world"
+    }
+    $ echo ggEC | python -m cbor2.tool -d
+    [1, 2]
+    $ python -m cbor2.tool -d tests/examples.cbor.b64
+    {...}
+
+It can be used in a pipeline with json processing tools like `jq`_ to allow syntax coloring,
+field extraction and more.
+
+CBOR data items concatenated into a sequence can be decoded also::
+
+    $ cat tests/examples.cbor.b64 tests/examples.cbor.b64 | python -m cbor2.tool -d --sequence
+    {...}
+    {...}
+
+Multiple files can also be sent to a single output file::
+
+    $ python -m cbor2.tool -o all_files.json file1.cbor file2.cbor ... fileN.cbor
+
+.. _jq: https://stedolan.github.io/jq/
+"""
 import argparse
 import json
 import sys
