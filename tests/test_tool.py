@@ -26,8 +26,11 @@ def test_default():
         json.dumps(BytesIO(b''), cls=cbor2.tool.DefEncoder)
 
 
-def test_self_referencing():
-    decoded = cbor2.loads(binascii.unhexlify("D81CA16162D81CA16161D81D00"))
+@pytest.mark.parametrize(
+    'payload', ["D81CA16162D81CA16161D81D00", "d81c81d81c830102d81d00"], ids=['dict', 'list']
+)
+def test_self_referencing(payload):
+    decoded = cbor2.loads(binascii.unhexlify(payload))
     with pytest.raises(ValueError, match="Cannot convert self-referential data to JSON"):
         cbor2.tool.key_to_str(decoded)
 
