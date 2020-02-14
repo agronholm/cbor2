@@ -58,3 +58,12 @@ def test_embed_bytes(monkeypatch, tmpdir):
         cbor2.tool.main()
         assert f.read() == '"c3R1ZmY="\n'
 
+def test_dtypes_from_file(monkeypatch, tmpdir):
+    infile = 'tests/examples.cbor.b64'
+    outfile = tmpdir.join('outfile.json')
+    argv = [ '-d', '-o', str(outfile), infile ]
+    with monkeypatch.context() as m:
+        m.setattr('sys.argv', [''] + argv)
+        cbor2.tool.main()
+        assert outfile.read().startswith('{"bytes": [')
+
