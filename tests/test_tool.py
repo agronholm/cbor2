@@ -1,9 +1,35 @@
+from __future__ import unicode_literals
 import pytest
 import sys
 import binascii
+import json
 from io import BytesIO, TextIOWrapper
 
 import cbor2.tool
+
+
+@pytest.mark.parametrize(
+    'value, expected',
+    [
+        ((1, 2, 3), [1, 2, 3]),
+        ({b"\x01\x02\x03": "b"}, {"AQID": "b"}),
+        ({"dict": {"b": 17}}, {"dict": {"b": 17}}),
+    ],
+    ids=['tuple', 'byte_key', 'recursion'],
+)
+def test_key_to_str(value, expected):
+    assert cbor2.tool.key_to_str(value) == expected
+
+
+def test_default():
+    with pytest.raises(TypeError):
+        json.dumps(BytesIO(b''), cls=cbor2.tool.DefEncoder)
+
+
+def test_self_referencing():
+    decoded = cbor2.loads(binascii.unhexlify("D81CA16162D81CA16161D81D00"))
+    with pytest.raises(ValueError, match="Cannot convert self-referential data to JSON"):
+        cbor2.tool.key_to_str(decoded)
 
 
 def test_stdin(monkeypatch, tmpdir):
@@ -54,7 +80,7 @@ def test_embed_bytes(monkeypatch, tmpdir):
     f = tmpdir.join('outfile')
     argv = ['-o', str(f)]
     inbuf = TextIOWrapper(BytesIO(binascii.unhexlify('43010203')))
-    expected = '"AQID"\n' if sys.version_info >= (3, 3) else '"\u0001\u0002\u0003"\n'
+    expected = '"AQID"\n' if sys.version_info >= (3, 3) else b'"\\u0001\\u0002\\u0003"\n'
     with monkeypatch.context() as m:
         m.setattr('sys.argv', [''] + argv)
         m.setattr('sys.stdin', inbuf)
