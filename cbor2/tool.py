@@ -7,7 +7,6 @@ import re
 import decimal
 import fractions
 import uuid
-import ipaddress
 from datetime import datetime
 from collections import OrderedDict
 from . import load, CBORDecoder
@@ -17,6 +16,18 @@ try:
     from _cbor2 import CBORTag, undefined, CBORSimpleValue
 except ImportError:
     from .types import CBORTag, undefined, CBORSimpleValue
+
+try:
+    import ipaddress
+    extra_encoders = OrderedDict([
+        (ipaddress.IPv4Address, lambda x: str(x)),
+        (ipaddress.IPv6Address, lambda x: str(x)),
+        (ipaddress.IPv4Network, lambda x: str(x)),
+        (ipaddress.IPv6Network, lambda x: str(x)),
+        ])
+except ImportError:
+    extra_encoders = OrderedDict()
+
 
 default_encoders = OrderedDict(
     [
@@ -28,15 +39,12 @@ default_encoders = OrderedDict(
         (datetime, lambda x: x.isoformat()),
         (fractions.Fraction, lambda x: str(x)),
         (uuid.UUID, lambda x: x.urn),
-        (ipaddress.IPv4Address, lambda x: str(x)),
-        (ipaddress.IPv6Address, lambda x: str(x)),
-        (ipaddress.IPv4Network, lambda x: str(x)),
-        (ipaddress.IPv6Network, lambda x: str(x)),
         (CBORTag, lambda x: {'CBORTag:{:d}'.format(x.tag): x.value}),
         (set, lambda x: list(x)),
-        (re.compile('').__class__, lambda x: str(x)),
+        (re.compile('').__class__, lambda x: x.pattern),
     ]
 )
+default_encoders.update(extra_encoders)
 
 
 class DefEncoder(json.JSONEncoder):
@@ -94,7 +102,7 @@ def main():
     parser.add_argument(
         '-o',
         '--outfile',
-        type=argparse.FileType('w', encoding="utf-8"),
+        type=argparse.FileType('w'),
         help='output file',
         default=sys.stdout,
     )
