@@ -9,6 +9,7 @@ Table of contents
    :maxdepth: 2
 
    usage
+   tool
    customizing
    versionhistory
 
