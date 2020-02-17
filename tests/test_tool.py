@@ -94,8 +94,8 @@ def test_stream(monkeypatch, tmpdir):
 def test_embed_bytes(monkeypatch, tmpdir):
     f = tmpdir.join('outfile')
     argv = ['-o', str(f)]
-    inbuf = TextIOWrapper(BytesIO(binascii.unhexlify('43010203')))
-    expected = '"AQID"\n' if sys.version_info >= (3, 3) else b'"\\u0001\\u0002\\u0003"\n'
+    inbuf = TextIOWrapper(BytesIO(binascii.unhexlify('42C2C2')))
+    expected = '"wsI="\n' if sys.version_info >= (3, 3) else b'"\\u00c2\\u00c2"\n'
     with monkeypatch.context() as m:
         m.setattr('sys.argv', [''] + argv)
         m.setattr('sys.stdin', inbuf)
