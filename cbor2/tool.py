@@ -7,12 +7,15 @@ value.
 
 Usage::
 
+    # Pass hexadecimal through xxd.
     $ echo a16568656c6c6f65776f726c64 | xxd -r -ps | python -m cbor2.tool --pretty
     {
         "hello": "world"
     }
-    $ echo ggEC | python -m cbor2.tool -d
+    # Decode Base64 directly
+    $ echo ggEC | python -m cbor2.tool --decode
     [1, 2]
+    # Read from a file encoded in Base64
     $ python -m cbor2.tool -d tests/examples.cbor.b64
     {...}
 
@@ -21,9 +24,10 @@ field extraction and more.
 
 CBOR data items concatenated into a sequence can be decoded also::
 
-    $ cat tests/examples.cbor.b64 tests/examples.cbor.b64 | python -m cbor2.tool -d --sequence
-    {...}
-    {...}
+    $ echo ggECggMEggUG | python -m cbor2.tool -d --sequence
+    [1, 2]
+    [3, 4]
+    [5, 6]
 
 Multiple files can also be sent to a single output file::
 
@@ -156,15 +160,18 @@ def main():
         help='Collection of CBOR files to process or - for stdin',
     )
     parser.add_argument(
+        '-k',
         '--sort-keys',
         action='store_true',
         default=False,
         help='sort the output of dictionaries alphabetically by key',
     )
     parser.add_argument(
+        '-p',
         '--pretty', action='store_true', default=False, help='indent the output to look good'
     )
     parser.add_argument(
+        '-s',
         '--sequence',
         action='store_true',
         default=False,
