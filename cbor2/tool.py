@@ -151,7 +151,7 @@ def main():
     )
     parser = argparse.ArgumentParser(prog=prog, description=description)
     parser.add_argument(
-        '-o', '--outfile', type=argparse.FileType('w'), help='output file', default=sys.stdout
+        '-o', '--outfile', type=str, help='output file', default='-'
     )
     parser.add_argument(
         'infiles',
@@ -191,9 +191,20 @@ def main():
     pretty = options.pretty
     sequence = options.sequence
     decode = options.decode
-    infiles = options.infiles or [sys.stdin.buffer]
-    with outfile:
+    infiles = options.infiles or [sys.stdin]
+    if outfile == '-':
+        sys.stdout.close()
+        outfile = 1
+    if sys.version_info < (3, 3):
+        opener = dict(mode='wb')
+        dumpargs = dict(ensure_ascii=True, encoding='raw_unicode_escape')
+    else:
+        opener = dict(mode='w', encoding='utf-8', errors='backslashescape')
+        dumpargs = dict(ensure_ascii=False)
+    with io.open(outfile, **opener) as outfile:
         for infile in infiles:
+            if hasattr(infile, 'buffer') and not decode:
+                infile = infile.buffer
             with infile:
                 if decode:
                     infile = io.BytesIO(base64.b64decode(infile.read()))
@@ -209,6 +220,7 @@ def main():
                             sort_keys=sort_keys,
                             indent=(None, 4)[pretty],
                             cls=DefEncoder,
+                            **dumpargs
                         )
                         outfile.write('\n')
                 except (ValueError, EOFError) as e:  # pragma: no cover
