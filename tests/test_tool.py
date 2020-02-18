@@ -12,7 +12,7 @@ import cbor2.tool
     'value, expected',
     [
         ((1, 2, 3), [1, 2, 3]),
-        ({b"\x01\x02\x03": "b"}, {"AQID": "b"}),
+        ({b"\x01\x02\x03": "b"}, {"\x01\x02\x03": "b"}),
         ({"dict": {"b": 17}}, {"dict": {"b": 17}}),
     ],
     ids=['tuple', 'byte_key', 'recursion'],
@@ -95,7 +95,7 @@ def test_embed_bytes(monkeypatch, tmpdir):
     f = tmpdir.join('outfile')
     argv = ['-o', str(f)]
     inbuf = TextIOWrapper(BytesIO(binascii.unhexlify('42C2C2')))
-    expected = '"wsI="\n' if sys.version_info >= (3, 3) else b'"\\u00c2\\u00c2"\n'
+    expected = b'"\\u00c2\\u00c2"\n' if sys.version_info < (3, 3) else '"\\\\xc2\\\\xc2"\n'
     with monkeypatch.context() as m:
         m.setattr('sys.argv', [''] + argv)
         m.setattr('sys.stdin', inbuf)
