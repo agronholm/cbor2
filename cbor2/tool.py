@@ -71,7 +71,7 @@ except ImportError:
 
 default_encoders = OrderedDict(
     [
-        (bytes, lambda x: base64.b64encode(x).decode('ascii')),
+        (bytes, lambda x: x.decode(encoding='utf-8', errors='backslashreplace')),
         (decimal.Decimal, lambda x: str(x)),
         (FrozenDict, lambda x: str(dict(x))),
         (CBORSimpleValue, lambda x: 'cbor_simple:{:d}'.format(x.value)),
@@ -130,7 +130,7 @@ def key_to_str(d, dict_ids=None):
 
     for k, v in d.items():
         if isinstance(k, bytes):
-            k = base64.b64encode(k).decode('ascii')
+            k = k.decode(encoding='utf-8', errors='backslashreplace')
         if isinstance(k, CBORSimpleValue):
             k = 'cbor_simple:{:d}'.format(k.value)
         if isinstance(k, (FrozenDict, frozenset, tuple)):
