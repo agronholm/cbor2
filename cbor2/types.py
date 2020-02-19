@@ -1,5 +1,6 @@
 from .compat import Mapping, recursive_repr
 from functools import total_ordering
+from collections import namedtuple
 
 
 class CBORError(Exception):
@@ -62,36 +63,30 @@ class CBORTag(object):
         return 'CBORTag({self.tag}, {self.value!r})'.format(self=self)
 
 
-class CBORSimpleValue(object):
+class CBORSimpleValue(namedtuple('CBORSimpleValue', ['value'])):
     """
     Represents a CBOR "simple value".
 
     :param int value: the value (0-255)
     """
 
-    __slots__ = 'value'
+    __slots__ = ()
+    __hash__ = namedtuple.__hash__
 
-    def __init__(self, value):
+    def __new__(cls, value):
         if value < 0 or value > 255:
             raise TypeError('simple value out of range (0..255)')
-        self.value = value
+        return super(CBORSimpleValue, cls).__new__(cls, value)
 
     def __eq__(self, other):
-        if isinstance(other, CBORSimpleValue):
-            return self.value == other.value
-        elif isinstance(other, int):
+        if isinstance(other, int):
             return self.value == other
-        return NotImplemented
+        return super(CBORSimpleValue, self).__eq__(other)
 
     def __ne__(self, other):
-        if isinstance(other, CBORSimpleValue):
-            return self.value != other.value
-        elif isinstance(other, int):
+        if isinstance(other, int):
             return self.value != other
-        return NotImplemented
-
-    def __repr__(self):
-        return 'CBORSimpleValue(value={self.value})'.format(self=self)
+        return super(CBORSimpleValue, self).__ne__(other)
 
 
 class FrozenDict(Mapping):
