@@ -207,12 +207,14 @@ def test_simple_value(impl, simple_values):
 
 
 def test_simple_val_as_key(impl):
-    payload = { impl.CBORSimpleValue(99): 1 }
+    payload = {impl.CBORSimpleValue(99): 1}
     result = impl.dumps(payload)
     assert result == unhexlify('A1F86301')
+
 #
 # Tests for extension tags
 #
+
 
 @pytest.mark.parametrize('value, as_timestamp, expected', [
     (datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc), False,
