@@ -104,13 +104,14 @@ def test_embed_bytes(monkeypatch, tmpdir):
 
 
 @pytest.mark.skipif(
-    sys.version_info < (3, 6), reason="No ipaddress module and simple value is unhashable"
+    sys.version_info < (3, 3), reason="Requires CPython > 3.3"
 )
 def test_dtypes_from_file(monkeypatch, tmpdir):
     infile = 'tests/examples.cbor.b64'
+    expected = open('tests/examples.json', 'r').read()
     outfile = tmpdir.join('outfile.json')
-    argv = ['--sort-keys', '-d', '-o', str(outfile), infile]
+    argv = ['--sort-keys', '--pretty', '-d', '-o', str(outfile), infile]
     with monkeypatch.context() as m:
         m.setattr('sys.argv', [''] + argv)
         cbor2.tool.main()
-        assert outfile.read().startswith('{"bytes": [')
+        assert outfile.read() == expected
