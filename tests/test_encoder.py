@@ -206,6 +206,10 @@ def test_simple_value(impl, simple_values):
     assert impl.dumps(value) == expected
 
 
+def test_simple_val_as_key(impl):
+    payload = { impl.CBORSimpleValue(99): 1 }
+    result = impl.dumps(payload)
+    assert result == unhexlify('A1F86301')
 #
 # Tests for extension tags
 #

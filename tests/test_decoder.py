@@ -300,6 +300,10 @@ def test_simple_value(impl, simple_value):
     assert decoded == wrapped
 
 
+def test_simple_val_as_key(impl):
+    decoded = impl.loads(unhexlify('A1F86301'))
+    assert decoded == { impl.CBORSimpleValue(99): 1 }
+
 #
 # Tests for extension tags
 #
