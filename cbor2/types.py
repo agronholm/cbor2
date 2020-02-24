@@ -1,7 +1,7 @@
-from .compat import Mapping, recursive_repr
-from functools import total_ordering
 from collections import namedtuple
+from functools import total_ordering
 
+from .compat import Mapping, recursive_repr
 
 class CBORError(Exception):
     "Base class for errors that occur during CBOR encoding or decoding."
