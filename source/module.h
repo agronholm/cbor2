@@ -9,7 +9,7 @@
 typedef
     union {
         struct {
-#if __BIG_ENDIAN
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
             unsigned int major: 3;
             unsigned int subtype: 5;
 #else
