@@ -98,12 +98,24 @@ def test_simple_value_equals(impl):
     tag1 = impl.CBORSimpleValue(1)
     tag2 = impl.CBORSimpleValue(1)
     tag3 = impl.CBORSimpleValue(21)
+    tag4 = impl.CBORSimpleValue(99)
     assert tag1 == tag2
     assert tag1 == 1
     assert not tag2 == "21"
     assert tag1 != tag3
     assert tag1 != 21
     assert tag2 != "21"
+    assert tag4 > tag1
+    assert 99 <= tag4
+    assert 100 > tag4
+
+
+def test_simple_ordering(impl):
+    randints = [9, 7, 3, 8, 4, 0, 2, 5, 6, 1]
+    expected = [ impl.CBORSimpleValue(v) for v in range(10) ]
+    disordered = [ impl.CBORSimpleValue(v) for v in randints ]
+    assert expected == sorted(disordered)
+    assert expected == sorted(randints)
 
 
 def test_simple_value_too_big(impl):
