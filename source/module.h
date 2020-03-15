@@ -9,8 +9,13 @@
 typedef
     union {
         struct {
+#if __BIG_ENDIAN
+            unsigned int major: 3;
+            unsigned int subtype: 5;
+#else
             unsigned int subtype: 5;
             unsigned int major: 3;
+#endif
         };
         char byte;
     } LeadByte;
