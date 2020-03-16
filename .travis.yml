@@ -1,4 +1,4 @@
-dist: xenial
+dist: bionic
 language: python
 python: "3.6"
 
@@ -41,6 +41,11 @@ jobs:
     - stage: test
       env: TOXENV=py38
       python: "3.8"
+      
+    - stage: test
+      env: TOXENV=py38
+      python: "3.8"
+      arch: s390x
 
     - stage: deploy to pypi
       install: true
