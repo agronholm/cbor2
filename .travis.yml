@@ -20,7 +20,7 @@ jobs:
 
     - stage: test
       env: TOXENV=pypy3
-      python: pypy3.5-7.2.0
+      python: pypy3.6-7.2.0
 
     - stage: test
       env: TOXENV=py27
