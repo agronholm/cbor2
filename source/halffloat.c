@@ -1,3 +1,4 @@
+#include <Python.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <math.h>
@@ -448,8 +449,13 @@ float unpack_float16(uint16_t i) {
     // equivalent value (handling infinity and NaN cases accordingly)
     union {
         struct {
+#if PY_BIG_ENDIAN
+            unsigned int exp: 6; // yes, this includes the sign
+            unsigned int sig: 10;
+#else
             unsigned int sig: 10;
             unsigned int exp: 6; // yes, this includes the sign
+#endif
         };
         uint16_t value;
     } in;
@@ -470,8 +476,13 @@ uint16_t pack_float16(float f) {
     // NaN cases accordingly); overflow returns infinity, underflow returns 0.0
     union {
         struct {
+#if PY_BIG_ENDIAN
+            unsigned int exp: 9;
+            unsigned int sig: 23;
+#else
             unsigned int sig: 23;
             unsigned int exp: 9; // again, this includes the sign
+#endif
         };
         float f;
     } in;
