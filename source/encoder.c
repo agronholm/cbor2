@@ -120,13 +120,22 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
         "fp", "datetime_as_timestamp", "timezone", "value_sharing", "default",
         "canonical", "date_as_datetime", NULL
     };
-    PyObject *tmp, *fp = NULL, *default_handler = NULL, *tz = NULL,
-    *date_as_datetime = NULL;
+    PyObject *tmp, *fp = NULL, *default_handler = NULL, *tz = NULL;
+    int value_sharing = 0, timestamp_format = 0, enc_style = 0,
+	date_as_datetime = 0;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOpp", keywords,
-                &fp, &self->timestamp_format, &tz, &self->value_sharing,
-                &default_handler, &self->enc_style, &date_as_datetime))
+                &fp, &timestamp_format, &tz, &value_sharing,
+                &default_handler, &enc_style, &date_as_datetime))
         return -1;
+    // Predicate values are returned as ints, but need to be stored as bool or ubyte
+    if (timestamp_format == 1)
+	self->timestamp_format = true;
+    if (value_sharing == 1)
+	self->value_sharing = true;
+    if (enc_style == 1)
+	self->enc_style = 1;
+
 
     if (_CBOREncoder_set_fp(self, fp, NULL) == -1)
         return -1;
@@ -155,7 +164,7 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
                     _CBOR2_str_update, _CBOR2_canonical_encoders, NULL))
             return -1;
     }
-    if (date_as_datetime) {
+    if (date_as_datetime == 1) {
         PyObject *encode_date = PyObject_GetAttr((PyObject *) &CBOREncoderType, _CBOR2_str_encode_date);
         if (!encode_date)
             return -1;
@@ -996,7 +1005,8 @@ static PyObject *
 encode_decimal_digits(CBOREncoderObject *self, PyObject *value)
 {
     PyObject *tuple, *digits, *exp, *sig, *ten, *tmp, *ret = NULL;
-    bool sign, sharing;
+    int sign = 0;
+    bool sharing;
 
     tuple = PyObject_CallMethodObjArgs(value, _CBOR2_str_as_tuple, NULL);
     if (tuple) {
