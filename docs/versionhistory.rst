@@ -5,6 +5,14 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**5.1.0** (2020-03-18)
+
+- Minor API change :class:`CBORSimpleValue` is now a subclass of namedtuple and allows
+  all numeric comparisons. This brings functional parity between C and Python modules.
+- Fixes for C-module on big-endian systems including floating point decoding, smallint encoding,
+  and boolean argument handling. Tested on s390x and MIPS32.
+- Increase version requred of setuptools during install due to unicode errors.
+
 **5.0.1** (2020-01-21)
 
 - Fix deprecation warning on python 3.7, 3.8 (mariano54)
