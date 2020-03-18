@@ -117,8 +117,8 @@ def test_simple_value_equals(impl):
 
 def test_simple_ordering(impl):
     randints = [9, 7, 3, 8, 4, 0, 2, 5, 6, 1]
-    expected = [ impl.CBORSimpleValue(v) for v in range(10) ]
-    disordered = [ impl.CBORSimpleValue(v) for v in randints ]
+    expected = [impl.CBORSimpleValue(v) for v in range(10)]
+    disordered = [impl.CBORSimpleValue(v) for v in randints]
     assert expected == sorted(disordered)
     assert expected == sorted(randints)
 
