@@ -106,8 +106,13 @@ def test_simple_value_equals(impl):
     assert tag1 != 21
     assert tag2 != "21"
     assert tag4 > tag1
+    assert tag4 >= tag3
     assert 99 <= tag4
     assert 100 > tag4
+    assert tag4 <= 100
+    assert 2 < tag4
+    assert tag4 >= 99
+    assert tag1 <= tag4
 
 
 def test_simple_ordering(impl):
