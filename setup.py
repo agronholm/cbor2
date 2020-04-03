@@ -33,7 +33,8 @@ if cpython and ((min_unix_version and libc_ok) or min_win_version):
             'source/decoder.c',
             'source/tags.c',
             'source/halffloat.c',
-        ]
+        ],
+        optional=True
     )
     kwargs = {'ext_modules': [_cbor2]}
 else:
