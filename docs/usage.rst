@@ -49,7 +49,7 @@ disabled by default in the next version. The behaviour can be re-enabled as foll
     from datetime import date, timezone
 
     # Serialize dates as datetimes
-    encoded = dumps(date(2019, 10, 28), timezone=timezone.utc, date_as_datetime=True)
+    encoded = dumps(date(2019, 10, 28), timezone=timezone.utc, datetime_as_timestamp=True)
 
 A default timezone offset must be provided also.
 
