@@ -44,7 +44,7 @@ jobs:
         CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=10.14
         CIBW_BUILD_VERBOSITY_MACOS: 0
         CIBW_BEFORE_BUILD_WINDOWS: python -m pip install --upgrade pip && pip install pybind11
-        CIBW_TEST_REQUIRES: pytest
+        CIBW_TEST_REQUIRES: pytest pytest-cov
         CIBW_TEST_COMMAND: py.test -v {project}/tests
     - name: Upload artifacts
       uses: actions/upload-artifact@v1
