@@ -324,11 +324,62 @@ def test_datetime(impl, payload, expected):
     assert decoded == expected
 
 
+def test_datetime_secfrac(impl):
+    decoded = impl.loads(b'\xc0\x78\x162018-08-02T07:00:59.1Z')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100000, tzinfo=timezone.utc)
+    decoded = impl.loads(b'\xc0\x78\x172018-08-02T07:00:59.01Z')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 10000, tzinfo=timezone.utc)
+    decoded = impl.loads(b'\xc0\x78\x182018-08-02T07:00:59.001Z')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 1000, tzinfo=timezone.utc)
+    decoded = impl.loads(b'\xc0\x78\x192018-08-02T07:00:59.0001Z')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100, tzinfo=timezone.utc)
+    decoded = impl.loads(b'\xc0\x78\x1a2018-08-02T07:00:59.00001Z')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 10, tzinfo=timezone.utc)
+    decoded = impl.loads(b'\xc0\x78\x1b2018-08-02T07:00:59.000001Z')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 1, tzinfo=timezone.utc)
+    decoded = impl.loads(b'\xc0\x78\x1c2018-08-02T07:00:59.0000001Z')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 0, tzinfo=timezone.utc)
+
+
+def test_datetime_secfrac_naive_float_to_int_cast(impl):
+    # A secfrac that would have rounding errors if naively parsed as
+    # `int(float(secfrac) * 1000000)`.
+    decoded = impl.loads(b'\xc0\x78\x202018-08-02T07:00:59.000251+00:00')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 251, tzinfo=timezone.utc)
+
+
+def test_datetime_secfrac_overflow(impl):
+    decoded = impl.loads(b'\xc0\x78\x2c2018-08-02T07:00:59.100500999999999999+00:00')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100500, tzinfo=timezone.utc)
+    decoded = impl.loads(b'\xc0\x78\x2c2018-08-02T07:00:59.999999999999999999+00:00')
+    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 999999, tzinfo=timezone.utc)
+
+
+def test_datetime_secfrac_requires_digit(impl):
+    with pytest.raises(impl.CBORDecodeError) as excinfo:
+        impl.loads(b'\xc0\x78\x1a2018-08-02T07:00:59.+00:00')
+    assert isinstance(excinfo.value, ValueError)
+    if sys.version_info < (3,):
+        assert str(excinfo.value) == "invalid datetime string: u'2018-08-02T07:00:59.+00:00'"
+    else:
+        assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.+00:00'"
+    with pytest.raises(impl.CBORDecodeError) as excinfo:
+        impl.loads(b'\xc0\x78\x152018-08-02T07:00:59.Z')
+    assert isinstance(excinfo.value, ValueError)
+    if sys.version_info < (3,):
+        assert str(excinfo.value) == "invalid datetime string: u'2018-08-02T07:00:59.Z'"
+    else:
+        assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.Z'"
+
+
 def test_bad_datetime(impl):
-    with pytest.raises(impl.CBORDecodeError) as exc:
+    with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(unhexlify('c06b303030302d3132332d3031'))
-        assert str(exc.value).endswith("invalid datetime string: '0000-123-01'")
-        assert isinstance(exc, ValueError)
+    assert isinstance(excinfo.value, ValueError)
+    if sys.version_info < (3,):
+        assert str(excinfo.value) == "invalid datetime string: u'0000-123-01'"
+    else:
+        assert str(excinfo.value) == "invalid datetime string: '0000-123-01'"
 
 
 def test_fraction(impl):
