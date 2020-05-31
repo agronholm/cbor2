@@ -331,6 +331,17 @@ def test_bad_datetime(impl):
         assert isinstance(exc, ValueError)
 
 
+def test_positive_bignum(impl):
+    # Example from RFC 7049 section 3.4.3.
+    decoded = impl.loads(unhexlify('c249010000000000000000'))
+    assert decoded == 18446744073709551616
+
+
+def test_negative_bignum(impl):
+    decoded = impl.loads(unhexlify('c349010000000000000000'))
+    assert decoded == -18446744073709551617
+
+
 def test_fraction(impl):
     decoded = impl.loads(unhexlify('c48221196ab3'))
     assert decoded == Decimal('273.15')
