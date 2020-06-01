@@ -87,6 +87,13 @@ default_encoders = OrderedDict(
 default_encoders.update(extra_encoders)
 
 
+def tag_hook(decoder, tag):
+    if tag.tag == 24:
+        return decoder.decode_from_bytes(tag.value)
+    else:
+        return tag
+
+
 class DefEncoder(json.JSONEncoder):
     def default(self, v):
         obj_type = v.__class__
@@ -96,8 +103,8 @@ class DefEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, v)
 
 
-def iterdecode(f):
-    decoder = CBORDecoder(f)
+def iterdecode(f, *args, **kwargs):
+    decoder = CBORDecoder(f, *args, **kwargs)
     while True:
         try:
             yield decoder.decode()
@@ -210,9 +217,9 @@ def main():
                     infile = io.BytesIO(base64.b64decode(infile.read()))
                 try:
                     if sequence:
-                        objs = iterdecode(infile)
+                        objs = iterdecode(infile, tag_hook=tag_hook)
                     else:
-                        objs = (load(infile),)
+                        objs = (load(infile, tag_hook=tag_hook),)
                     for obj in objs:
                         json.dump(
                             key_to_str(obj),
