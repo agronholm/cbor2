@@ -921,17 +921,15 @@ parse_datestr(CBORDecoderObject *self, PyObject *str)
         H = strtoul(buf + 11, NULL, 10);
         M = strtoul(buf + 14, NULL, 10);
         S = strtoul(buf + 17, &p, 10);
+        uS = 0;
         if (*p == '.') {
-            uS = strtoul(buf + 20, &p, 10);
-            switch (p - (buf + 20)) {
-                case 1: uS *= 100000; break;
-                case 2: uS *= 10000; break;
-                case 3: uS *= 1000; break;
-                case 4: uS *= 100; break;
-                case 5: uS *= 10; break;
+            unsigned long int scale = 100000;
+            p++;
+            while (*p >= '0' && *p <= '9') {
+                uS += (*p++ - '0') * scale;
+                scale /= 10;
             }
-        } else
-            uS = 0;
+        }
         if (*p == 'Z') {
             offset_sign = false;
             Py_INCREF(_CBOR2_timezone_utc);

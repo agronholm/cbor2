@@ -10,7 +10,7 @@ from .types import (
     CBORSimpleValue, FrozenDict)
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
-                          r'(?:\.(\d+))?(?:Z|([+-]\d\d):(\d\d))$')
+                          r'(?:\.(\d{1,6})\d*)?(?:Z|([+-]\d\d):(\d\d))$')
 
 
 class CBORDecoder(object):
@@ -363,10 +363,15 @@ class CBORDecoder(object):
                 hour,
                 minute,
                 second,
-                micro,
+                secfrac,
                 offset_h,
                 offset_m,
             ) = match.groups()
+            if secfrac is None:
+                microsecond = 0
+            else:
+                microsecond = int('{:<06}'.format(secfrac))
+
             if offset_h:
                 tz = timezone(timedelta(hours=int(offset_h), minutes=int(offset_m)))
             else:
@@ -374,7 +379,7 @@ class CBORDecoder(object):
 
             return self.set_shareable(datetime(
                 int(year), int(month), int(day),
-                int(hour), int(minute), int(second), int(micro or 0), tz))
+                int(hour), int(minute), int(second), microsecond, tz))
         else:
             raise CBORDecodeValueError(
                 'invalid datetime string: {!r}'.format(value))

@@ -955,7 +955,7 @@ PyInit__cbor2(void)
             !(_CBOR2_str_datestr_re = PyUnicode_InternFromString(
                     "^(\\d{4})-(\\d\\d)-(\\d\\d)T"     // Y-m-d
                     "(\\d\\d):(\\d\\d):(\\d\\d)"       // H:M:S
-                    "(?:\\.(\\d+))?"                   // .uS
+                    "(?:\\.(\\d{1,6})\\d*)?"           // .uS
                     "(?:Z|([+-]\\d\\d):(\\d\\d))$")))  // +-TZ
         goto error;
     if (!_CBOR2_empty_bytes &&
