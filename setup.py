@@ -1,4 +1,5 @@
 import sys
+import os
 import platform
 from pkg_resources import parse_version
 from setuptools import setup, Extension
@@ -21,7 +22,7 @@ if libc_ok:
 else:
     gnu_flag = []
 
-if cpython and ((min_unix_version and libc_ok) or min_win_version):
+if cpython and ((min_unix_version and libc_ok) or min_win_version) and not os.environ.get('CBOR2_NO_EXT'):
     _cbor2 = Extension(
         '_cbor2',
         # math.h routines are built-in to MSVCRT
