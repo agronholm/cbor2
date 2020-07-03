@@ -5,6 +5,13 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**5.1.1** (2020-07-03)
+
+- Build system: Making C lib optional if it fails to compile (chiefnoah)
+- Build system: Better Glibc version detection (Sekenre and JayH5)
+- Tests: Positive and negative bignums (kalcutter)
+- Bugfix: Fractional seconds parsing in datetimes (kalcutter) 
+
 **5.1.0** (2020-03-18)
 
 - Minor API change :class:`CBORSimpleValue` is now a subclass of namedtuple and allows
