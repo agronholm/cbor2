@@ -94,6 +94,8 @@ def tag_hook(decoder, tag, ignore_tags=set()):
     if tag.tag == 24:
         return decoder.decode_from_bytes(tag.value)
     else:
+        if decoder.immutable:
+            return 'CBORtag:{}:{}'.format(tag.tag, tag.value)
         return tag
 
 
