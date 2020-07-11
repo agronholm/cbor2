@@ -115,3 +115,15 @@ def test_dtypes_from_file(monkeypatch, tmpdir):
         m.setattr('sys.argv', [''] + argv)
         cbor2.tool.main()
         assert outfile.read() == expected
+
+
+def test_ignore_tag(monkeypatch, tmpdir):
+    f = tmpdir.join('outfile')
+    argv = ['-o', str(f), '-i', '6000']
+    inbuf = TextIOWrapper(BytesIO(binascii.unhexlify('D917706548656C6C6F')))
+    expected = '"Hello"\n'
+    with monkeypatch.context() as m:
+        m.setattr('sys.argv', [''] + argv)
+        m.setattr('sys.stdin', inbuf)
+        cbor2.tool.main()
+        assert f.read() == expected

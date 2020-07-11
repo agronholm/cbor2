@@ -46,6 +46,7 @@ import fractions
 import uuid
 from datetime import datetime
 from collections import OrderedDict
+from functools import partial
 from . import load, CBORDecoder
 from .types import FrozenDict
 
@@ -87,7 +88,9 @@ default_encoders = OrderedDict(
 default_encoders.update(extra_encoders)
 
 
-def tag_hook(decoder, tag):
+def tag_hook(decoder, tag, ignore_tags=set()):
+    if tag.tag in ignore_tags:
+        return tag.value
     if tag.tag == 24:
         return decoder.decode_from_bytes(tag.value)
     else:
@@ -191,6 +194,12 @@ def main():
         default=False,
         help='CBOR data is base64 encoded (handy for stdin)',
     )
+    parser.add_argument(
+        '-i',
+        '--tag-ignore',
+        type=str,
+        help='Comma separated list of tags to ignore and only return the value',
+    )
     options = parser.parse_args()
 
     outfile = options.outfile
@@ -208,6 +217,12 @@ def main():
     else:
         opener = dict(mode='w', encoding='utf-8', errors='backslashescape')
         dumpargs = dict(ensure_ascii=False)
+    if options.tag_ignore:
+        ignore_s = options.tag_ignore.split(',')
+        droptags = set(int(n) for n in ignore_s if (len(n) and n[0].isdigit()))
+    else:
+        droptags = set()
+    my_hook = partial(tag_hook, ignore_tags=droptags)
     with io.open(outfile, **opener) as outfile:
         for infile in infiles:
             if hasattr(infile, 'buffer') and not decode:
@@ -217,9 +232,9 @@ def main():
                     infile = io.BytesIO(base64.b64decode(infile.read()))
                 try:
                     if sequence:
-                        objs = iterdecode(infile, tag_hook=tag_hook)
+                        objs = iterdecode(infile, tag_hook=my_hook)
                     else:
-                        objs = (load(infile, tag_hook=tag_hook),)
+                        objs = (load(infile, tag_hook=my_hook),)
                     for obj in objs:
                         json.dump(
                             key_to_str(obj),
