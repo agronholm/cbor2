@@ -58,6 +58,17 @@ def test_stdin(monkeypatch, tmpdir):
         assert f.read() == '2\n'
 
 
+def test_stdout(monkeypatch, tmpdir):
+    argv = ['-o', '-']
+    inbuf = TextIOWrapper(BytesIO(binascii.unhexlify('02')))
+    outbuf = BytesIO()
+    with monkeypatch.context() as m:
+        m.setattr('sys.argv', [''] + argv)
+        m.setattr('sys.stdin', inbuf)
+        m.setattr('sys.stdout', outbuf)
+        cbor2.tool.main()
+
+
 def test_readfrom(monkeypatch, tmpdir):
     f = tmpdir.join('infile')
     outfile = tmpdir.join('outfile')

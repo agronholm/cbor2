@@ -210,14 +210,15 @@ def main():
     sequence = options.sequence
     decode = options.decode
     infiles = options.infiles or [sys.stdin]
+    closefd = True
     if outfile == '-':
-        sys.stdout.close()
         outfile = 1
+        closefd = False
     if sys.version_info < (3, 3):
-        opener = dict(mode='wb')
+        opener = dict(mode='wb', closefd=closefd)
         dumpargs = dict(ensure_ascii=True, encoding='raw_unicode_escape')
     else:
-        opener = dict(mode='w', encoding='utf-8', errors='backslashescape')
+        opener = dict(mode='w', encoding='utf-8', errors='backslashescape', closefd=closefd)
         dumpargs = dict(ensure_ascii=False)
     if options.tag_ignore:
         ignore_s = options.tag_ignore.split(',')
