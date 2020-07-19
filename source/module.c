@@ -806,6 +806,7 @@ PyInit__cbor2(void)
             "_cbor2.CBORError", _cbor2_CBORError__doc__, NULL, NULL);
     if (!_CBOR2_CBORError)
         goto error;
+    Py_INCREF(_CBOR2_CBORError);
     if (PyModule_AddObject(module, "CBORError", _CBOR2_CBORError) == -1)
         goto error;
 
@@ -814,6 +815,7 @@ PyInit__cbor2(void)
             _CBOR2_CBORError, NULL);
     if (!_CBOR2_CBOREncodeError)
         goto error;
+    Py_INCREF(_CBOR2_CBOREncodeError);
     if (PyModule_AddObject(module, "CBOREncodeError", _CBOR2_CBOREncodeError) == -1)
         goto error;
 
@@ -824,6 +826,7 @@ PyInit__cbor2(void)
     Py_DECREF(base);
     if (!_CBOR2_CBOREncodeTypeError)
         goto error;
+    Py_INCREF(_CBOR2_CBOREncodeTypeError);
     if (PyModule_AddObject(module, "CBOREncodeTypeError", _CBOR2_CBOREncodeTypeError) == -1)
         goto error;
 
@@ -834,6 +837,7 @@ PyInit__cbor2(void)
     Py_DECREF(base);
     if (!_CBOR2_CBOREncodeValueError)
         goto error;
+    Py_INCREF(_CBOR2_CBOREncodeValueError);
     if (PyModule_AddObject(module, "CBOREncodeValueError", _CBOR2_CBOREncodeValueError) == -1)
         goto error;
 
@@ -842,6 +846,7 @@ PyInit__cbor2(void)
             _CBOR2_CBORError, NULL);
     if (!_CBOR2_CBORDecodeError)
         goto error;
+    Py_INCREF(_CBOR2_CBORDecodeError);
     if (PyModule_AddObject(module, "CBORDecodeError", _CBOR2_CBORDecodeError) == -1)
         goto error;
 
@@ -852,6 +857,7 @@ PyInit__cbor2(void)
     Py_DECREF(base);
     if (!_CBOR2_CBORDecodeValueError)
         goto error;
+    Py_INCREF(_CBOR2_CBORDecodeValueError);
     if (PyModule_AddObject(module, "CBORDecodeValueError", _CBOR2_CBORDecodeValueError) == -1)
         goto error;
 
@@ -862,6 +868,7 @@ PyInit__cbor2(void)
     Py_DECREF(base);
     if (!_CBOR2_CBORDecodeEOF)
         goto error;
+    Py_INCREF(_CBOR2_CBORDecodeEOF);
     if (PyModule_AddObject(module, "CBORDecodeEOF", _CBOR2_CBORDecodeEOF) == -1)
         goto error;
 
