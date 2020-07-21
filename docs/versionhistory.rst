@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+
+**5.1.2** (2020-07-21)
+
+- Bugfix: Refcount bug in C lib causing intermittent segfaults on shutdown (tdryer)
+
 **5.1.1** (2020-07-03)
 
 - Build system: Making C lib optional if it fails to compile (chiefnoah)
