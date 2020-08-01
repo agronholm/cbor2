@@ -19,3 +19,6 @@ wraps the ``_pickle`` C module in the Python Standard Library. On Windows, this 
 On PyPy, cbor2 runs with almost identical performance to the C backend.
 
 .. _RFC 7049: https://tools.ietf.org/html/rfc7049
+
+To force building of the optional C-extension, set OS env ``CBOR2_BUILD_C_EXTENSION=1``.
+To disable building of the optional C-extension, set OS env ``CBOR2_BUILD_C_EXTENSION=0``.
