@@ -9,7 +9,6 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
-        #os: [macos-latest, ubuntu-latest, windows-latest]
 
     steps:
     - uses: actions/checkout@v2
@@ -41,9 +40,8 @@ jobs:
         CIBW_BUILD_VERBOSITY_LINUX: 0
         CIBW_BUILD_VERBOSITY_MACOS: 0
         CIBW_BUILD_VERBOSITY_WINDOWS: 1
-        # we need boost
         CIBW_BEFORE_ALL_LINUX: >
-          yum -y install boost-devel
+          yum -y install python3-venv python3-pip
           && python -m pip install --upgrade pip
         CIBW_BEFORE_BUILD_LINUX: >
           python -m pip install --upgrade pip

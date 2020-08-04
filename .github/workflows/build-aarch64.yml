@@ -52,11 +52,7 @@ jobs:
         # build python 3.7 and 3.8
         CIBW_BUILD: cp37-* cp38-*
         CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
-        # we need boost
-        CIBW_BEFORE_ALL_LINUX: >
-          yum -y install epel-release
-          && yum -y install boost-devel
-          && uname -a
+        # CIBW_BEFORE_ALL_LINUX: >
         CIBW_BEFORE_BUILD_LINUX: >
           python -m pip install --upgrade pip
         CIBW_TEST_REQUIRES: pytest pytest-cov
