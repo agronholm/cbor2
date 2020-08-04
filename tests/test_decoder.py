@@ -501,10 +501,7 @@ def test_bad_shared_reference(impl):
 
 def test_uninitialized_shared_reference(impl):
     with pytest.raises(impl.CBORDecodeError) as exc:
-        # encode a set of a recursive array; the set forces the embedded array
-        # to be decoded as a recursive tuple which is impossible, and leads to
-        # the expected error
-        impl.loads(unhexlify('d90102d81c81d81d00'))
+        impl.loads(unhexlify('D81CA1D81D014161'))
         assert str(exc.value).endswith('shared value 0 has not been initialized')
         assert isinstance(exc, ValueError)
 
@@ -626,3 +623,18 @@ def test_set(impl):
 def test_immutable_keys(impl, payload, expected):
     value = impl.loads(unhexlify(payload))
     assert value == expected
+
+
+def test_huge_truncated_array(impl):
+    with pytest.raises(impl.CBORDecodeEOF):
+        impl.loads(unhexlify('9b37388519251ae9ca'))
+
+
+def test_huge_truncated_bytes(impl):
+    with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
+        impl.loads(unhexlify('5b37388519251ae9ca'))
+
+
+def test_huge_truncated_string(impl):
+    with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
+        impl.loads(unhexlify('7B37388519251ae9ca'))

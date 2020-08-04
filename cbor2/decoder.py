@@ -276,11 +276,11 @@ class CBORDecoder(object):
                 else:
                     items.append(value)
         else:
-            items = [None] * length
+            items = []
             if not self._immutable:
                 self.set_shareable(items)
             for index in range(length):
-                items[index] = self._decode()
+                items.append(self._decode())
 
         if self._immutable:
             items = tuple(items)
@@ -300,15 +300,6 @@ class CBORDecoder(object):
                     break
                 else:
                     dictionary[key] = self._decode(unshared=True)
-        elif self._share_index is None:
-            # Optimization: pre-allocate structures from length. Note this
-            # cannot be done when sharing the structure as the resulting
-            # structure is not the one initially allocated
-            seq = [None] * length
-            for index in range(length):
-                key = self._decode(immutable=True, unshared=True)
-                seq[index] = (key, self._decode(unshared=True))
-            dictionary = dict(seq)
         else:
             dictionary = {}
             self.set_shareable(dictionary)

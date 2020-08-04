@@ -344,7 +344,7 @@ fp_read(CBORDecoderObject *self, char *buf, const uint64_t size)
         obj = PyObject_CallFunctionObjArgs(self->read, size_obj, NULL);
         if (obj) {
             assert(PyBytes_CheckExact(obj));
-            if (PyBytes_GET_SIZE(obj) == size) {
+            if (PyBytes_GET_SIZE(obj) == (Py_ssize_t) size) {
                 data = PyBytes_AS_STRING(obj);
                 memcpy(buf, data, size);
                 ret = 0;
@@ -698,55 +698,94 @@ decode_indefinite_array(CBORDecoderObject *self)
 
 
 static PyObject *
-decode_definite_array(CBORDecoderObject *self, uint64_t length)
+decode_definite_array(CBORDecoderObject *self, Py_ssize_t length)
 {
     Py_ssize_t i;
     PyObject *array, *item, *ret = NULL;
 
-    if (length > PY_SSIZE_T_MAX) {
+    if (length > PY_SSIZE_T_MAX || length < 0) {
         PyErr_Format(
                 _CBOR2_CBORDecodeValueError,
                 "excessive array size %llu", length);
         return NULL;
-    }
-    if (self->immutable) {
-        array = PyTuple_New(length);
-        if (array) {
-            ret = array;
-            for (i = 0; i < (Py_ssize_t) length; ++i) {
-                item = decode(self, DECODE_UNSHARED);
-                if (item)
-                    PyTuple_SET_ITEM(array, i, item);
-                else {
-                    ret = NULL;
-                    break;
-                }
-            }
-        }
-        // This is done *after* the construction of the tuple because while
-        // it's valid for a tuple object to be shared, it's not valid for it to
-        // contain a reference to itself (because a reference to it can't exist
-        // during its own construction ... in Python at least; as can be seen
-        // above this *is* theoretically possible at the C level).
-        set_shareable(self, ret);
-    } else {
-        array = PyList_New(length);
+    } else if (length > 65536) {
+        // Let cPython manage allocation of huge lists by appending
+        // items one-by-one
+        array = PyList_New(0);
         if (array) {
             ret = array;
             set_shareable(self, array);
-            for (i = 0; i < (Py_ssize_t) length; ++i) {
+            for (i = 0; i < length; ++i) {
                 item = decode(self, DECODE_UNSHARED);
-                if (item)
-                    PyList_SET_ITEM(array, i, item);
-                else {
+                if (item) {
+                    if (PyList_Append(array, item) == -1) {
+                        ret = NULL;
+                        Py_DECREF(item);
+                        break;
+                    }
+                    Py_DECREF(item);
+                } else {
                     ret = NULL;
                     break;
                 }
             }
+            if (ret && self->immutable) {
+                ret = PyList_AsTuple(array);
+                if (ret) {
+                    Py_DECREF(array);
+                    // There's a potential here for an indefinite length recursive
+                    // array to wind up with a strange representation (the outer
+                    // being a tuple, the inners all being a list). However, a
+                    // recursive tuple isn't valid in the first place so it's a bit
+                    // of a waste of time searching for recursive references just
+                    // to throw an error
+                    set_shareable(self, ret);
+                } else
+                    ret = NULL;
+            }
+            if (!ret)
+                Py_DECREF(array);
         }
+    } else {
+        if (self->immutable) {
+            array = PyTuple_New(length);
+            if (array) {
+                ret = array;
+                for (i = 0; i < length; ++i) {
+                    item = decode(self, DECODE_UNSHARED);
+                    if (item)
+                        PyTuple_SET_ITEM(array, i, item);
+                    else {
+                        ret = NULL;
+                        break;
+                    }
+                }
+            }
+            // This is done *after* the construction of the tuple because while
+            // it's valid for a tuple object to be shared, it's not valid for it to
+            // contain a reference to itself (because a reference to it can't exist
+            // during its own construction ... in Python at least; as can be seen
+            // above this *is* theoretically possible at the C level).
+            set_shareable(self, ret);
+        } else {
+            array = PyList_New(length);
+            if (array) {
+                ret = array;
+                set_shareable(self, array);
+                for (i = 0; i < length; ++i) {
+                    item = decode(self, DECODE_UNSHARED);
+                    if (item)
+                        PyList_SET_ITEM(array, i, item);
+                    else {
+                        ret = NULL;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!ret)
+            Py_DECREF(array);
     }
-    if (!ret)
-        Py_DECREF(array);
     return ret;
 }
 
@@ -763,7 +802,7 @@ decode_array(CBORDecoderObject *self, uint8_t subtype)
     if (indefinite)
         return decode_indefinite_array(self);
     else
-        return decode_definite_array(self, length);
+        return decode_definite_array(self, (Py_ssize_t) length);
 }
 
 
