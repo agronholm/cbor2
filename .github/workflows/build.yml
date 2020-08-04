@@ -40,9 +40,7 @@ jobs:
         CIBW_BUILD_VERBOSITY_LINUX: 0
         CIBW_BUILD_VERBOSITY_MACOS: 0
         CIBW_BUILD_VERBOSITY_WINDOWS: 1
-        CIBW_BEFORE_ALL_LINUX: >
-          yum -y install python3-venv python3-pip
-          && python -m pip install --upgrade pip
+        # CIBW_BEFORE_ALL_LINUX: >
         CIBW_BEFORE_BUILD_LINUX: >
           python -m pip install --upgrade pip
         CIBW_BEFORE_BUILD_MACOS: >
