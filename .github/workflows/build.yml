@@ -26,11 +26,6 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install cibuildwheel==1.5.5
 
-    - name: Install Visual C++ for Python 2.7
-      if: startsWith(matrix.os, 'windows')
-      run: |
-        choco install vcpython27 -f -y
-
     - name: Build wheel
       run: |
         python -m cibuildwheel --output-dir dist
@@ -39,7 +34,7 @@ jobs:
         CIBW_BUILD: cp37-* cp38-*
         CIBW_BUILD_VERBOSITY_LINUX: 0
         CIBW_BUILD_VERBOSITY_MACOS: 0
-        CIBW_BUILD_VERBOSITY_WINDOWS: 1
+        CIBW_BUILD_VERBOSITY_WINDOWS: 0
         # CIBW_BEFORE_ALL_LINUX: >
         CIBW_BEFORE_BUILD_LINUX: >
           python -m pip install --upgrade pip
