@@ -1,0 +1,74 @@
+name: Build ARM64 wheel
+
+on: [push, pull_request]
+
+jobs:
+  build_wheels:
+    name: Build wheel on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ARM64]
+
+    steps:
+    - name: Cancel previous runs on the same branch
+      uses: styfle/cancel-workflow-action@0.4.0
+      with:
+        access_token: ${{ github.token }}
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        # we need fetch-depth 0 so setuptools_scm can resolve tags
+
+    - name: Test for secrets access
+      id: check_secrets
+      shell: bash
+      run: |
+        unset HAS_SECRET
+        if [ -n "$SECRET" ]; then HAS_SECRET='true' ; fi
+        echo ::set-output name=HAS_SECRET::${HAS_SECRET}
+      env:
+        SECRET: "${{ secrets.test_pypi_password }}"
+
+    - name: Prepare cibuildwheel
+      run: |
+        if [ ! -f "venv" ]; then rm -rf venv; fi
+        sudo apt-get install python3-venv python3-pip -y
+        python3 -m venv venv
+        source venv/bin/activate
+        python -m pip install --upgrade pip
+        pip install wheel
+        pip install cibuildwheel==1.5.5
+
+    - name: Build wheel and test
+      run: |
+        source venv/bin/activate
+        python -m cibuildwheel --output-dir dist
+      env:
+        CIBW_BUILD_VERBOSITY_LINUX: 0
+        # build python 3.7 and 3.8
+        CIBW_BUILD: cp37-* cp38-*
+        CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
+        # we need boost
+        CIBW_BEFORE_ALL_LINUX: >
+          yum -y install epel-release
+          && yum -y install boost-devel
+          && uname -a
+        CIBW_BEFORE_BUILD_LINUX: >
+          python -m pip install --upgrade pip
+        CIBW_TEST_REQUIRES: pytest pytest-cov
+        CIBW_TEST_COMMAND: py.test -v {project}/tests
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: wheels
+        path: ./dist
+
+    - name: Clean up
+      run: |
+        rm -rf venv
+        rm -rf dist

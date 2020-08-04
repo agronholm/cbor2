@@ -12,18 +12,20 @@ jobs:
         #os: [macos-latest, ubuntu-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
       with:
         fetch-depth: 0
         # we need fetch-depth 0 so setuptools_scm can resolve tags
-    - uses: actions/setup-python@v1
+
+    - uses: actions/setup-python@v2
       name: Install Python
       with:
         python-version: '3.7'
 
     - name: Install cibuildwheel
       run: |
-        python -m pip install cibuildwheel==1.3.0
+        python -m pip install --upgrade pip
+        python -m pip install cibuildwheel==1.5.5
 
     - name: Install Visual C++ for Python 2.7
       if: startsWith(matrix.os, 'windows')
@@ -34,36 +36,27 @@ jobs:
       run: |
         python -m cibuildwheel --output-dir dist
       env:
-        # build just python 3.7
+        # build python 3.7 and 3.8
         CIBW_BUILD: cp37-* cp38-*
-        # we need boost
-        # we need pybind11 to be globally available for cibuildwheel
-        CIBW_BEFORE_BUILD_LINUX: yum -y install boost-devel && python -m pip install --upgrade pip && pip install pybind11
-        # CIBW_BEFORE_BUILD_MACOS: brew install boost && python -m pip install --upgrade pip && pip install pybind11
-        CIBW_BEFORE_BUILD_MACOS: python -m pip install --upgrade pip && pip install pybind11
-        CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=10.14
+        CIBW_BUILD_VERBOSITY_LINUX: 0
         CIBW_BUILD_VERBOSITY_MACOS: 0
-        CIBW_BEFORE_BUILD_WINDOWS: python -m pip install --upgrade pip && pip install pybind11
+        CIBW_BUILD_VERBOSITY_WINDOWS: 1
+        # we need boost
+        CIBW_BEFORE_ALL_LINUX: >
+          yum -y install boost-devel
+          && python -m pip install --upgrade pip
+        CIBW_BEFORE_BUILD_LINUX: >
+          python -m pip install --upgrade pip
+        CIBW_BEFORE_BUILD_MACOS: >
+          python -m pip install --upgrade pip
+        CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=10.14
+        CIBW_BEFORE_BUILD_WINDOWS: >
+          python -m pip install --upgrade pip
         CIBW_TEST_REQUIRES: pytest pytest-cov
         CIBW_TEST_COMMAND: py.test -v {project}/tests
+
     - name: Upload artifacts
-      uses: actions/upload-artifact@v1
+      uses: actions/upload-artifact@v2
       with:
         name: wheels
         path: ./dist
-    - name: Install twine
-      run: pip install twine
-    #- name: Publish distribution to Test PyPI
-      #env:
-        #TWINE_REPOSITORY_URL: https://test.pypi.org/legacy/
-        #TWINE_USERNAME: __token__
-        #TWINE_NON_INTERACTIVE: 1
-        #TWINE_PASSWORD: ${{ secrets.test_pypi_password }}
-      #run: twine upload --non-interactive --skip-existing --verbose 'dist/*whl'
-    #- name: Publish distribution to PyPI
-      #if: startsWith(github.event.ref, 'refs/tags')
-      #env:
-        #TWINE_USERNAME: __token__
-        #TWINE_NON_INTERACTIVE: 1
-        #TWINE_PASSWORD: ${{ secrets.pypi_password }}
-      #run: twine upload --non-interactive --skip-existing --verbose 'dist/*whl'
