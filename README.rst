@@ -22,3 +22,5 @@ On PyPy, cbor2 runs with almost identical performance to the C backend.
 
 To force building of the optional C-extension, set OS env ``CBOR2_BUILD_C_EXTENSION=1``.
 To disable building of the optional C-extension, set OS env ``CBOR2_BUILD_C_EXTENSION=0``.
+If this environment variable is unset, setup.py will default to auto detecting a compatible C library and
+attempt to compile the extension.
