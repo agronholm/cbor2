@@ -435,7 +435,7 @@ class CBOREncoder(object):
                 try:
                     new_encoded = struct.pack(format, tag, value)
                     # Check if encoding as low-byte float loses precision
-                    if struct.unpack(format, new_encoded)[1] == value:
+                    if math.isclose(struct.unpack(format, new_encoded)[1], value, rel_tol=0.0000001):
                         encoded = new_encoded
                     else:
                         break
