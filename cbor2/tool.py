@@ -36,18 +36,18 @@ Multiple files can also be sent to a single output file::
 .. _jq: https://stedolan.github.io/jq/
 """
 import argparse
-import json
-import sys
 import base64
-import io
-import re
 import decimal
 import fractions
+import io
+import json
+import re
+import sys
 import uuid
-from datetime import datetime
 from collections import OrderedDict
+from datetime import datetime
 from functools import partial
-from . import load, CBORDecoder
+from . import CBORDecoder, load
 from .types import FrozenDict
 
 try:
@@ -58,34 +58,33 @@ except ImportError:
 try:
     import ipaddress
 
-    extra_encoders = OrderedDict(
+    default_encoders = OrderedDict(
         [
-            (ipaddress.IPv4Address, lambda x: str(x)),
-            (ipaddress.IPv6Address, lambda x: str(x)),
-            (ipaddress.IPv4Network, lambda x: str(x)),
-            (ipaddress.IPv6Network, lambda x: str(x)),
+            (ipaddress.IPv4Address, str),
+            (ipaddress.IPv6Address, str),
+            (ipaddress.IPv4Network, str),
+            (ipaddress.IPv6Network, str),
         ]
     )
 except ImportError:
-    extra_encoders = OrderedDict()
+    default_encoders = OrderedDict()
 
 
-default_encoders = OrderedDict(
+default_encoders.update(
     [
         (bytes, lambda x: x.decode(encoding='utf-8', errors='backslashreplace')),
-        (decimal.Decimal, lambda x: str(x)),
+        (decimal.Decimal, str),
         (FrozenDict, lambda x: str(dict(x))),
         (CBORSimpleValue, lambda x: 'cbor_simple:{:d}'.format(x.value)),
         (type(undefined), lambda x: 'cbor:undef'),
         (datetime, lambda x: x.isoformat()),
-        (fractions.Fraction, lambda x: str(x)),
+        (fractions.Fraction, str),
         (uuid.UUID, lambda x: x.urn),
         (CBORTag, lambda x: {'CBORTag:{:d}'.format(x.tag): x.value}),
-        (set, lambda x: list(x)),
+        (set, list),
         (re.compile('').__class__, lambda x: x.pattern),
     ]
 )
-default_encoders.update(extra_encoders)
 
 
 def tag_hook(decoder, tag, ignore_tags=set()):
@@ -99,7 +98,7 @@ def tag_hook(decoder, tag, ignore_tags=set()):
         return tag
 
 
-class DefEncoder(json.JSONEncoder):
+class DefaultEncoder(json.JSONEncoder):
     def default(self, v):
         obj_type = v.__class__
         encoder = default_encoders.get(obj_type)
@@ -210,22 +209,27 @@ def main():
     sequence = options.sequence
     decode = options.decode
     infiles = options.infiles or [sys.stdin]
+
     closefd = True
     if outfile == '-':
         outfile = 1
         closefd = False
+
     if sys.version_info < (3, 3):
         opener = dict(mode='wb', closefd=closefd)
         dumpargs = dict(ensure_ascii=True, encoding='raw_unicode_escape')
     else:
         opener = dict(mode='w', encoding='utf-8', errors='backslashescape', closefd=closefd)
         dumpargs = dict(ensure_ascii=False)
+
     if options.tag_ignore:
         ignore_s = options.tag_ignore.split(',')
         droptags = set(int(n) for n in ignore_s if (len(n) and n[0].isdigit()))
     else:
         droptags = set()
+
     my_hook = partial(tag_hook, ignore_tags=droptags)
+
     with io.open(outfile, **opener) as outfile:
         for infile in infiles:
             if hasattr(infile, 'buffer') and not decode:
@@ -244,7 +248,7 @@ def main():
                             outfile,
                             sort_keys=sort_keys,
                             indent=(None, 4)[pretty],
-                            cls=DefEncoder,
+                            cls=DefaultEncoder,
                             **dumpargs
                         )
                         outfile.write('\n')

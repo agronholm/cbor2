@@ -23,7 +23,7 @@ def test_key_to_str(value, expected):
 
 def test_default():
     with pytest.raises(TypeError):
-        json.dumps(BytesIO(b''), cls=cbor2.tool.DefEncoder)
+        json.dumps(BytesIO(b''), cls=cbor2.tool.DefaultEncoder)
 
 
 @pytest.mark.parametrize(
