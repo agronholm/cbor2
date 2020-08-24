@@ -1,6 +1,5 @@
 .. include:: ../README.rst
-   :start-line: 7
-   :end-before: Project links
+   :start-line: 11
 
 Table of contents
 -----------------
@@ -9,7 +8,6 @@ Table of contents
    :maxdepth: 2
 
    usage
-   tool
    customizing
    versionhistory
 
