@@ -1,10 +1,14 @@
 import sys
 import os
 import platform
+import warnings
 from pkg_resources import parse_version
 from setuptools import setup, Extension
 
 min_glibc = parse_version('2.9')
+
+if sys.version_info < (3, 6):
+    warnings.warn("Support for Python<3.6 will be dropped with cbor2 version 6.0.0")
 
 
 def check_libc():
