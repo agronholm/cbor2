@@ -41,6 +41,7 @@ Installation
 ============
 
 ::
+
     pip install cbor2
 
 Requirements
