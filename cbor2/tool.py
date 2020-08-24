@@ -47,13 +47,14 @@ import uuid
 from collections import OrderedDict
 from datetime import datetime
 from functools import partial
+
 from . import CBORDecoder, load
 from .types import FrozenDict
 
 try:
-    from _cbor2 import CBORTag, undefined, CBORSimpleValue
+    from _cbor2 import CBORSimpleValue, CBORTag, undefined
 except ImportError:
-    from .types import CBORTag, undefined, CBORSimpleValue
+    from .types import CBORSimpleValue, CBORTag, undefined
 
 try:
     import ipaddress
