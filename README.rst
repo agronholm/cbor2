@@ -27,10 +27,11 @@ Features
 * Support many `CBOR tags`_ with `stdlib objects`_.
 * Generic tag decoding.
 * `Shared value`_ references including cyclic references.
-* Optional C module backend.
+* Optional C module backend tested on big- and little-endian architectures.
 * Extensible `tagged value handling`_ using ``tag_hook`` and ``object_hook`` on decode and ``default`` on encode.
 * Command-line diagnostic tool, converting CBOR file or stream to JSON ``python -m cbor2.tool``
   (This is a lossy conversion, for diagnostics only)
+* Thorough test suite.
 
 .. _CBOR tags: https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
 .. _stdlib objects: https://cbor2.readthedocs.io/en/latest/usage.html#tag-support
@@ -70,7 +71,36 @@ Usage
 Command-line Usage
 ==================
 
-.. include:: cbor2/tool.py
-   :start-line: 8
-   :end-line: 20
-   :literal:
+``python -m cbor2.tool`` converts CBOR data in raw binary or base64 encoding into
+a representation that allows printing as JSON. This is a lossy transformation as
+each datatype is converted into something that can be represented as a JSON value.
+
+Usage::
+
+    # Pass hexadecimal through xxd.
+    $ echo a16568656c6c6f65776f726c64 | xxd -r -ps | python -m cbor2.tool --pretty
+    {
+        "hello": "world"
+    }
+    # Decode Base64 directly
+    $ echo ggEC | python -m cbor2.tool --decode
+    [1, 2]
+    # Read from a file encoded in Base64
+    $ python -m cbor2.tool -d tests/examples.cbor.b64
+    {...}
+
+It can be used in a pipeline with json processing tools like `jq`_ to allow syntax
+coloring, field extraction and more.
+
+CBOR data items concatenated into a sequence can be decoded also::
+
+    $ echo ggECggMEggUG | python -m cbor2.tool -d --sequence
+    [1, 2]
+    [3, 4]
+    [5, 6]
+
+Multiple files can also be sent to a single output file::
+
+    $ python -m cbor2.tool -o all_files.json file1.cbor file2.cbor ... fileN.cbor
+
+.. _jq: https://stedolan.github.io/jq/
