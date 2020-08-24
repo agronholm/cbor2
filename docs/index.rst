@@ -1,5 +1,5 @@
 .. include:: ../README.rst
-   :start-line: 11
+   :start-line: 10
 
 Table of contents
 -----------------
