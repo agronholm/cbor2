@@ -104,3 +104,9 @@ Multiple files can also be sent to a single output file::
     $ python -m cbor2.tool -o all_files.json file1.cbor file2.cbor ... fileN.cbor
 
 .. _jq: https://stedolan.github.io/jq/
+
+Security
+========
+
+This library has not been tested against malicious input. In theory it should be
+as safe as JSON, since unlike ``pickle`` the decoder does not execute any code.
