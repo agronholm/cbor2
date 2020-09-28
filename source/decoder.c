@@ -61,6 +61,7 @@ static PyObject * CBORDecoder_decode_float32(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_float64(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_ipaddress(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_ipnetwork(CBORDecoderObject *);
+static PyObject * CBORDecoder_decode_self_describe_cbor(CBORDecoderObject *);
 
 static PyObject * CBORDecoder_decode_shareable(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_sharedref(CBORDecoderObject *);
@@ -890,21 +891,24 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
 
     if (decode_length(self, subtype, &tagnum, NULL) == 0) {
         switch (tagnum) {
-            case 0:   ret = CBORDecoder_decode_datetime_string(self); break;
-            case 1:   ret = CBORDecoder_decode_epoch_datetime(self);  break;
-            case 2:   ret = CBORDecoder_decode_positive_bignum(self); break;
-            case 3:   ret = CBORDecoder_decode_negative_bignum(self); break;
-            case 4:   ret = CBORDecoder_decode_fraction(self);        break;
-            case 5:   ret = CBORDecoder_decode_bigfloat(self);        break;
-            case 28:  ret = CBORDecoder_decode_shareable(self);       break;
-            case 29:  ret = CBORDecoder_decode_sharedref(self);       break;
-            case 30:  ret = CBORDecoder_decode_rational(self);        break;
-            case 35:  ret = CBORDecoder_decode_regexp(self);          break;
-            case 36:  ret = CBORDecoder_decode_mime(self);            break;
-            case 37:  ret = CBORDecoder_decode_uuid(self);            break;
-            case 258: ret = CBORDecoder_decode_set(self);             break;
-            case 260: ret = CBORDecoder_decode_ipaddress(self);       break;
-            case 261: ret = CBORDecoder_decode_ipnetwork(self);       break;
+            case 0:     ret = CBORDecoder_decode_datetime_string(self); break;
+            case 1:     ret = CBORDecoder_decode_epoch_datetime(self);  break;
+            case 2:     ret = CBORDecoder_decode_positive_bignum(self); break;
+            case 3:     ret = CBORDecoder_decode_negative_bignum(self); break;
+            case 4:     ret = CBORDecoder_decode_fraction(self);        break;
+            case 5:     ret = CBORDecoder_decode_bigfloat(self);        break;
+            case 28:    ret = CBORDecoder_decode_shareable(self);       break;
+            case 29:    ret = CBORDecoder_decode_sharedref(self);       break;
+            case 30:    ret = CBORDecoder_decode_rational(self);        break;
+            case 35:    ret = CBORDecoder_decode_regexp(self);          break;
+            case 36:    ret = CBORDecoder_decode_mime(self);            break;
+            case 37:    ret = CBORDecoder_decode_uuid(self);            break;
+            case 258:   ret = CBORDecoder_decode_set(self);             break;
+            case 260:   ret = CBORDecoder_decode_ipaddress(self);       break;
+            case 261:   ret = CBORDecoder_decode_ipnetwork(self);       break;
+            case 55799: ret = CBORDecoder_decode_self_describe_cbor(self);
+                break;
+
             default:
                 tag = CBORTag_New(tagnum);
                 if (tag) {
@@ -1437,6 +1441,15 @@ CBORDecoder_decode_ipnetwork(CBORDecoderObject *self)
     return ret;
 }
 
+
+// CBORDecoder.decode_self_describe_cbor(self)
+static PyObject *
+CBORDecoder_decode_self_describe_cbor(CBORDecoderObject *self)
+{
+    // semantic tag 55799
+    return decode(self, DECODE_NORMAL);
+}
+
 
 // Special decoders //////////////////////////////////////////////////////////
 
@@ -1729,6 +1742,10 @@ static PyMethodDef CBORDecoder_methods[] = {
         "decode a set or frozenset from the input"},
     {"decode_ipaddress", (PyCFunction) CBORDecoder_decode_ipaddress, METH_NOARGS,
         "decode an IPv4Address or IPv6Address from the input"},
+    {"decode_ipnetwork", (PyCFunction) CBORDecoder_decode_ipnetwork, METH_NOARGS,
+        "decode an IPv4Network or IPv6Network from the input"},
+    {"decode_self_describe_cbor", (PyCFunction) CBORDecoder_decode_self_describe_cbor, METH_NOARGS,
+        "decode a data item after a self-describe CBOR tag"},
     {"decode_simple_value",
         (PyCFunction) CBORDecoder_decode_simple_value, METH_NOARGS,
         "decode a CBORSimpleValue from the input"},
