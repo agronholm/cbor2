@@ -9,12 +9,8 @@ from decimal import Decimal
 from email.message import Message
 from fractions import Fraction
 from io import BytesIO
+from ipaddress import ip_address, ip_network
 from uuid import UUID
-try:
-    from ipaddress import ip_address, ip_network
-except ImportError:
-    def ip_address(x): pass
-    def ip_network(x, strict): pass
 
 import pytest
 
@@ -430,8 +426,8 @@ def test_uuid(impl):
 
 @pytest.mark.skipif(sys.version_info < (3, 3), reason="Address decoding requires Py3.3+")
 @pytest.mark.parametrize('payload, expected', [
-    ('d9010444c00a0a01', ip_address('192.10.10.1')),
-    ('d901045020010db885a3000000008a2e03707334', ip_address('2001:db8:85a3::8a2e:370:7334')),
+    ('d9010444c00a0a01', ip_address(u'192.10.10.1')),
+    ('d901045020010db885a3000000008a2e03707334', ip_address(u'2001:db8:85a3::8a2e:370:7334')),
     ('d9010446010203040506', (260, b'\x01\x02\x03\x04\x05\x06')),
 ], ids=[
     'ipv4',
@@ -461,7 +457,7 @@ def test_bad_ipaddress(impl):
 @pytest.mark.parametrize('payload, expected', [
     ('d90105a144c0a800641818', ip_network('192.168.0.100/24', False)),
     ('d90105a15020010db885a3000000008a2e000000001860',
-     ip_network('2001:db8:85a3:0:0:8a2e::/96', False)),
+     ip_network(u'2001:db8:85a3:0:0:8a2e::/96', False)),
 ], ids=[
     'ipv4',
     'ipv6',
