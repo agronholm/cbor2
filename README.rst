@@ -11,7 +11,7 @@
 About
 =====
 
-.. warning:: This project will be ending it's support of Python 3.5 and lower with release 6.0.0.
+.. warning:: This project will be ending it's support of Python 3.5 and lower with release 6.0.0. Version 5.2 is the last version tested on Python 2.7
 
 This library provides encoding and decoding for the Concise Binary Object Representation (CBOR)
 (`RFC 7049`_) serialization format. `Read the docs <https://cbor2.readthedocs.io/>`_ to learn more.
