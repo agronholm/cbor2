@@ -51,7 +51,7 @@ jobs:
         path: ~/.cache/pip
         key: pip-test-${{ matrix.python-version }}-${{ matrix.os }}
     - name: Install dependencies
-      run: pip install .[test] coveralls
+      run: pip install -e .[test] coveralls
     - name: Test with pytest
       run: coverage run -m pytest
     - name: Upload Coverage
@@ -65,11 +65,14 @@ jobs:
     name: Finish Coveralls
     needs: test
     runs-on: ubuntu-latest
-    container: python:3-slim
     steps:
-    - name: Finished
-      run: |
-        pip install coveralls
-        coveralls --finish
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+    - name: Install dependencies
+      run: pip install coveralls
+    - name: Notify Coveralls
+      run: coveralls --finish
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
