@@ -53,7 +53,7 @@ jobs:
     - name: Install dependencies
       run: pip install -e .[test] coveralls
     - name: Test with pytest
-      run: coverage run -m pytest
+      run: pytest
     - name: Upload Coverage
       run: coveralls
       env:
