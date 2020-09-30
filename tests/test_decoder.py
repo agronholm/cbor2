@@ -1,10 +1,7 @@
-from __future__ import division
-
 import math
 import re
-import sys
 from binascii import unhexlify
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from email.message import Message
 from fractions import Fraction
@@ -14,7 +11,6 @@ from uuid import UUID
 
 import pytest
 
-from cbor2.compat import timezone
 from cbor2.types import FrozenDict
 
 
@@ -355,27 +351,19 @@ def test_datetime_secfrac_requires_digit(impl):
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(b'\xc0\x78\x1a2018-08-02T07:00:59.+00:00')
     assert isinstance(excinfo.value, ValueError)
-    if sys.version_info < (3,):
-        assert str(excinfo.value) == "invalid datetime string: u'2018-08-02T07:00:59.+00:00'"
-    else:
-        assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.+00:00'"
+    assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.+00:00'"
+
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(b'\xc0\x78\x152018-08-02T07:00:59.Z')
     assert isinstance(excinfo.value, ValueError)
-    if sys.version_info < (3,):
-        assert str(excinfo.value) == "invalid datetime string: u'2018-08-02T07:00:59.Z'"
-    else:
-        assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.Z'"
+    assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.Z'"
 
 
 def test_bad_datetime(impl):
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(unhexlify('c06b303030302d3132332d3031'))
     assert isinstance(excinfo.value, ValueError)
-    if sys.version_info < (3,):
-        assert str(excinfo.value) == "invalid datetime string: u'0000-123-01'"
-    else:
-        assert str(excinfo.value) == "invalid datetime string: '0000-123-01'"
+    assert str(excinfo.value) == "invalid datetime string: '0000-123-01'"
 
 
 def test_positive_bignum(impl):
@@ -424,7 +412,6 @@ def test_uuid(impl):
     assert decoded == UUID(hex='5eaffac8b51e480581277fdcc7842faf')
 
 
-@pytest.mark.skipif(sys.version_info < (3, 3), reason="Address decoding requires Py3.3+")
 @pytest.mark.parametrize('payload, expected', [
     ('d9010444c00a0a01', ip_address(u'192.10.10.1')),
     ('d901045020010db885a3000000008a2e03707334', ip_address(u'2001:db8:85a3::8a2e:370:7334')),
@@ -441,7 +428,6 @@ def test_ipaddress(impl, payload, expected):
     assert impl.loads(payload) == expected
 
 
-@pytest.mark.skipif(sys.version_info < (3, 3), reason="Address decoding requires Py3.3+")
 def test_bad_ipaddress(impl):
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify('d9010443c00a0a'))
@@ -453,7 +439,6 @@ def test_bad_ipaddress(impl):
         assert isinstance(exc, ValueError)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 5), reason="Network decoding requires Py3.5+")
 @pytest.mark.parametrize('payload, expected', [
     ('d90105a144c0a800641818', ip_network('192.168.0.100/24', False)),
     ('d90105a15020010db885a3000000008a2e000000001860',
@@ -466,13 +451,10 @@ def test_ipnetwork(impl, payload, expected):
     # XXX The following pytest.skip is only included to work-around a bug in
     # pytest under python 3.3 (which prevents the decorator above from skipping
     # correctly); remove when 3.3 support is dropped
-    if sys.version_info < (3, 5):
-        pytest.skip("Network decoding requires Py3.5+")
     payload = unhexlify(payload)
     assert impl.loads(payload) == expected
 
 
-@pytest.mark.skipif(sys.version_info < (3, 5), reason="Network decoding requires Py3.5+")
 def test_bad_ipnetwork(impl):
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify('d90105a244c0a80064181844c0a800001818'))
@@ -589,7 +571,6 @@ def test_load_from_file(impl, tmpdir):
     assert obj == [1, 10]
 
 
-@pytest.mark.skipif(sys.version_info < (3, 0), reason="No exception with python 2.7")
 def test_nested_exception(impl):
     with pytest.raises((impl.CBORDecodeError, TypeError)) as exc:
         impl.loads(unhexlify('A1D9177082010201'))

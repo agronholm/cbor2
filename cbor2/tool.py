@@ -4,6 +4,7 @@ import base64
 import decimal
 import fractions
 import io
+import ipaddress
 import json
 import re
 import sys
@@ -20,22 +21,8 @@ try:
 except ImportError:
     from .types import CBORSimpleValue, CBORTag, undefined
 
-try:
-    import ipaddress
 
-    default_encoders = OrderedDict(
-        [
-            (ipaddress.IPv4Address, str),
-            (ipaddress.IPv6Address, str),
-            (ipaddress.IPv4Network, str),
-            (ipaddress.IPv6Network, str),
-        ]
-    )
-except ImportError:
-    default_encoders = OrderedDict()
-
-
-default_encoders.update(
+default_encoders = OrderedDict(
     [
         (bytes, lambda x: x.decode(encoding='utf-8', errors='backslashreplace')),
         (decimal.Decimal, str),
@@ -48,6 +35,10 @@ default_encoders.update(
         (CBORTag, lambda x: {'CBORTag:{:d}'.format(x.tag): x.value}),
         (set, list),
         (re.compile('').__class__, lambda x: x.pattern),
+        (ipaddress.IPv4Address, str),
+        (ipaddress.IPv6Address, str),
+        (ipaddress.IPv4Network, str),
+        (ipaddress.IPv6Network, str)
     ]
 )
 
@@ -180,12 +171,8 @@ def main():
         outfile = 1
         closefd = False
 
-    if sys.version_info < (3, 3):
-        opener = dict(mode='wb', closefd=closefd)
-        dumpargs = dict(ensure_ascii=True, encoding='raw_unicode_escape')
-    else:
-        opener = dict(mode='w', encoding='utf-8', errors='backslashescape', closefd=closefd)
-        dumpargs = dict(ensure_ascii=False)
+    opener = dict(mode='w', encoding='utf-8', errors='backslashescape', closefd=closefd)
+    dumpargs = dict(ensure_ascii=False)
 
     if options.tag_ignore:
         ignore_s = options.tag_ignore.split(',')

@@ -1,7 +1,7 @@
 from collections import namedtuple
+from collections.abc import Mapping
 from functools import total_ordering
-
-from .compat import Mapping, recursive_repr
+from reprlib import recursive_repr
 
 
 class CBORError(Exception):
@@ -33,7 +33,7 @@ class CBORDecodeEOF(CBORDecodeError, EOFError):
 
 
 @total_ordering
-class CBORTag(object):
+class CBORTag:
     """
     Represents a CBOR semantic tag.
 
@@ -139,7 +139,7 @@ class FrozenDict(Mapping):
         return self._hash
 
 
-class UndefinedType(object):
+class UndefinedType:
     __slots__ = ()
 
     def __new__(cls):
@@ -156,7 +156,7 @@ class UndefinedType(object):
     __nonzero__ = __bool__  # Py2.7 compat
 
 
-class BreakMarkerType(object):
+class BreakMarkerType:
     __slots__ = ()
 
     def __new__(cls):

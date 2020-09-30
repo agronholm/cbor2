@@ -1,9 +1,8 @@
 import re
-import sys
 from io import BytesIO
 from binascii import unhexlify
 from collections import OrderedDict
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from decimal import Decimal
 from email.mime.text import MIMEText
 from fractions import Fraction
@@ -13,7 +12,6 @@ from uuid import UUID
 import pytest
 
 from cbor2 import shareable_encoder
-from cbor2.compat import timezone, pack_float16
 from cbor2.types import FrozenDict
 
 
@@ -296,7 +294,6 @@ def test_uuid(impl):
     assert impl.dumps(UUID(hex='5eaffac8b51e480581277fdcc7842faf')) == expected
 
 
-@pytest.mark.skipif(sys.version_info < (3, 3), reason="Address encoding requires Py3.3+")
 @pytest.mark.parametrize('value, expected', [
     (ip_address(u'192.10.10.1'), 'd9010444c00a0a01'),
     (ip_address(u'2001:db8:85a3::8a2e:370:7334'), 'd901045020010db885a3000000008a2e03707334'),
@@ -309,7 +306,6 @@ def test_ipaddress(impl, value, expected):
     assert impl.dumps(value) == expected
 
 
-@pytest.mark.skipif(sys.version_info < (3, 3), reason="Network encoding requires Py3.3+")
 @pytest.mark.parametrize('value, expected', [
     (ip_network(u'192.168.0.100/24', False), 'd90105a144c0a800001818'),
     (ip_network(u'2001:db8:85a3:0:0:8a2e::/96', False),
@@ -485,23 +481,3 @@ def test_canonical_set(impl, frozen):
 
     serialized = impl.dumps(value, canonical=True)
     assert serialized == unhexlify('d9010284616161786179626161')
-
-
-@pytest.mark.skipif(sys.version_info >= (3, 6), reason="Using native struct.pack")
-@pytest.mark.parametrize('value, expected', [
-    (3.5, 'F94300'),
-    (100000.0,  False),
-    (3.8, False),
-    (float.fromhex('0x1.0p-24'), 'f90001'),
-    (float.fromhex('0x1.4p-24'), False),
-    (float.fromhex('0x1.ff8p-63'), False),
-    (1e300, False)
-], ids=['float 16', 'float 32', 'float 64',
-        'float 16 minimum positive subnormal', 'mantissa o/f to 32',
-        'exponent o/f to 32', 'oversize float'])
-def test_float16_encoder(value, expected):
-    if expected:
-        expected = unhexlify(expected)
-        assert pack_float16(value) == expected
-    else:
-        assert not pack_float16(value)

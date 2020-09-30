@@ -10,9 +10,6 @@ from datetime import datetime, date, time, tzinfo
 from io import BytesIO
 from sys import modules
 
-from .compat import (
-    iteritems, long, int2bytes, unicode, as_unicode, pack_float16,
-    unpack_float16)
 from .types import (
     CBOREncodeTypeError, CBOREncodeValueError, CBORTag, undefined,
     CBORSimpleValue, FrozenDict)
@@ -36,7 +33,7 @@ def shareable_encoder(func):
     return wrapper
 
 
-class CBOREncoder(object):
+class CBOREncoder:
     """
     The CBOREncoder class implements a fully featured `CBOR`_ encoder with
     several extensions for handling shared references, big integers, rational
@@ -95,7 +92,7 @@ class CBOREncoder(object):
             self._encoders[date] = CBOREncoder.encode_date
 
     def _find_encoder(self, obj_type):
-        for type_, enc in list(iteritems(self._encoders)):
+        for type_, enc in list(self._encoders.items()):
             if type(type_) is tuple:
                 try:
                     modname, typename = type_
@@ -263,7 +260,7 @@ class CBOREncoder(object):
                 major_type = 0x03
                 value = -value - 1
 
-            payload = int2bytes(value)
+            payload = value.to_bytes((value.bit_length() + 7) // 8, 'big')
             self.encode_semantic(CBORTag(major_type, payload))
         elif value >= 0:
             self.encode_length(0, value)
@@ -342,7 +339,7 @@ class CBOREncoder(object):
                 timestamp = timegm(value.utctimetuple()) + value.microsecond / 1000000
             self.encode_semantic(CBORTag(1, timestamp))
         else:
-            datestring = as_unicode(value.isoformat().replace('+00:00', 'Z'))
+            datestring = value.isoformat().replace('+00:00', 'Z')
             self.encode_semantic(CBORTag(0, datestring))
 
     def encode_date(self, value):
@@ -372,11 +369,11 @@ class CBOREncoder(object):
 
     def encode_regexp(self, value):
         # Semantic tag 35
-        self.encode_semantic(CBORTag(35, as_unicode(value.pattern)))
+        self.encode_semantic(CBORTag(35, str(value.pattern)))
 
     def encode_mime(self, value):
         # Semantic tag 36
-        self.encode_semantic(CBORTag(36, as_unicode(value.as_string())))
+        self.encode_semantic(CBORTag(36, value.as_string()))
 
     def encode_uuid(self, value):
         # Semantic tag 37
@@ -439,15 +436,9 @@ class CBOREncoder(object):
                         encoded = new_encoded
                     else:
                         break
-                except struct.error:
-                    # Catch the case where the 'e' format is not supported
-                    new_encoded = pack_float16(value)
-                    if new_encoded and unpack_float16(new_encoded[1:]) == value:
-                        encoded = new_encoded
-                    else:
-                        break
                 except OverflowError:
                     break
+
             self._fp_write(encoded)
 
     def encode_boolean(self, value):
@@ -463,9 +454,8 @@ class CBOREncoder(object):
 default_encoders = OrderedDict([
     (bytes,                         CBOREncoder.encode_bytestring),
     (bytearray,                     CBOREncoder.encode_bytearray),
-    (unicode,                       CBOREncoder.encode_string),
+    (str,                           CBOREncoder.encode_string),
     (int,                           CBOREncoder.encode_int),
-    (long,                          CBOREncoder.encode_int),
     (float,                         CBOREncoder.encode_float),
     (('decimal', 'Decimal'),        CBOREncoder.encode_decimal),
     (bool,                          CBOREncoder.encode_boolean),

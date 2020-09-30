@@ -1,10 +1,9 @@
 import re
 import struct
-from .compat import Mapping
-from datetime import datetime, timedelta
+from collections.abc import Mapping
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
-from .compat import timezone, range, byte_as_integer, unpack_float16
 from .types import (
     CBORDecodeValueError, CBORDecodeEOF, CBORTag, undefined, break_marker,
     CBORSimpleValue, FrozenDict)
@@ -13,7 +12,7 @@ timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d{1,6})\d*)?(?:Z|([+-]\d\d):(\d\d))$')
 
 
-class CBORDecoder(object):
+class CBORDecoder:
     """
     The CBORDecoder class implements a fully featured `CBOR`_ decoder with
     several extensions for handling shared references, big integers, rational
@@ -144,7 +143,7 @@ class CBORDecoder(object):
             old_index = self._share_index
             self._share_index = None
         try:
-            initial_byte = byte_as_integer(self.read(1))
+            initial_byte = self.read(1)[0]
             major_type = initial_byte >> 5
             subtype = initial_byte & 31
             decoder = major_decoders[major_type]
@@ -183,7 +182,7 @@ class CBORDecoder(object):
         if subtype < 24:
             return subtype
         elif subtype == 24:
-            return byte_as_integer(self.read(1))
+            return self.read(1)[0]
         elif subtype == 25:
             return struct.unpack('>H', self.read(2))[0]
         elif subtype == 26:
@@ -211,7 +210,7 @@ class CBORDecoder(object):
             # Indefinite length
             buf = []
             while True:
-                initial_byte = byte_as_integer(self.read(1))
+                initial_byte = self.read(1)[0]
                 if initial_byte == 0xff:
                     result = b''.join(buf)
                     break
@@ -246,7 +245,7 @@ class CBORDecoder(object):
             # that would happily ignore UTF-8 characters split across chunks.
             buf = []
             while True:
-                initial_byte = byte_as_integer(self.read(1))
+                initial_byte = self.read(1)[0]
                 if initial_byte == 0xff:
                     result = ''.join(buf)
                     break
@@ -482,14 +481,11 @@ class CBORDecoder(object):
 
     def decode_simple_value(self):
         # XXX Set shareable?
-        return CBORSimpleValue(byte_as_integer(self.read(1)))
+        return CBORSimpleValue(self.read(1)[0])
 
     def decode_float16(self):
         payload = self.read(2)
-        try:
-            value = struct.unpack('>e', payload)[0]
-        except struct.error:
-            value = unpack_float16(payload)
+        value = struct.unpack('>e', payload)[0]
         return self.set_shareable(value)
 
     def decode_float32(self):
