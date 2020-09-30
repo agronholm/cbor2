@@ -28,7 +28,6 @@ class Module(object):
 @pytest.fixture(params=[pytest.param("c", marks=cpython), "python"], scope="session")
 def impl(request):
     if request.param == "c":
-        from pdb import set_trace; set_trace()
         return _cbor2
     else:
         # Make a mock module of cbor2 which always contains the pure Python
