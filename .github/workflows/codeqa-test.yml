@@ -23,24 +23,6 @@ jobs:
     - name: Run flake8
       run: flake8 cbor2 tests
 
-  test-py27:
-    needs: [lint]
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python 2.7
-      uses: actions/setup-python@v2
-      with:
-        python-version: 2.7
-    - uses: actions/cache@v2
-      with:
-        path: ~/.cache/pip
-        key: pip-test-2.7-ubuntu-latest
-    - name: Install dependencies
-      run: pip install -e .[test]
-    - name: Test with pytest
-      run: pytest
-
   test:
     needs: [lint]
     strategy:
