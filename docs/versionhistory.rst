@@ -5,13 +5,15 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**5.2.0-rc1** (Unreleased)
+**5.2.0** (2020-09-30)
 
+- Final version tested with Python 2.7 and 3.5
 - README: Announce deprecation of Python 2.7, 3.5
 - README: More detail and examples
 - Bugfix: Fix segfault on loading huge arrays with C-backend (Sekenre)
 - Build system: Allow packagers to force C-backend building or disable using env var (jameshilliard)
-- Feature: :module:`cbor2.tool` Command line diagnostic tool
+- Feature: :module:`cbor2.tool` Command line diagnostic tool (Sekenre)
+- Feature: Ignore semantic tag used for file magic 55799 AKA "Self-Described CBOR" (kalcutter)
 
 **5.1.2** (2020-07-21)
 

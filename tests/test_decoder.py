@@ -506,6 +506,14 @@ def test_cyclic_map(impl):
     assert decoded == {0: decoded}
 
 
+@pytest.mark.parametrize('payload, expected', [
+    ('d9d9f71903e8', 1000),
+    ('d9d9f7c249010000000000000000', 18446744073709551616),
+], ids=['self_describe_cbor+int', 'self_describe_cbor+positive_bignum'])
+def test_self_describe_cbor(impl, payload, expected):
+    assert impl.loads(unhexlify(payload)) == expected
+
+
 def test_unhandled_tag(impl):
     """
     Test that a tag is simply ignored and its associated value returned if there is no special

@@ -66,28 +66,38 @@ Tag support
 
 In addition to all standard CBOR tags, this library supports many extended tags:
 
-=== ======================================== ====================================================
-Tag Semantics                                Python type(s)
-=== ======================================== ====================================================
-0   Standard date/time string                datetime.date / datetime.datetime
-1   Epoch-based date/time                    datetime.date / datetime.datetime
-2   Positive bignum                          int / long
-3   Negative bignum                          int / long
-4   Decimal fraction                         decimal.Decimal
-5   Bigfloat                                 decimal.Decimal
-28  Mark shared value                        N/A
-29  Reference shared value                   N/A
-30  Rational number                          fractions.Fraction
-35  Regular expression                       ``_sre.SRE_Pattern`` (result of ``re.compile(...)``)
-36  MIME message                             email.message.Message
-37  Binary UUID                              uuid.UUID
-258 Set of unique items                      set
-260 Network address                          :class:`ipaddress.IPv4Address` (or IPv6)
-261 Network prefix                           :class:`ipaddress.IPv4Network` (or IPv6)
-=== ======================================== ====================================================
+===== ======================================== ====================================================
+Tag   Semantics                                Python type(s)
+===== ======================================== ====================================================
+0     Standard date/time string                datetime.date / datetime.datetime
+1     Epoch-based date/time                    datetime.date / datetime.datetime
+2     Positive bignum                          int / long
+3     Negative bignum                          int / long
+4     Decimal fraction                         decimal.Decimal
+5     Bigfloat                                 decimal.Decimal
+28    Mark shared value                        N/A
+29    Reference shared value                   N/A
+30    Rational number                          fractions.Fraction
+35    Regular expression                       ``_sre.SRE_Pattern`` (result of ``re.compile(...)``)
+36    MIME message                             email.message.Message
+37    Binary UUID                              uuid.UUID
+258   Set of unique items                      set
+260   Network address                          :class:`ipaddress.IPv4Address` (or IPv6)
+261   Network prefix                           :class:`ipaddress.IPv4Network` (or IPv6)
+55799 Self-Described CBOR                      object
+===== ======================================== ====================================================
 
 Arbitary tags can be represented with the :class:`~cbor2.types.CBORTag` class.
 
+If you want to write a file that is detected as CBOR by the Unix ``file`` utility, wrap your data in
+a `~cbor2.types.CBORTag` object like so::
+
+    from cbor2 import dump, CBORTag
+
+    with open('output.cbor', 'wb') as fp:
+        dump(CBORTag(55799, obj), fp)
+
+This will be ignored on decode and the original data content will be returned.
 
 Use Cases
 ---------
