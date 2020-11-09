@@ -1,0 +1,81 @@
+name: Publish packages to PyPI
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+[a-b][0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+rc[0-9]+"
+
+jobs:
+  linux-wheels:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build manylinux Python wheels
+      uses: RalfG/python-wheels-manylinux-build@v0.3.1-manylinux2014_x86_64
+    - uses: actions/upload-artifact@v2
+      with:
+        name: linux-wheels
+        path: dist/*-manylinux*.whl
+
+  other-wheels:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+        python-version: [3.6, 3.7, 3.8]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: pip-test-${{ matrix.python-version }}-${{ matrix.os }}
+    - name: Install dependencies
+      run: pip install pep517
+    - name: Create packages
+      run: python -m pep517.build --binary .
+    - uses: actions/upload-artifact@v2
+      with:
+        name: other-wheels
+        path: dist/*.whl
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.x
+    - name: Install dependencies
+      run: pip install pep517
+    - name: Create sdist
+      run: python -m pep517.build --source .
+    - uses: actions/upload-artifact@v2
+      with:
+        name: sdist
+        path: dist/*.tar.gz
+
+  publish:
+    needs:
+      - linux-wheels
+      - other-wheels
+      - sdist
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download generated packaging artifacts
+      uses: actions/download-artifact@v2
+    - name: Move the packages to dist/
+      run: |
+        mkdir dist
+        mv */*.whl */*.tar.gz dist
+    - name: Upload packages
+      uses: pypa/gh-action-pypi-publish@master
+      with:
+        user: __token__
+        password: ${{ secrets.pypi_password }}

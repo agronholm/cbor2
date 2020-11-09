@@ -276,11 +276,11 @@ class CBORDecoder(object):
                 else:
                     items.append(value)
         else:
-            items = [None] * length
+            items = []
             if not self._immutable:
                 self.set_shareable(items)
             for index in range(length):
-                items[index] = self._decode()
+                items.append(self._decode())
 
         if self._immutable:
             items = tuple(items)
@@ -300,15 +300,6 @@ class CBORDecoder(object):
                     break
                 else:
                     dictionary[key] = self._decode(unshared=True)
-        elif self._share_index is None:
-            # Optimization: pre-allocate structures from length. Note this
-            # cannot be done when sharing the structure as the resulting
-            # structure is not the one initially allocated
-            seq = [None] * length
-            for index in range(length):
-                key = self._decode(immutable=True, unshared=True)
-                seq[index] = (key, self._decode(unshared=True))
-            dictionary = dict(seq)
         else:
             dictionary = {}
             self.set_shareable(dictionary)
@@ -485,6 +476,10 @@ class CBORDecoder(object):
                     break
         raise CBORDecodeValueError("invalid ipnetwork value %r" % net_map)
 
+    def decode_self_describe_cbor(self):
+        # Semantic tag 55799
+        return self._decode()
+
     #
     # Special decoders (major tag 7)
     #
@@ -532,21 +527,22 @@ special_decoders = {
 }
 
 semantic_decoders = {
-    0:   CBORDecoder.decode_datetime_string,
-    1:   CBORDecoder.decode_epoch_datetime,
-    2:   CBORDecoder.decode_positive_bignum,
-    3:   CBORDecoder.decode_negative_bignum,
-    4:   CBORDecoder.decode_fraction,
-    5:   CBORDecoder.decode_bigfloat,
-    28:  CBORDecoder.decode_shareable,
-    29:  CBORDecoder.decode_sharedref,
-    30:  CBORDecoder.decode_rational,
-    35:  CBORDecoder.decode_regexp,
-    36:  CBORDecoder.decode_mime,
-    37:  CBORDecoder.decode_uuid,
-    258: CBORDecoder.decode_set,
-    260: CBORDecoder.decode_ipaddress,
-    261: CBORDecoder.decode_ipnetwork,
+    0:     CBORDecoder.decode_datetime_string,
+    1:     CBORDecoder.decode_epoch_datetime,
+    2:     CBORDecoder.decode_positive_bignum,
+    3:     CBORDecoder.decode_negative_bignum,
+    4:     CBORDecoder.decode_fraction,
+    5:     CBORDecoder.decode_bigfloat,
+    28:    CBORDecoder.decode_shareable,
+    29:    CBORDecoder.decode_sharedref,
+    30:    CBORDecoder.decode_rational,
+    35:    CBORDecoder.decode_regexp,
+    36:    CBORDecoder.decode_mime,
+    37:    CBORDecoder.decode_uuid,
+    258:   CBORDecoder.decode_set,
+    260:   CBORDecoder.decode_ipaddress,
+    261:   CBORDecoder.decode_ipnetwork,
+    55799: CBORDecoder.decode_self_describe_cbor,
 }
 
 

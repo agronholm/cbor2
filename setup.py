@@ -1,10 +1,14 @@
 import sys
 import os
 import platform
+import warnings
 from pkg_resources import parse_version
 from setuptools import setup, Extension
 
 min_glibc = parse_version('2.9')
+
+if sys.version_info < (3, 6):
+    warnings.warn("Support for Python<3.6 will be dropped with cbor2 version 6.0.0")
 
 
 def check_libc():
@@ -27,7 +31,13 @@ cpython = platform.python_implementation() == 'CPython'
 windows = sys.platform.startswith('win')
 min_win_version = sys.version_info >= (3, 5)
 min_unix_version = sys.version_info >= (3, 3)
-build_c_ext = cpython and ((windows and min_win_version) or (check_libc() and min_unix_version))
+use_c_ext = os.environ.get("CBOR2_BUILD_C_EXTENSION", None)
+if use_c_ext == "1":
+    build_c_ext = True
+elif use_c_ext == "0":
+    build_c_ext = False
+else:
+    build_c_ext = cpython and ((windows and min_win_version) or (check_libc() and min_unix_version))
 
 # Enable GNU features for libc's like musl, should have no effect
 # on Apple/BSDs
