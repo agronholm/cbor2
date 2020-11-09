@@ -25,12 +25,12 @@ jobs:
       if: startsWith(matrix.os, 'ubuntu')
       run: |
         python -m pip install --upgrade pip
-        pip install pep517
-        python -m pep517.build --source --out-dir dist .
+        pip install build
+        python -m build --sdist --outdir dist .
 
     - name: Install cibuildwheel
       run: |
-        python -m pip install cibuildwheel==1.5.5
+        python -m pip install cibuildwheel==1.6.4
 
     - name: Build wheel
       run: |
@@ -38,6 +38,7 @@ jobs:
       env:
         # build python 3.7 and 3.8
         CIBW_BUILD: cp37-* cp38-*
+        CIBW_SKIP: '*-manylinux_i686 *-win32'
         CIBW_BUILD_VERBOSITY_LINUX: 0
         CIBW_BUILD_VERBOSITY_MACOS: 0
         CIBW_BUILD_VERBOSITY_WINDOWS: 0
@@ -50,7 +51,13 @@ jobs:
         CIBW_BEFORE_BUILD_WINDOWS: >
           python -m pip install --upgrade pip
         CIBW_TEST_REQUIRES: pytest pytest-cov
-        CIBW_TEST_COMMAND: py.test -v {project}/tests
+        # CIBW_BEFORE_TEST: ln -s {project}/tests tests
+        CIBW_BEFORE_ALL_WINDOWS: "ln -sf d:/a/cbor2/cbor2 c:/cbor2"
+        # CIBW_BEFORE_TEST_WINDOWS: "ln -sf d:/a/cbor2/cbor2 c:/cbor2"
+        CIBW_TEST_COMMAND_WINDOWS: "cd cbor2 && pytest tests"
+        CIBW_TEST_COMMAND_MACOS: cd {project} && pytest tests
+        CIBW_TEST_COMMAND_LINUX: cd {project} && pytest tests
+
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2

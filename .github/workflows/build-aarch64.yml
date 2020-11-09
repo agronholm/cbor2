@@ -41,7 +41,7 @@ jobs:
         source venv/bin/activate
         python -m pip install --upgrade pip
         pip install wheel
-        pip install cibuildwheel==1.5.5
+        pip install cibuildwheel==1.6.4
 
     - name: Build wheel and test
       run: |
@@ -56,7 +56,7 @@ jobs:
         CIBW_BEFORE_BUILD_LINUX: >
           python -m pip install --upgrade pip
         CIBW_TEST_REQUIRES: pytest pytest-cov
-        CIBW_TEST_COMMAND: py.test -v {project}/tests
+        CIBW_TEST_COMMAND_LINUX: cd {project} && pytest tests
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
