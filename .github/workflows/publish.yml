@@ -53,9 +53,9 @@ jobs:
       with:
         python-version: 3.x
     - name: Install dependencies
-      run: pip install pep517
+      run: pip install build
     - name: Create sdist
-      run: python -m pep517.build --source .
+      run: python -m build --sdist --outdir dist .
     - uses: actions/upload-artifact@v2
       with:
         name: sdist
@@ -74,7 +74,17 @@ jobs:
       run: |
         mkdir dist
         mv */*.whl */*.tar.gz dist
+    - name: Test for secrets access
+      id: check_secrets
+      shell: bash
+      run: |
+        unset HAS_SECRET
+        if [ -n "$SECRET" ]; then HAS_SECRET='true' ; fi
+        echo ::set-output name=HAS_SECRET::${HAS_SECRET}
+      env:
+        SECRET: "${{ secrets.secrets.pypi_password }}"
     - name: Upload packages
+      if: steps.check_secrets.outputs.HAS_SECRET
       uses: pypa/gh-action-pypi-publish@master
       with:
         user: __token__
