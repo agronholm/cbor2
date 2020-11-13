@@ -75,12 +75,14 @@ Tag   Semantics                                Python type(s)
 3     Negative bignum                          int / long
 4     Decimal fraction                         decimal.Decimal
 5     Bigfloat                                 decimal.Decimal
+25    String reference                         str / bytes
 28    Mark shared value                        N/A
 29    Reference shared value                   N/A
 30    Rational number                          fractions.Fraction
 35    Regular expression                       ``_sre.SRE_Pattern`` (result of ``re.compile(...)``)
 36    MIME message                             email.message.Message
 37    Binary UUID                              uuid.UUID
+256   String reference namespace               N/A
 258   Set of unique items                      set
 260   Network address                          :class:`ipaddress.IPv4Address` (or IPv6)
 261   Network prefix                           :class:`ipaddress.IPv4Network` (or IPv6)
