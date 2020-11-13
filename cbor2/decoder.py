@@ -39,7 +39,7 @@ class CBORDecoder:
 
     __slots__ = (
         '_tag_hook', '_object_hook', '_share_index', '_shareables', '_fp_read',
-        '_immutable', '_str_errors')
+        '_immutable', '_str_errors', '_stringref_namespace')
 
     def __init__(self, fp, tag_hook=None, object_hook=None,
                  str_errors='strict'):
@@ -49,6 +49,7 @@ class CBORDecoder:
         self.str_errors = str_errors
         self._share_index = None
         self._shareables = []
+        self._stringref_namespace = None
         self._immutable = False
 
     @property
@@ -120,6 +121,23 @@ class CBORDecoder:
         if self._share_index is not None:
             self._shareables[self._share_index] = value
         return value
+
+    def _stringref_namespace_add(self, string, length):
+        if self._stringref_namespace is not None:
+            next_index = len(self._stringref_namespace)
+            if next_index < 24:
+                is_referenced = length >= 3
+            elif next_index < 256:
+                is_referenced = length >= 4
+            elif next_index < 65536:
+                is_referenced = length >= 5
+            elif next_index < 4294967296:
+                is_referenced = length >= 7
+            else:
+                is_referenced = length >= 11
+
+            if is_referenced:
+                self._stringref_namespace.append(string)
 
     def read(self, amount):
         """
@@ -223,6 +241,7 @@ class CBORDecoder:
                         "non-bytestring found in indefinite length bytestring")
         else:
             result = self.read(length)
+            self._stringref_namespace_add(result, length)
         return self.set_shareable(result)
 
     def decode_string(self, subtype):
@@ -258,6 +277,7 @@ class CBORDecoder:
                         "non-string found in indefinite length string")
         else:
             result = self.read(length).decode('utf-8', self._str_errors)
+            self._stringref_namespace_add(result, length)
         return self.set_shareable(result)
 
     def decode_array(self, subtype):
@@ -401,6 +421,19 @@ class CBORDecoder:
         exp, sig = self._decode()
         return self.set_shareable(Decimal(sig) * (2 ** Decimal(exp)))
 
+    def decode_stringref(self):
+        # Semantic tag 25
+        if self._stringref_namespace is None:
+            raise CBORDecodeValueError('string reference outside of namespace')
+
+        index = self._decode()
+        try:
+            value = self._stringref_namespace[index]
+        except IndexError:
+            raise CBORDecodeValueError('string reference %d not found' % index)
+
+        return value
+
     def decode_shareable(self):
         # Semantic tag 28
         old_index = self._share_index
@@ -443,6 +476,14 @@ class CBORDecoder:
         # Semantic tag 37
         from uuid import UUID
         return self.set_shareable(UUID(bytes=self._decode()))
+
+    def decode_stringref_namespace(self):
+        # Semantic tag 256
+        old_namespace = self._stringref_namespace
+        self._stringref_namespace = []
+        value = self._decode()
+        self._stringref_namespace = old_namespace
+        return value
 
     def decode_set(self):
         # Semantic tag 258
@@ -529,12 +570,14 @@ semantic_decoders = {
     3:     CBORDecoder.decode_negative_bignum,
     4:     CBORDecoder.decode_fraction,
     5:     CBORDecoder.decode_bigfloat,
+    25:    CBORDecoder.decode_stringref,
     28:    CBORDecoder.decode_shareable,
     29:    CBORDecoder.decode_sharedref,
     30:    CBORDecoder.decode_rational,
     35:    CBORDecoder.decode_regexp,
     36:    CBORDecoder.decode_mime,
     37:    CBORDecoder.decode_uuid,
+    256:   CBORDecoder.decode_stringref_namespace,
     258:   CBORDecoder.decode_set,
     260:   CBORDecoder.decode_ipaddress,
     261:   CBORDecoder.decode_ipnetwork,
