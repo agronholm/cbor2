@@ -9,6 +9,7 @@ typedef struct {
     PyObject *tag_hook;
     PyObject *object_hook;
     PyObject *shareables;
+    PyObject *stringref_namespace;
     PyObject *str_errors;
     bool immutable;
     Py_ssize_t shared_index;

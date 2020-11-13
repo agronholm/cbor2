@@ -67,6 +67,9 @@ static PyObject * CBORDecoder_decode_shareable(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_sharedref(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_set(CBORDecoderObject *);
 
+static PyObject * CBORDecoder_decode_stringref(CBORDecoderObject *);
+static PyObject * CBORDecoder_decode_stringref_ns(CBORDecoderObject *);
+
 
 // Constructors and destructors //////////////////////////////////////////////
 
@@ -77,6 +80,7 @@ CBORDecoder_traverse(CBORDecoderObject *self, visitproc visit, void *arg)
     Py_VISIT(self->tag_hook);
     Py_VISIT(self->object_hook);
     Py_VISIT(self->shareables);
+    Py_VISIT(self->stringref_namespace);
     // No need to visit str_errors; it's only a string and can't reference us
     // or other objects
     return 0;
@@ -89,6 +93,7 @@ CBORDecoder_clear(CBORDecoderObject *self)
     Py_CLEAR(self->tag_hook);
     Py_CLEAR(self->object_hook);
     Py_CLEAR(self->shareables);
+    Py_CLEAR(self->stringref_namespace);
     Py_CLEAR(self->str_errors);
     return 0;
 }
@@ -120,6 +125,8 @@ CBORDecoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         self->shareables = PyList_New(0);
         if (!self->shareables)
             goto error;
+        Py_INCREF(Py_None);
+        self->stringref_namespace = Py_None;
         Py_INCREF(Py_None);
         self->read = Py_None;
         Py_INCREF(Py_None);
@@ -453,6 +460,32 @@ decode_length(CBORDecoderObject *self, uint8_t subtype,
     }
 }
 
+static int
+string_namespace_add(CBORDecoderObject *self, PyObject *string, uint64_t length)
+{
+    if (self->stringref_namespace != Py_None) {
+        uint64_t next_index = PyList_GET_SIZE(self->stringref_namespace);
+        bool is_referenced = true;
+        if (next_index < 24) {
+            is_referenced = length >= 3;
+        } else if (next_index < 256) {
+            is_referenced = length >= 4;
+        } else if (next_index < 65536) {
+            is_referenced = length >= 5;
+        } else if (next_index < 4294967296ull) {
+            is_referenced = length >= 7;
+        } else {
+            is_referenced = length >= 11;
+        }
+
+        if (is_referenced) {
+            return PyList_Append(self->stringref_namespace, string);
+        }
+    }
+
+    return 0;
+}
+
 
 // Major decoders ////////////////////////////////////////////////////////////
 
@@ -507,6 +540,10 @@ decode_definite_bytestring(CBORDecoderObject *self, uint64_t length)
     if (!ret)
         return NULL;
     if (fp_read(self, PyBytes_AS_STRING(ret), length) == -1) {
+        Py_DECREF(ret);
+        return NULL;
+    }
+    if (string_namespace_add(self, ret, length) == -1) {
         Py_DECREF(ret);
         return NULL;
     }
@@ -598,6 +635,11 @@ decode_definite_string(CBORDecoderObject *self, uint64_t length)
         ret = PyUnicode_DecodeUTF8(
                 buf, length, PyBytes_AS_STRING(self->str_errors));
     PyMem_Free(buf);
+
+    if (string_namespace_add(self, ret, length) == -1) {
+        Py_DECREF(ret);
+        return NULL;
+    }
     return ret;
 }
 
@@ -897,12 +939,14 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
             case 3:     ret = CBORDecoder_decode_negative_bignum(self); break;
             case 4:     ret = CBORDecoder_decode_fraction(self);        break;
             case 5:     ret = CBORDecoder_decode_bigfloat(self);        break;
+            case 25:    ret = CBORDecoder_decode_stringref(self);       break;
             case 28:    ret = CBORDecoder_decode_shareable(self);       break;
             case 29:    ret = CBORDecoder_decode_sharedref(self);       break;
             case 30:    ret = CBORDecoder_decode_rational(self);        break;
             case 35:    ret = CBORDecoder_decode_regexp(self);          break;
             case 36:    ret = CBORDecoder_decode_mime(self);            break;
             case 37:    ret = CBORDecoder_decode_uuid(self);            break;
+            case 256:   ret = CBORDecoder_decode_stringref_ns(self);    break;
             case 258:   ret = CBORDecoder_decode_set(self);             break;
             case 260:   ret = CBORDecoder_decode_ipaddress(self);       break;
             case 261:   ret = CBORDecoder_decode_ipnetwork(self);       break;
@@ -1183,6 +1227,42 @@ CBORDecoder_decode_bigfloat(CBORDecoderObject *self)
     return ret;
 }
 
+// CBORDecoder.decode_stringref(self)
+static PyObject *
+CBORDecoder_decode_stringref(CBORDecoderObject *self)
+{
+    // semantic type 25
+    PyObject *index, *ret = NULL;
+
+    if (self->stringref_namespace == Py_None) {
+        PyErr_Format(
+            _CBOR2_CBORDecodeValueError,
+            "string reference outside of namespace");
+        return NULL;
+    }
+
+    index = decode(self, DECODE_UNSHARED);
+    if (index) {
+        if (PyLong_CheckExact(index)) {
+            ret = PyList_GetItem(self->stringref_namespace, PyLong_AsSsize_t(index));
+            if (ret) {
+                // convert borrowed reference to new reference
+                Py_INCREF(ret);
+            } else {
+                PyErr_Format(
+                    _CBOR2_CBORDecodeValueError,
+                    "string reference %R not found", index);
+            }
+        } else {
+            PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                "invalid string reference %R", index);
+        }
+    }
+
+    return ret;
+}
+
 
 // CBORDecoder.decode_shareable(self)
 static PyObject *
@@ -1325,6 +1405,24 @@ CBORDecoder_decode_uuid(CBORDecoderObject *self)
     return ret;
 }
 
+// CBORDecoder.decode_stringref_namespace(self)
+static PyObject *
+CBORDecoder_decode_stringref_ns(CBORDecoderObject *self)
+{
+    // semantic type 256
+    PyObject *old_namespace, *ret = NULL;
+
+    old_namespace = self->stringref_namespace;
+
+    self->stringref_namespace = PyList_New(0);
+    if (self->stringref_namespace) {
+        ret = decode(self, DECODE_NORMAL);
+        Py_CLEAR(self->stringref_namespace);
+    }
+
+    self->stringref_namespace = old_namespace;
+    return ret;
+}
 
 // CBORDecoder.decode_set(self)
 static PyObject *
@@ -1738,6 +1836,11 @@ static PyMethodDef CBORDecoder_methods[] = {
         "decode a shareable value from the input"},
     {"decode_sharedref", (PyCFunction) CBORDecoder_decode_sharedref, METH_NOARGS,
         "decode a shared reference from the input"},
+    {"decode_stringref",
+        (PyCFunction) CBORDecoder_decode_stringref, METH_NOARGS,
+        "decode a string reference from the input"},
+    {"decode_stringref_namespace", (PyCFunction) CBORDecoder_decode_stringref_ns, METH_NOARGS,
+        "decode a string reference namespace from the input"},
     {"decode_set", (PyCFunction) CBORDecoder_decode_set, METH_NOARGS,
         "decode a set or frozenset from the input"},
     {"decode_ipaddress", (PyCFunction) CBORDecoder_decode_ipaddress, METH_NOARGS,
