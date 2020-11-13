@@ -1,7 +1,5 @@
 version: 2
 formats: [htmlzip, pdf]
-sphinx:
-  configuration: docs/conf.py
 python:
    version: 3.7
    install:
