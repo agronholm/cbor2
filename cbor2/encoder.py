@@ -33,6 +33,38 @@ def shareable_encoder(func):
     return wrapper
 
 
+def container_encoder(func):
+    """
+    The given encoder is a container with child values. Handle cyclic or
+    duplicate references to the value and strings within the value
+    efficiently.
+
+    Containers may contain cyclic data structures or may contain values
+    or themselves by referenced multiple times throughout the greater
+    encoded value and could thus be more efficiently encoded with shared
+    value references and string references where duplication occurs.
+
+    If value sharing is enabled, this marks the given value shared in the
+    datastream on the first call. If the value has already been passed to this
+    method, a reference marker is instead written to the data stream and the
+    wrapped function is not called.
+
+    If value sharing is disabled, only infinite recursion protection is done.
+
+    If string referencing is enabled and this is the first use of this
+    method in encoding a value, all repeated references to long strings
+    and bytearrays will be replaced with references to the first
+    occurrence of those arrays.
+
+    If string referencing is disabled, all strings and bytearrays will
+    be encoded directly.
+    """
+    @wraps(func)
+    def wrapper(encoder, value):
+        encoder.encode_container(func, value)
+    return wrapper
+
+
 class CBOREncoder:
     """
     The CBOREncoder class implements a fully featured `CBOR`_ encoder with
@@ -67,24 +99,31 @@ class CBOREncoder:
     :param bool date_as_datetime: set to ``True`` to serialize date objects as
         datetimes (CBOR tag 0), which was the default behavior in previous
         releases (cbor2 <= 4.1.2).
+    :param bool string_referencing:
+        set to ``True`` to allow more efficient serializing of repeated
+        string values
 
     .. _CBOR: https://cbor.io/
     """
 
     __slots__ = (
         'datetime_as_timestamp', '_timezone', '_default', 'value_sharing',
-        '_fp_write', '_shared_containers', '_encoders', '_canonical')
+        '_fp_write', '_shared_containers', '_encoders', '_canonical',
+        'string_referencing', 'string_namespacing', '_string_references')
 
     def __init__(self, fp, datetime_as_timestamp=False, timezone=None,
                  value_sharing=False, default=None, canonical=False,
-                 date_as_datetime=False):
+                 date_as_datetime=False, string_referencing=False):
         self.fp = fp
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone
         self.value_sharing = value_sharing
+        self.string_referencing = string_referencing
+        self.string_namespacing = string_referencing
         self.default = default
         self._canonical = canonical
         self._shared_containers = {}  # indexes used for value sharing
+        self._string_references = {}  # indexes used for string references
         self._encoders = default_encoders.copy()
         if canonical:
             self._encoders.update(canonical_encoders)
@@ -166,6 +205,28 @@ class CBOREncoder:
         yield
         self.value_sharing = old_value_sharing
 
+    @contextmanager
+    def disable_string_referencing(self):
+        """
+        Disable tracking of string references for the duration of the
+        context block.
+        """
+        old_string_referencing = self.string_referencing
+        self.string_referencing = False
+        yield
+        self.string_referencing = old_string_referencing
+
+    @contextmanager
+    def disable_string_namespacing(self):
+        """
+        Disable generation of new string namespaces for the duration of the
+        context block.
+        """
+        old_string_namespacing = self.string_namespacing
+        self.string_namespacing = False
+        yield
+        self.string_namespacing = old_string_namespacing
+
     def write(self, data):
         """
         Write bytes to the data stream.
@@ -209,6 +270,14 @@ class CBOREncoder:
             self.fp = old_fp
             return fp.getvalue()
 
+    def encode_container(self, encoder, value):
+        if self.string_namespacing:
+            # Create a new string reference domain
+            self.encode_length(6, 256)
+
+        with self.disable_string_namespacing():
+            self.encode_shared(encoder, value)
+
     def encode_shared(self, encoder, value):
         value_id = id(value)
         try:
@@ -237,6 +306,36 @@ class CBOREncoder:
                 raise CBOREncodeValueError(
                     'cyclic data structure detected but value sharing is '
                     'disabled')
+
+    def _stringref(self, value):
+        """
+        Try to encode the string or bytestring as a reference.
+
+        Returns True if a reference was generated, False if the string
+        must still be emitted.
+        """
+        try:
+            index = self._string_references[value]
+            self.encode_semantic(CBORTag(25, index))
+            return True
+        except KeyError:
+            length = len(value)
+            next_index = len(self._string_references)
+            if next_index < 24:
+                is_referenced = length >= 3
+            elif next_index < 256:
+                is_referenced = length >= 4
+            elif next_index < 65536:
+                is_referenced = length >= 5
+            elif next_index < 4294967296:
+                is_referenced = length >= 7
+            else:
+                is_referenced = length >= 11
+
+            if is_referenced:
+                self._string_references[value] = next_index
+
+            return False
 
     def encode_length(self, major_tag, length):
         major_tag <<= 5
@@ -268,6 +367,10 @@ class CBOREncoder:
             self.encode_length(1, -(value + 1))
 
     def encode_bytestring(self, value):
+        if self.string_referencing:
+            if self._stringref(value):
+                return
+
         self.encode_length(2, len(value))
         self._fp_write(value)
 
@@ -275,17 +378,21 @@ class CBOREncoder:
         self.encode_bytestring(bytes(value))
 
     def encode_string(self, value):
+        if self.string_referencing:
+            if self._stringref(value):
+                return
+
         encoded = value.encode('utf-8')
         self.encode_length(3, len(encoded))
         self._fp_write(encoded)
 
-    @shareable_encoder
+    @container_encoder
     def encode_array(self, value):
         self.encode_length(4, len(value))
         for item in value:
             self.encode(item)
 
-    @shareable_encoder
+    @container_encoder
     def encode_map(self, value):
         self.encode_length(5, len(value))
         for key, val in value.items():
@@ -298,10 +405,11 @@ class CBOREncoder:
         representation, along with the representation itself. This is used as
         the sorting key in CBOR's canonical representations.
         """
-        encoded = self.encode_to_bytes(value)
-        return len(encoded), encoded
+        with self.disable_string_referencing():
+            encoded = self.encode_to_bytes(value)
+            return len(encoded), encoded
 
-    @shareable_encoder
+    @container_encoder
     def encode_canonical_map(self, value):
         "Reorder keys according to Canonical CBOR specification"
         keyed_keys = (
@@ -310,12 +418,28 @@ class CBOREncoder:
         )
         self.encode_length(5, len(value))
         for sortkey, realkey, value in sorted(keyed_keys):
-            self._fp_write(sortkey[1])
+            if self.string_referencing:
+                # String referencing requires that the order encoded is
+                # the same as the order emitted so string references are
+                # generated after an order is determined
+                self.encode(realkey)
+            else:
+                self._fp_write(sortkey[1])
             self.encode(value)
 
     def encode_semantic(self, value):
+        # Nested string reference domains are distinct
+        old_string_referencing = self.string_referencing
+        old_string_references = self._string_references
+        if value.tag == 256:
+            self.string_referencing = True
+            self._string_references = {}
+
         self.encode_length(6, value.tag)
         self.encode(value.value)
+
+        self.string_referencing = old_string_referencing
+        self._string_references = old_string_references
 
     #
     # Semantic decoders (major tag 6)
@@ -362,6 +486,11 @@ class CBOREncoder:
             with self.disable_value_sharing():
                 self.encode_semantic(CBORTag(4, [dt.exponent, sig]))
 
+    def encode_stringref(self, value):
+        # Semantic tag 25
+        if not self._stringref(value):
+            self.encode(value)
+
     def encode_rational(self, value):
         # Semantic tag 30
         with self.disable_value_sharing():
@@ -378,6 +507,11 @@ class CBOREncoder:
     def encode_uuid(self, value):
         # Semantic tag 37
         self.encode_semantic(CBORTag(37, value.bytes))
+
+    def encode_stringref_namespace(self, value):
+        # Semantic tag 256
+        with self.disable_string_namespacing():
+            self.encode_semantic(CBORTag(256, value))
 
     def encode_set(self, value):
         # Semantic tag 258
