@@ -506,6 +506,30 @@ def test_cyclic_map(impl):
     assert decoded == {0: decoded}
 
 
+def test_string_ref(impl):
+    decoded = impl.loads(unhexlify('d9010085656669727374d81900667365636f6e64d81900d81901'))
+    assert isinstance(decoded, list)
+    assert decoded[0] == "first"
+    assert decoded[1] == "first"
+    assert decoded[2] == "second"
+    assert decoded[3] == "first"
+    assert decoded[4] == "second"
+
+
+def test_outside_string_ref_namespace(impl):
+    with pytest.raises(impl.CBORDecodeError) as exc:
+        impl.loads(unhexlify('85656669727374d81900667365636f6e64d81900d81901'))
+        assert str(exc.value).endswith('string reference outside of namespace')
+        assert isinstance(exc, ValueError)
+
+
+def test_invalid_string_ref(impl):
+    with pytest.raises(impl.CBORDecodeError) as exc:
+        impl.loads(unhexlify('d9010086656669727374d81900667365636f6e64d81900d81901d81903'))
+        assert str(exc.value).endswith('string reference 3 not found')
+        assert isinstance(exc, ValueError)
+
+
 @pytest.mark.parametrize('payload, expected', [
     ('d9d9f71903e8', 1000),
     ('d9d9f7c249010000000000000000', 18446744073709551616),
