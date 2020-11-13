@@ -1,4 +1,3 @@
-# coding: utf-8
 #!/usr/bin/env python
 import pkg_resources
 
@@ -12,8 +11,8 @@ templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
 project = 'cbor2'
-author = u'Alex Grönholm'
-copyright = u'2016, ' + author
+author = 'Alex Grönholm'
+copyright = '2016, ' + author
 
 v = pkg_resources.get_distribution(project).parsed_version
 version = v.base_version

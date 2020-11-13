@@ -21,12 +21,6 @@ Serializing and deserializing with cbor2 is pretty straightforward::
 
 Some data types, however, require extra considerations, as detailed below.
 
-String/bytes handling on Python 2
----------------------------------
-
-The ``str`` type is encoded as binary on Python 2. If you want to encode strings as text on
-Python 2, use unicode strings instead.
-
 Date/time handling
 ------------------
 

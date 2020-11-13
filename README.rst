@@ -11,8 +11,6 @@
 About
 =====
 
-.. warning:: This project will be ending it's support of Python 3.5 and lower with release 6.0.0. Version 5.2 will be the last version tested on Python 2.7 and 3.5
-
 This library provides encoding and decoding for the Concise Binary Object Representation (CBOR)
 (`RFC 7049`_) serialization format. `Read the docs <https://cbor2.readthedocs.io/>`_ to learn more.
 
@@ -50,11 +48,11 @@ Installation
 Requirements
 ------------
 
-* cPython==2.7 or cPython>=3.5 or `PyPy`_ (Python 2.7 and 3.5 support will be removed with release 6.0.0)
+* Python >= 3.6 (or `PyPy3`_ 3.6+)
 * C-extension: Any C compiler that can build Python extensions.
   Any modern libc with the exception of Glibc<2.9
 
-.. _PyPy: https://www.pypy.org/
+.. _PyPy3: https://www.pypy.org/
 
 Building the C-Extension
 ------------------------

@@ -21,7 +21,7 @@ Using the CBOR tags for custom types
 The most common way to use ``default`` is to call :meth:`~cbor2.encoder.CBOREncoder.encode`
 to add a custom tag in the data stream, with the payload as the value::
 
-    class Point(object):
+    class Point:
         def __init__(self, x, y):
             self.x = x
             self.y = y
@@ -66,7 +66,7 @@ to its parent and the parent contains a list of children::
     from cbor2 import dumps, loads, shareable_encoder, CBORTag
 
 
-    class MyType(object):
+    class MyType:
         def __init__(self, parent=None):
             self.parent = parent
             self.children = []

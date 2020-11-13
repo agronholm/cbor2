@@ -1,8 +1,5 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
-#if PY_VERSION_HEX < 0x03030000
-#error "_cbor2 requires Python 3.3 or newer"
-#endif
 
 // structure of the lead-byte for all CBOR records
 typedef

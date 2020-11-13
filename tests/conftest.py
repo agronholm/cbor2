@@ -1,4 +1,3 @@
-import sys
 import platform
 
 import pytest
@@ -10,16 +9,14 @@ import cbor2.decoder
 load_exc = ''
 try:
     import _cbor2
-except ImportError as e:
+except ModuleNotFoundError as e:
     if not str(e).startswith('No module'):
         load_exc = str(e)
     _cbor2 = None
 
-cpython33 = pytest.mark.skipif(
-    platform.python_implementation() != "CPython"
-    or sys.version_info < (3, 3)
-    or _cbor2 is None,
-    reason=(load_exc or "requires CPython 3.3+"),
+cpython = pytest.mark.skipif(
+    platform.python_implementation() != "CPython" or _cbor2 is None,
+    reason=(load_exc or "requires CPython"),
 )
 
 
@@ -28,7 +25,7 @@ class Module(object):
     pass
 
 
-@pytest.fixture(params=[pytest.param("c", marks=cpython33), "python"], scope="session")
+@pytest.fixture(params=[pytest.param("c", marks=cpython), "python"], scope="session")
 def impl(request):
     if request.param == "c":
         return _cbor2
