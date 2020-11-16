@@ -37,7 +37,7 @@ jobs:
         python -m cibuildwheel --output-dir dist
       env:
         # build python 3.7 and 3.8
-        CIBW_BUILD: cp37-* cp38-*
+        CIBW_BUILD: cp37-* cp38-* cp39-*
         CIBW_SKIP: '*-manylinux_i686 *-win32'
         CIBW_BUILD_VERBOSITY_LINUX: 0
         CIBW_BUILD_VERBOSITY_MACOS: 0
