@@ -33,6 +33,7 @@ typedef PyObject * (EncodeFunction)(CBOREncoderObject *, PyObject *);
 
 static int encode_semantic(CBOREncoderObject *, const uint64_t, PyObject *);
 static PyObject * encode_shared(CBOREncoderObject *, EncodeFunction *, PyObject *);
+static PyObject * encode_container(CBOREncoderObject *, EncodeFunction *, PyObject *);
 
 static PyObject * CBOREncoder_encode_to_bytes(CBOREncoderObject *, PyObject *);
 static PyObject * CBOREncoder_encode_int(CBOREncoderObject *, PyObject *);
@@ -54,6 +55,7 @@ CBOREncoder_traverse(CBOREncoderObject *self, visitproc visit, void *arg)
     Py_VISIT(self->shared);
     Py_VISIT(self->tz);
     Py_VISIT(self->shared_handler);
+    Py_VISIT(self->string_references);
     return 0;
 }
 
@@ -66,6 +68,7 @@ CBOREncoder_clear(CBOREncoderObject *self)
     Py_CLEAR(self->shared);
     Py_CLEAR(self->tz);
     Py_CLEAR(self->shared_handler);
+    Py_CLEAR(self->string_references);
     return 0;
 }
 
@@ -101,10 +104,14 @@ CBOREncoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         self->default_handler = Py_None;
         Py_INCREF(Py_None);
         self->tz = Py_None;
+        Py_INCREF(Py_None);
+        self->string_references = Py_None;
         self->enc_style = 0;
         self->timestamp_format = false;
         self->value_sharing = false;
         self->shared_handler = NULL;
+        self->string_referencing = false;
+        self->string_namespacing = false;
     }
     return (PyObject *) self;
 }
@@ -118,15 +125,16 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {
         "fp", "datetime_as_timestamp", "timezone", "value_sharing", "default",
-        "canonical", "date_as_datetime", NULL
+        "canonical", "date_as_datetime", "string_referencing", NULL
     };
     PyObject *tmp, *fp = NULL, *default_handler = NULL, *tz = NULL;
     int value_sharing = 0, timestamp_format = 0, enc_style = 0,
-	date_as_datetime = 0;
+	date_as_datetime = 0, string_referencing = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOpp", keywords,
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOppp", keywords,
                 &fp, &timestamp_format, &tz, &value_sharing,
-                &default_handler, &enc_style, &date_as_datetime))
+                &default_handler, &enc_style, &date_as_datetime,
+                &string_referencing))
         return -1;
     // Predicate values are returned as ints, but need to be stored as bool or ubyte
     if (timestamp_format == 1)
@@ -135,6 +143,10 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
 	self->value_sharing = true;
     if (enc_style == 1)
 	self->enc_style = 1;
+    if (string_referencing == 1) {
+        self->string_referencing = true;
+        self->string_namespacing = true;
+    }
 
 
     if (_CBOREncoder_set_fp(self, fp, NULL) == -1)
@@ -146,6 +158,10 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
 
     self->shared = PyDict_New();
     if (!self->shared)
+        return -1;
+
+    self->string_references = PyDict_New();
+    if (!self->string_references)
         return -1;
 
     if (!_CBOR2_default_encoders && init_default_encoders() == -1)
@@ -433,6 +449,53 @@ replace_deferred(CBOREncoderObject *self, PyObject *item)
 }
 
 
+// Try to encode a string reference if the string has already been
+// emitted.
+static int
+stringref(CBOREncoderObject *self, PyObject *value)
+{
+    PyObject *index, *ret = NULL;
+    int retcode = -1;
+
+    index = PyDict_GetItem(self->string_references, value);
+    if (index) {
+        if (encode_length(self, 6, 25) == 0) {
+            ret = CBOREncoder_encode_int(self, index);
+            if (ret) {
+                Py_DECREF(ret);
+                retcode = 1;
+            }
+        }
+    } else {
+        uint64_t length = PyObject_Length(value);
+        uint64_t next_index = PyDict_Size(self->string_references);
+
+        bool is_referenced = true;
+        if (next_index < 24) {
+            is_referenced = length >= 3;
+        } else if (next_index < 256) {
+            is_referenced = length >= 4;
+        } else if (next_index < 65536) {
+            is_referenced = length >= 5;
+        } else if (next_index < 4294967296ull) {
+            is_referenced = length >= 7;
+        } else {
+            is_referenced = length >= 11;
+        }
+
+        if (is_referenced) {
+            index = PyLong_FromLongLong(next_index);
+            if (index && PyDict_SetItem(self->string_references, value, index) == 0)
+                retcode = 0;
+        } else {
+            retcode = 0;
+        }
+    }
+
+    return retcode;
+}
+
+
 // CBOREncoder._find_encoder(type)
 static PyObject *
 CBOREncoder_find_encoder(CBOREncoderObject *self, PyObject *type)
@@ -624,6 +687,12 @@ CBOREncoder_encode_bytestring(CBOREncoderObject *self, PyObject *value)
 
     if (PyBytes_AsStringAndSize(value, &buf, &length) == -1)
         return NULL;
+    if (self->string_referencing) {
+        switch (stringref(self, value)) {
+            case -1: return NULL;
+            case  1: Py_RETURN_NONE;
+        }
+    }
     if (encode_length(self, 2, length) == -1)
         return NULL;
     if (fp_write(self, buf, length) == -1)
@@ -644,6 +713,14 @@ CBOREncoder_encode_bytearray(CBOREncoderObject *self, PyObject *value)
                 "invalid bytearray value %R", value);
         return NULL;
     }
+
+    if (self->string_referencing) {
+        switch (stringref(self, value)) {
+            case -1: return NULL;
+            case  1: Py_RETURN_NONE;
+        }
+    }
+
     length = PyByteArray_GET_SIZE(value);
     if (encode_length(self, 2, length) == -1)
         return NULL;
@@ -664,6 +741,11 @@ CBOREncoder_encode_string(CBOREncoderObject *self, PyObject *value)
     buf = PyUnicode_AsUTF8AndSize(value, &length);
     if (!buf)
         return NULL;
+    if (self->string_referencing)
+        switch (stringref(self, value)) {
+            case -1: return NULL;
+            case  1: Py_RETURN_NONE;
+        }
     if (encode_length(self, 3, length) == -1)
         return NULL;
     if (fp_write(self, buf, length) == -1)
@@ -707,7 +789,7 @@ static PyObject *
 CBOREncoder_encode_array(CBOREncoderObject *self, PyObject *value)
 {
     // major type 4
-    return encode_shared(self, &encode_array, value);
+    return encode_container(self, &encode_array, value);
 }
 
 
@@ -793,7 +875,7 @@ static PyObject *
 CBOREncoder_encode_map(CBOREncoderObject *self, PyObject *value)
 {
     // major type 5
-    return encode_shared(self, &CBOREncoder__encode_map, value);
+    return encode_container(self, &CBOREncoder__encode_map, value);
 }
 
 
@@ -818,13 +900,36 @@ CBOREncoder_encode_semantic(CBOREncoderObject *self, PyObject *value)
 {
     // major type 6
     CBORTagObject *tag;
+    PyObject *ret = NULL;
+    PyObject *old_string_references = self->string_references;
+    bool old_string_referencing = self->string_referencing;
+
 
     if (!CBORTag_CheckExact(value))
         return NULL;
+
     tag = (CBORTagObject *) value;
-    if (encode_semantic(self, tag->tag, tag->value) == -1)
-        return NULL;
-    Py_RETURN_NONE;
+    if (tag->tag == 256) {
+        PyObject *string_references = PyDict_New();
+        if (!string_references)
+            return NULL;
+        self->string_referencing = true;
+        self->string_references = string_references;
+    }
+
+    if (encode_semantic(self, tag->tag, tag->value) == 0) {
+        Py_INCREF(Py_None);
+        ret = Py_None;
+    }
+
+    if (self->string_references != old_string_references) {
+        Py_DECREF(self->string_references);
+    }
+
+    self->string_references = old_string_references;
+    self->string_referencing = old_string_referencing;
+
+    return ret;
 }
 
 
@@ -1097,6 +1202,27 @@ CBOREncoder_encode_decimal(CBOREncoderObject *self, PyObject *value)
     Py_RETURN_NONE;
 }
 
+static PyObject *
+encode_container(CBOREncoderObject *self, EncodeFunction *encoder,
+                 PyObject *value)
+{
+    PyObject *ret = NULL;
+    bool old_string_namespacing = self->string_namespacing;
+
+    if (self->string_namespacing) {
+        self->string_namespacing = false;
+        if (encode_semantic(self, 256, value) == 0) {
+            Py_INCREF(Py_None);
+            ret = Py_None;
+        }
+    } else {
+        ret = encode_shared(self, encoder, value);
+    }
+
+    self->string_namespacing = old_string_namespacing;
+
+    return ret;
+}
 
 static PyObject *
 encode_shared(CBOREncoderObject *self, EncodeFunction *encoder,
@@ -1181,6 +1307,21 @@ CBOREncoder_encode_shared(CBOREncoderObject *self, PyObject *args)
     return ret;
 }
 
+
+// CBOREncoder.encode_stringref(self, value)
+static PyObject *
+CBOREncoder_encode_stringref(CBOREncoderObject *self, PyObject *value)
+{
+    // semantic type 25
+    PyObject *ret = NULL;
+
+    switch (stringref(self, value)) {
+        case 1: Py_RETURN_NONE;
+        case 0: ret = CBOREncoder_encode(self, value);
+    }
+
+    return ret;
+}
 
 // CBOREncoder.encode_rational(self, value)
 static PyObject *
@@ -1270,6 +1411,25 @@ CBOREncoder_encode_uuid(CBOREncoderObject *self, PyObject *value)
 }
 
 
+// CBOREncoder.encode_stringref_namespace(self, value)
+static PyObject *
+CBOREncoder_encode_stringref_ns(CBOREncoderObject *self, PyObject *value)
+{
+    // semantic type 256
+    PyObject *ret = NULL;
+    bool old_string_namespacing = self->string_namespacing;
+
+    self->string_namespacing = false;
+    if (encode_semantic(self, 256, value) == 0) {
+        Py_INCREF(Py_None);
+        ret = Py_None;
+    }
+    self->string_namespacing = old_string_namespacing;
+
+    return ret;
+}
+
+
 static PyObject *
 encode_set(CBOREncoderObject *self, PyObject *value)
 {
@@ -1309,7 +1469,7 @@ static PyObject *
 CBOREncoder_encode_set(CBOREncoderObject *self, PyObject *value)
 {
     // semantic type 258
-    return encode_shared(self, &encode_set, value);
+    return encode_container(self, &encode_set, value);
 }
 
 
@@ -1335,7 +1495,7 @@ static PyObject *
 CBOREncoder_encode_ipaddress(CBOREncoderObject *self, PyObject *value)
 {
     // semantic type 260
-    return encode_shared(self, &encode_ipaddress, value);
+    return encode_container(self, &encode_ipaddress, value);
 }
 
 
@@ -1375,7 +1535,7 @@ static PyObject *
 CBOREncoder_encode_ipnetwork(CBOREncoderObject *self, PyObject *value)
 {
     // semantic type 261
-    return encode_shared(self, &encode_ipnetwork, value);
+    return encode_container(self, &encode_ipnetwork, value);
 }
 
 
@@ -1562,10 +1722,21 @@ encode_canonical_map_list(CBOREncoderObject *self, PyObject *list)
     if (encode_length(self, 5, PyList_GET_SIZE(list)) == -1)
         return NULL;
     for (index = 0; index < PyList_GET_SIZE(list); ++index) {
-        // We already have the encoded form of the key so just write it out
-        bytes = PyTuple_GET_ITEM(PyList_GET_ITEM(list, index), 1);
-        if (fp_write(self, PyBytes_AS_STRING(bytes), PyBytes_GET_SIZE(bytes)) == -1)
-            return NULL;
+        // If we are encoding string references, the order of the keys
+        // needs to match the order we encode.
+        if (self->string_referencing) {
+            ret = CBOREncoder_encode(self,
+                    PyTuple_GET_ITEM(PyList_GET_ITEM(list, index), 2));
+            if (ret)
+                Py_DECREF(ret);
+            else
+                return NULL;
+        } else {
+            // We already have the encoded form of the key so just write it out
+            bytes = PyTuple_GET_ITEM(PyList_GET_ITEM(list, index), 1);
+            if (fp_write(self, PyBytes_AS_STRING(bytes), PyBytes_GET_SIZE(bytes)) == -1)
+                return NULL;
+        }
         ret = CBOREncoder_encode(self,
                 PyTuple_GET_ITEM(PyList_GET_ITEM(list, index), 3));
         if (ret)
@@ -1670,15 +1841,21 @@ static PyObject *
 encode_canonical_map(CBOREncoderObject *self, PyObject *value)
 {
     PyObject *list, *ret = NULL;
+    bool string_referencing_old = self->string_referencing;
 
+    // Don't generate string references when sorting keys
+    self->string_referencing = false;
     if (PyDict_Check(value))
         list = dict_to_canonical_list(self, value);
     else
         list = mapping_to_canonical_list(self, value);
+    self->string_referencing = string_referencing_old;
+
     if (list) {
         ret = encode_canonical_map_list(self, list);
         Py_DECREF(list);
     }
+
     return ret;
 }
 
@@ -1686,7 +1863,7 @@ encode_canonical_map(CBOREncoderObject *self, PyObject *value)
 static PyObject *
 CBOREncoder_encode_canonical_map(CBOREncoderObject *self, PyObject *value)
 {
-    return encode_shared(self, &encode_canonical_map, value);
+    return encode_container(self, &encode_canonical_map, value);
 }
 
 
@@ -1768,7 +1945,7 @@ encode_canonical_set(CBOREncoderObject *self, PyObject *value)
 static PyObject *
 CBOREncoder_encode_canonical_set(CBOREncoderObject *self, PyObject *value)
 {
-    return encode_shared(self, &encode_canonical_set, value);
+    return encode_container(self, &encode_canonical_set, value);
 }
 
 
@@ -1972,6 +2149,10 @@ static PyMethodDef CBOREncoder_methods[] = {
         "encode the specified IPv4 or IPv6 network prefix to the output"},
     {"encode_shared", (PyCFunction) CBOREncoder_encode_shared, METH_VARARGS,
         "encode the specified CBORTag to the output"},
+    {"encode_stringref", (PyCFunction) CBOREncoder_encode_stringref, METH_O,
+        "encode the string potentially referencing an existing occurrence"},
+    {"encode_stringref_namespace", (PyCFunction) CBOREncoder_encode_stringref_ns, METH_O,
+        "encode all string and bytestring descendants with stringrefs"},
     // Canonical encoding methods
     {"encode_minimal_float",
         (PyCFunction) CBOREncoder_encode_minimal_float, METH_O,

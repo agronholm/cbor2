@@ -15,11 +15,14 @@ typedef struct {
     PyObject *encoders;
     PyObject *default_handler;
     PyObject *shared;
+    PyObject *string_references;
     PyObject *tz;       // renamed from timezone to avoid Python issue #24643
     PyObject *shared_handler;
     uint8_t enc_style;  // 0=regular, 1=canonical, 2=custom
     bool timestamp_format;
     bool value_sharing;
+    bool string_referencing;
+    bool string_namespacing;
 } CBOREncoderObject;
 
 extern PyTypeObject CBOREncoderType;
