@@ -481,3 +481,42 @@ def test_canonical_set(impl, frozen):
 
     serialized = impl.dumps(value, canonical=True)
     assert serialized == unhexlify('d9010284616161786179626161')
+
+
+@pytest.mark.parametrize('value', [
+    u'',
+    u'a',
+    u'abcde',
+    b'\x01\x02\x03\x04',
+    [u'a', u'bb', u'a', u'bb'],
+    [u'a', u'bb', u'ccc', u'dddd', u'a', u'bb'],
+    {u'a': u'm', u'bb': u'nn', u'e': u'm', u'ff': u'nn'},
+    {u'a': u'm', u'bb': u'nn', u'ccc': u'ooo', u'dddd': u'pppp',
+     u'e': u'm', u'ff': u'nn'},
+], ids=['empty string', 'short string', 'long string', 'bytestring',
+        'array of short strings', 'no repeated long strings',
+        'dict with short keys and strings',
+        'dict with no repeated long strings'])
+def test_encode_stringrefs_unchanged(impl, value):
+    expected = impl.dumps(value)
+    if isinstance(value, list) or isinstance(value, dict):
+        expected = b'\xd9\x01\x00' + expected
+    assert impl.dumps(value, string_referencing=True) == expected
+
+
+def test_encode_stringrefs_array(impl):
+    value = [u'aaaa', u'aaaa', u'bbbb', u'aaaa', u'bbbb']
+    equivalent = [u'aaaa', impl.CBORTag(25, 0), u'bbbb', impl.CBORTag(25, 0), impl.CBORTag(25, 1)]
+    assert impl.dumps(value, string_referencing=True) == b'\xd9\x01\x00' + impl.dumps(equivalent)
+
+
+def test_encode_stringrefs_dict(impl):
+    value = {u'aaaa': u'mmmm', u'bbbb': u'bbbb', u'cccc': u'aaaa', u'mmmm': u'aaaa'}
+    expected = unhexlify(
+        'd90100' 'a4'
+        '6461616161' '646d6d6d6d'
+        '6462626262' 'd81902'
+        '6463636363' 'd81900'
+        'd81901' 'd81900'
+    )
+    assert impl.dumps(value, string_referencing=True, canonical=True) == expected
