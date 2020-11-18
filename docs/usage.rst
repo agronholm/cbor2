@@ -61,6 +61,17 @@ it possible to serialize such cyclic references, but value sharing has to be ena
     whether you want to enable it. It also causes some line overhead, as all potentially shareable
     values must be tagged as such.
 
+String references
+-----------------
+
+When ``string_referencing=True`` is passed to
+:func:`~cbor2.encoder.dump`/:func:`~cbor2.encoder.dumps`, if the encoder would encode a string that
+it has previously encoded and where a reference would be shorter than the encoded string, it
+instead encodes a reference to the nth sufficiently long string already encoded.
+
+.. warning:: Support for string referencing is rare in other CBOR implementations, so think carefully
+    whether you want to enable it.
+
 Tag support
 -----------
 
