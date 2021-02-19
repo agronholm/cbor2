@@ -610,16 +610,12 @@ def test_immutable_keys(impl, payload, expected):
     assert value == expected
 
 
-def test_huge_truncated_array(impl):
+def test_huge_truncated_array(impl, will_overflow):
     with pytest.raises(impl.CBORDecodeEOF):
-        impl.loads(unhexlify('9b37388519251ae9ca'))
+        impl.loads(unhexlify('9b') + will_overflow)
 
 
-def test_huge_truncated_bytes(impl):
+@pytest.mark.parametrize('dtype_prefix', ['7B', '5b'], ids=['string', 'bytes'])
+def test_huge_truncated_data(impl, dtype_prefix, will_overflow):
     with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
-        impl.loads(unhexlify('5b37388519251ae9ca'))
-
-
-def test_huge_truncated_string(impl):
-    with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
-        impl.loads(unhexlify('7B37388519251ae9ca'))
+        impl.loads(unhexlify(dtype_prefix) + will_overflow)
