@@ -171,7 +171,7 @@ def main():
         outfile = 1
         closefd = False
 
-    opener = dict(mode='w', encoding='utf-8', errors='backslashescape', closefd=closefd)
+    opener = dict(mode='w', encoding='utf-8', errors='backslashreplace', closefd=closefd)
     dumpargs = dict(ensure_ascii=False)
 
     if options.tag_ignore:
