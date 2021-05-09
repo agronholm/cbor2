@@ -36,9 +36,9 @@ jobs:
         path: ~/.cache/pip
         key: pip-test-${{ matrix.python-version }}-${{ matrix.os }}
     - name: Install dependencies
-      run: pip install pep517
+      run: pip install build
     - name: Create packages
-      run: python -m pep517.build --binary .
+      run: python -m build --wheel .
     - uses: actions/upload-artifact@v2
       with:
         name: other-wheels
@@ -53,9 +53,9 @@ jobs:
       with:
         python-version: 3.x
     - name: Install dependencies
-      run: pip install pep517
+      run: pip install build
     - name: Create sdist
-      run: python -m pep517.build --source .
+      run: python -m build --sdist .
     - uses: actions/upload-artifact@v2
       with:
         name: sdist
