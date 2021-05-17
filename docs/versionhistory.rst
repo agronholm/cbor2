@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**5.3.0** (2021-05-18)
+
+- Removed support for Python < 3.6
+
 **5.2.0** (2020-09-30)
 
 - Final version tested with Python 2.7 and 3.5
@@ -24,7 +28,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 - Build system: Making C lib optional if it fails to compile (chiefnoah)
 - Build system: Better Glibc version detection (Sekenre and JayH5)
 - Tests: Positive and negative bignums (kalcutter)
-- Bugfix: Fractional seconds parsing in datetimes (kalcutter) 
+- Bugfix: Fractional seconds parsing in datetimes (kalcutter)
 
 **5.1.0** (2020-03-18)
 
