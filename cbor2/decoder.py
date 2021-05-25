@@ -499,6 +499,59 @@ class CBORDecoder:
         self._stringref_namespace = old_namespace
         return value
 
+    def _decode_typed_array_half_float_impl(self, name, tag, element_size, format):
+        """Helper function for decoding typed arrays of half-precision floats"""
+        buf = self.decode()
+        if not isinstance(buf, bytes):
+            raise CBORDecodeValueError("invalid %s typed array %r" % (name, buf))
+        elif len(buf) % element_size != 0:
+            raise CBORDecodeValueError(
+                "invalid length for %s typed array -- must be multiple of %i, but is %i"
+                % (name, element_size, len(buf)))
+
+        out = struct.unpack(format % (len(buf) // element_size), buf)
+
+        if self._immutable:
+            return self.set_shareable(out)
+        else:
+            return self.set_shareable(list(out))
+
+    def _decode_typed_array_half_fload_func(*args):
+        return lambda self: self._decode_typed_array_half_float_impl(*args)
+
+    decode_array_float16_be = _decode_typed_array_half_fload_func('float16', 80, 2, '>%ie')
+    decode_array_float16_le = _decode_typed_array_half_fload_func('float16', 84, 2, '<%ie')
+
+    def _decode_typed_array_impl(self, name, tag, element_size, typecode, endianness):
+        """Helper function for decoding typed arrays described by RFC 8746"""
+        import array
+        import sys
+
+        buf = self.decode()
+        if not isinstance(buf, bytes):
+            raise CBORDecodeValueError("invalid %s typed array %r" % (name, buf))
+        elif len(buf) % element_size != 0:
+            raise CBORDecodeValueError(
+                "invalid length for %s typed array -- must be multiple of %i, but is %i"
+                % (name, element_size, len(buf)))
+
+        out = array.array(typecode, buf)
+        if sys.byteorder != endianness:
+            out.byteswap()
+
+        if self._immutable:
+            return self.set_shareable(tuple(out))
+        else:
+            return self.set_shareable(out)
+
+    def _decode_typed_array_func(*args):
+        return lambda self: self._decode_typed_array_impl(*args)
+
+    decode_array_float32_be = _decode_typed_array_func('float32', 81, 4, 'f', 'big')
+    decode_array_float64_be = _decode_typed_array_func('float64', 82, 8, 'd', 'big')
+    decode_array_float32_le = _decode_typed_array_func('float32', 85, 4, 'f', 'little')
+    decode_array_float64_le = _decode_typed_array_func('float64', 86, 8, 'd', 'little')
+
     def decode_set(self):
         # Semantic tag 258
         if self._immutable:
@@ -591,6 +644,12 @@ semantic_decoders = {
     35:    CBORDecoder.decode_regexp,
     36:    CBORDecoder.decode_mime,
     37:    CBORDecoder.decode_uuid,
+    80:    CBORDecoder.decode_array_float16_be,
+    81:    CBORDecoder.decode_array_float32_be,
+    82:    CBORDecoder.decode_array_float64_be,
+    84:    CBORDecoder.decode_array_float16_le,
+    85:    CBORDecoder.decode_array_float32_le,
+    86:    CBORDecoder.decode_array_float64_le,
     256:   CBORDecoder.decode_stringref_namespace,
     258:   CBORDecoder.decode_set,
     260:   CBORDecoder.decode_ipaddress,

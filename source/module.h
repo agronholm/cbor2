@@ -32,19 +32,23 @@ extern PyTypeObject CBORSimpleValueType;
 // Various interned strings
 extern PyObject *_CBOR2_empty_bytes;
 extern PyObject *_CBOR2_empty_str;
+extern PyObject *_CBOR2_str_array;
 extern PyObject *_CBOR2_str_as_string;
 extern PyObject *_CBOR2_str_as_tuple;
 extern PyObject *_CBOR2_str_bit_length;
 extern PyObject *_CBOR2_str_bytes;
+extern PyObject *_CBOR2_str_byteswap;
 extern PyObject *_CBOR2_str_BytesIO;
 extern PyObject *_CBOR2_str_canonical_encoders;
 extern PyObject *_CBOR2_str_compile;
 extern PyObject *_CBOR2_str_copy;
+extern PyObject *_CBOR2_str_d;
 extern PyObject *_CBOR2_str_datestr_re;
 extern PyObject *_CBOR2_str_Decimal;
 extern PyObject *_CBOR2_str_default_encoders;
 extern PyObject *_CBOR2_str_denominator;
 extern PyObject *_CBOR2_str_encode_date;
+extern PyObject *_CBOR2_str_f;
 extern PyObject *_CBOR2_str_Fraction;
 extern PyObject *_CBOR2_str_fromtimestamp;
 extern PyObject *_CBOR2_str_FrozenDict;
@@ -87,6 +91,7 @@ extern PyObject *_CBOR2_CBORDecodeEOF;
 // Global references (initialized by functions declared below)
 extern PyObject *_CBOR2_timezone;
 extern PyObject *_CBOR2_timezone_utc;
+extern PyObject *_CBOR2_array;
 extern PyObject *_CBOR2_BytesIO;
 extern PyObject *_CBOR2_Decimal;
 extern PyObject *_CBOR2_Fraction;
@@ -100,6 +105,7 @@ extern PyObject *_CBOR2_ip_network;
 
 // Initializers for the cached references above
 int _CBOR2_init_timezone_utc(void); // also handles timezone
+int _CBOR2_init_array(void);
 int _CBOR2_init_BytesIO(void);
 int _CBOR2_init_Decimal(void);
 int _CBOR2_init_Fraction(void);

@@ -1,5 +1,6 @@
 import math
 import re
+from array import array
 from binascii import unhexlify
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -677,8 +678,7 @@ def test_invalid_indefinite_data_item(impl, data):
 @pytest.mark.parametrize('data', [
     '7f7bff0000000000000471717272ff', '5f5bff0000000000000471717272ff'
     ],
-    ids=['string', 'bytes']
-)
+    ids=['string', 'bytes'])
 def test_indefinite_overflow(impl, data):
     with pytest.raises(impl.CBORDecodeValueError):
         impl.loads(unhexlify(data))
@@ -692,3 +692,36 @@ def test_invalid_cbor(impl):
             '4c271579b01633a3ef6271be5c225eb2'
             )
         )
+
+
+@pytest.mark.parametrize('payload, expected', [
+    # 16-bit Big Endian
+    ('d850483e00410048c0c500', [1.5, 2.5, 9.5, -5.0]),
+    # 16-bit Little Endian
+    ('d85448003e0041c04800c5', [1.5, 2.5, 9.5, -5.0]),
+    # 32-bit Big Endian
+    ('d851503fc000004020000041180000c0a00000',
+     array('f', [1.5, 2.5, 9.5, -5.0])),
+    # 32-bit Little Endian
+    ('d855500000c03f00002040000018410000a0c0',
+     array('f', [1.5, 2.5, 9.5, -5.0])),
+    # 64-bit Big Endian
+    ('d85258203ff800000000000040040000000000004023000000000000c014000000000000',
+     array('d', [1.5, 2.5, 9.5, -5.0])),
+    # 64-bit Little Endian
+    ('d8565820000000000000f83f0000000000000440000000000000234000000000000014c0',
+     array('d', [1.5, 2.5, 9.5, -5.0])),
+    ('d85640', array('d', [])),
+])
+def test_typed_array_floats(impl, payload, expected):
+    src_bytes = unhexlify(payload)
+    decoded = impl.loads(src_bytes)
+
+    assert decoded == expected
+
+    # Immutability check -- a map with the payload as the key
+    src_bytes = unhexlify('a1' + payload + '00')
+    decoded = impl.loads(src_bytes)
+    assert len(decoded) == 1
+    decoded = next(iter(decoded))  # <- only care about the first key
+    assert decoded == tuple(expected)
