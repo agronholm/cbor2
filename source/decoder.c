@@ -30,6 +30,9 @@
 #define be64toh(x) _byteswap_uint64(x)
 #endif
 
+// copied from cpython/Objects/bytesobject.c for bounds checks
+#define PyBytesObject_SIZE (offsetof(PyBytesObject, ob_sval) + 1)
+
 enum DecodeOption {
     DECODE_NORMAL = 0,
     DECODE_IMMUTABLE = 1,
@@ -534,8 +537,6 @@ decode_definite_bytestring(CBORDecoderObject *self, uint64_t length)
 {
     PyObject *ret = NULL;
 
-    if (length > PY_SSIZE_T_MAX)
-        return NULL;
     ret = PyBytes_FromStringAndSize(NULL, length);
     if (!ret)
         return NULL;
@@ -625,8 +626,11 @@ decode_definite_string(CBORDecoderObject *self, uint64_t length)
     PyObject *ret = NULL;
     char *buf;
 
-    if (length > PY_SSIZE_T_MAX)
+    if ((size_t)length > (size_t)PY_SSIZE_T_MAX - PyBytesObject_SIZE) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "byte string is too large");
         return NULL;
+    }
     buf = PyMem_Malloc(length);
     if (!buf)
         return PyErr_NoMemory();
