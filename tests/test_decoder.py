@@ -647,3 +647,13 @@ def test_huge_truncated_bytes(impl):
 def test_huge_truncated_string(impl):
     with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
         impl.loads(unhexlify('7B37388519251ae9ca'))
+
+
+def test_invalid_cbor(impl):
+    with pytest.raises(impl.CBORDecodeError):
+        impl.loads(unhexlify(
+            'c788370016b8965bdb2074bff82e5a20e09bec21f8406e86442b87ec3ff245b70a47624dc9cdc6824b2a'
+            '4c52e95ec9d6b0534b71c2b49e4bf9031500cee6869979c297bb5a8b381e98db714108415e5c50db7897'
+            '4c271579b01633a3ef6271be5c225eb2'
+            )
+        )
