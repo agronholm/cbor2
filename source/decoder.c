@@ -563,7 +563,7 @@ decode_indefinite_bytestrings(CBORDecoderObject *self)
         while (1) {
             if (fp_read(self, &lead.byte, 1) == -1)
                 break;
-            if (lead.major == 2) {
+            if (lead.major == 2 && lead.subtype != 31) {
                 ret = decode_bytestring(self, lead.subtype);
                 if (ret) {
                     PyList_Append(list, ret);
@@ -659,7 +659,7 @@ decode_indefinite_strings(CBORDecoderObject *self)
         while (1) {
             if (fp_read(self, &lead.byte, 1) == -1)
                 break;
-            if (lead.major == 3) {
+            if (lead.major == 3 && lead.subtype != 31) {
                 ret = decode_string(self, lead.subtype);
                 if (ret) {
                     PyList_Append(list, ret);
