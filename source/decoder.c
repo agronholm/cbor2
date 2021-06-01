@@ -569,6 +569,8 @@ decode_indefinite_bytestrings(CBORDecoderObject *self)
                     PyList_Append(list, ret);
                     Py_DECREF(ret);
                     ret = NULL;
+                } else {
+                    break;
                 }
             } else if (lead.major == 7 && lead.subtype == 31) { // break-code
                 ret = PyObject_CallMethodObjArgs(
@@ -597,6 +599,13 @@ decode_bytestring(CBORDecoderObject *self, uint8_t subtype)
 
     if (decode_length(self, subtype, &length, &indefinite) == -1)
         return NULL;
+
+    if ((size_t)length < 0 || (size_t)length > (size_t)PY_SSIZE_T_MAX - PyBytesObject_SIZE) {
+        PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                "excessive bytestring size %llu", length);
+        return NULL;
+    }
     if (indefinite)
         ret = decode_indefinite_bytestrings(self);
     else
@@ -626,11 +635,6 @@ decode_definite_string(CBORDecoderObject *self, uint64_t length)
     PyObject *ret = NULL;
     char *buf;
 
-    if ((size_t)length > (size_t)PY_SSIZE_T_MAX - PyBytesObject_SIZE) {
-        PyErr_SetString(PyExc_OverflowError,
-                        "byte string is too large");
-        return NULL;
-    }
     buf = PyMem_Malloc(length);
     if (!buf)
         return PyErr_NoMemory();
@@ -665,6 +669,8 @@ decode_indefinite_strings(CBORDecoderObject *self)
                     PyList_Append(list, ret);
                     Py_DECREF(ret);
                     ret = NULL;
+                } else {
+                    break;
                 }
             } else if (lead.major == 7 && lead.subtype == 31) { // break-code
                 ret = PyObject_CallMethodObjArgs(
@@ -693,6 +699,12 @@ decode_string(CBORDecoderObject *self, uint8_t subtype)
 
     if (decode_length(self, subtype, &length, &indefinite) == -1)
         return NULL;
+    if ((size_t)length < 0 || (size_t)length > (size_t)PY_SSIZE_T_MAX - PyBytesObject_SIZE) {
+        PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                "excessive string size %llu", length);
+        return NULL;
+    }
     if (indefinite)
         ret = decode_indefinite_strings(self);
     else
