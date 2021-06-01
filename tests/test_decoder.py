@@ -635,21 +635,25 @@ def test_immutable_keys(impl, payload, expected):
     value = impl.loads(unhexlify(payload))
     assert value == expected
 
+
 # Corrupted or invalid data checks
 
 def test_huge_truncated_array(impl, will_overflow):
     with pytest.raises(impl.CBORDecodeEOF):
         impl.loads(unhexlify('9b') + will_overflow)
 
+
 def test_huge_truncated_string(impl):
     huge_index = struct.pack('Q', sys.maxsize + 1)
     with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
         impl.loads(unhexlify('7b') + huge_index + unhexlify('70717273'))
 
+
 @pytest.mark.parametrize('dtype_prefix', ['7B', '5b'], ids=['string', 'bytes'])
 def test_huge_truncated_data(impl, dtype_prefix, will_overflow):
     with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
         impl.loads(unhexlify(dtype_prefix) + will_overflow)
+
 
 @pytest.mark.parametrize('tag_dtype', ['7F7B', '5f5B'], ids=['string', 'bytes'])
 def test_huge_truncated_indefinite_data(impl, tag_dtype, will_overflow):
@@ -658,10 +662,11 @@ def test_huge_truncated_indefinite_data(impl, tag_dtype, will_overflow):
         impl.loads(unhexlify(tag_dtype) + huge_index + unhexlify('70717273ff'))
 
 
-@pytest.mark.parametrize('data', ['7f61777f6177ffff', '5f41775f4177ffff'], ids=['string','bytes'])
+@pytest.mark.parametrize('data', ['7f61777f6177ffff', '5f41775f4177ffff'], ids=['string', 'bytes'])
 def test_embedded_indefinite_data(impl, data):
     with pytest.raises((impl.CBORDecodeValueError)):
         impl.loads(unhexlify(data))
+
 
 def test_invalid_cbor(impl):
     with pytest.raises((impl.CBORDecodeError, SystemError)):
