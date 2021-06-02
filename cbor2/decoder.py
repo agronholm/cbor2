@@ -334,8 +334,6 @@ class CBORDecoder:
                 else:
                     dictionary[key] = self._decode(unshared=True)
         else:
-            if length > sys.maxsize:
-                raise CBORDecodeValueError('invalid length for map 0x%x' % length)
             dictionary = {}
             self.set_shareable(dictionary)
             for _ in range(length):
