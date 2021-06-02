@@ -30,6 +30,9 @@
 #define be64toh(x) _byteswap_uint64(x)
 #endif
 
+// copied from cpython/Objects/bytesobject.c for bounds checks
+#define PyBytesObject_SIZE (offsetof(PyBytesObject, ob_sval) + 1)
+
 enum DecodeOption {
     DECODE_NORMAL = 0,
     DECODE_IMMUTABLE = 1,
@@ -341,13 +344,13 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
 // Utility functions /////////////////////////////////////////////////////////
 
 static int
-fp_read(CBORDecoderObject *self, char *buf, const uint64_t size)
+fp_read(CBORDecoderObject *self, char *buf, const Py_ssize_t size)
 {
     PyObject *obj, *size_obj;
     char *data;
     int ret = -1;
 
-    size_obj = PyLong_FromUnsignedLongLong(size);
+    size_obj = PyLong_FromSsize_t(size);
     if (size_obj) {
         obj = PyObject_CallFunctionObjArgs(self->read, size_obj, NULL);
         if (obj) {
@@ -359,8 +362,8 @@ fp_read(CBORDecoderObject *self, char *buf, const uint64_t size)
             } else {
                 PyErr_Format(
                     _CBOR2_CBORDecodeEOF,
-                    "premature end of stream (expected to read %llu bytes, "
-                    "got %lld instead)", size, PyBytes_GET_SIZE(obj));
+                    "premature end of stream (expected to read %zd bytes, "
+                    "got %zd instead)", size, PyBytes_GET_SIZE(obj));
             }
             Py_DECREF(obj);
         }
@@ -530,12 +533,10 @@ decode_negint(CBORDecoderObject *self, uint8_t subtype)
 
 
 static PyObject *
-decode_definite_bytestring(CBORDecoderObject *self, uint64_t length)
+decode_definite_bytestring(CBORDecoderObject *self, Py_ssize_t length)
 {
     PyObject *ret = NULL;
 
-    if (length > PY_SSIZE_T_MAX)
-        return NULL;
     ret = PyBytes_FromStringAndSize(NULL, length);
     if (!ret)
         return NULL;
@@ -562,12 +563,14 @@ decode_indefinite_bytestrings(CBORDecoderObject *self)
         while (1) {
             if (fp_read(self, &lead.byte, 1) == -1)
                 break;
-            if (lead.major == 2) {
+            if (lead.major == 2 && lead.subtype != 31) {
                 ret = decode_bytestring(self, lead.subtype);
                 if (ret) {
                     PyList_Append(list, ret);
                     Py_DECREF(ret);
                     ret = NULL;
+                } else {
+                    break;
                 }
             } else if (lead.major == 7 && lead.subtype == 31) { // break-code
                 ret = PyObject_CallMethodObjArgs(
@@ -590,16 +593,25 @@ static PyObject *
 decode_bytestring(CBORDecoderObject *self, uint8_t subtype)
 {
     // major type 2
-    uint64_t length;
+    uint64_t length = 0;
     bool indefinite = true;
     PyObject *ret;
+    char length_hex[17];
 
     if (decode_length(self, subtype, &length, &indefinite) == -1)
         return NULL;
+
+    if (length > (uint64_t)PY_SSIZE_T_MAX - (uint64_t)PyBytesObject_SIZE) {
+        sprintf(length_hex, "%llX", length);
+        PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                "excessive bytestring size 0x%s", length_hex);
+        return NULL;
+    }
     if (indefinite)
         ret = decode_indefinite_bytestrings(self);
     else
-        ret = decode_definite_bytestring(self, length);
+        ret = decode_definite_bytestring(self, (Py_ssize_t)length);
     set_shareable(self, ret);
     return ret;
 }
@@ -620,13 +632,11 @@ decode_bytestring(CBORDecoderObject *self, uint8_t subtype)
 
 
 static PyObject *
-decode_definite_string(CBORDecoderObject *self, uint64_t length)
+decode_definite_string(CBORDecoderObject *self, Py_ssize_t length)
 {
     PyObject *ret = NULL;
     char *buf;
 
-    if (length > PY_SSIZE_T_MAX)
-        return NULL;
     buf = PyMem_Malloc(length);
     if (!buf)
         return PyErr_NoMemory();
@@ -655,12 +665,14 @@ decode_indefinite_strings(CBORDecoderObject *self)
         while (1) {
             if (fp_read(self, &lead.byte, 1) == -1)
                 break;
-            if (lead.major == 3) {
+            if (lead.major == 3 && lead.subtype != 31) {
                 ret = decode_string(self, lead.subtype);
                 if (ret) {
                     PyList_Append(list, ret);
                     Py_DECREF(ret);
                     ret = NULL;
+                } else {
+                    break;
                 }
             } else if (lead.major == 7 && lead.subtype == 31) { // break-code
                 ret = PyObject_CallMethodObjArgs(
@@ -683,16 +695,24 @@ static PyObject *
 decode_string(CBORDecoderObject *self, uint8_t subtype)
 {
     // major type 3
-    uint64_t length;
+    uint64_t length = 0;
     bool indefinite = true;
     PyObject *ret;
+    char length_hex[17];
 
     if (decode_length(self, subtype, &length, &indefinite) == -1)
         return NULL;
+    if (length > (uint64_t)PY_SSIZE_T_MAX - (uint64_t)PyBytesObject_SIZE) {
+        sprintf(length_hex, "%llX", length);
+        PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                "excessive string size 0x%s", length_hex);
+        return NULL;
+    }
     if (indefinite)
         ret = decode_indefinite_strings(self);
     else
-        ret = decode_definite_string(self, length);
+        ret = decode_definite_string(self, (Py_ssize_t)length);
     set_shareable(self, ret);
     return ret;
 }
@@ -745,13 +765,7 @@ decode_definite_array(CBORDecoderObject *self, Py_ssize_t length)
 {
     Py_ssize_t i;
     PyObject *array, *item, *ret = NULL;
-
-    if (length > PY_SSIZE_T_MAX || length < 0) {
-        PyErr_Format(
-                _CBOR2_CBORDecodeValueError,
-                "excessive array size %llu", length);
-        return NULL;
-    } else if (length > 65536) {
+    if (length > 65536) {
         // Let cPython manage allocation of huge lists by appending
         // items one-by-one
         array = PyList_New(0);
@@ -839,12 +853,19 @@ decode_array(CBORDecoderObject *self, uint8_t subtype)
     // major type 4
     uint64_t length;
     bool indefinite = true;
+    char length_hex[17];
 
     if (decode_length(self, subtype, &length, &indefinite) == -1)
         return NULL;
     if (indefinite)
         return decode_indefinite_array(self);
-    else
+    if (length > (uint64_t)PY_SSIZE_T_MAX) {
+        sprintf(length_hex, "%llX", length);
+        PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                "excessive array size 0x%s", length_hex);
+        return NULL;
+    } else
         return decode_definite_array(self, (Py_ssize_t) length);
 }
 

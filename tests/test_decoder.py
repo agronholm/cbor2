@@ -7,6 +7,8 @@ from email.message import Message
 from fractions import Fraction
 from io import BytesIO
 from ipaddress import ip_address, ip_network
+import struct
+import sys
 from uuid import UUID
 
 import pytest
@@ -634,16 +636,59 @@ def test_immutable_keys(impl, payload, expected):
     assert value == expected
 
 
-def test_huge_truncated_array(impl):
-    with pytest.raises(impl.CBORDecodeEOF):
-        impl.loads(unhexlify('9b37388519251ae9ca'))
+# Corrupted or invalid data checks
 
-
-def test_huge_truncated_bytes(impl):
-    with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
-        impl.loads(unhexlify('5b37388519251ae9ca'))
+def test_huge_truncated_array(impl, will_overflow):
+    with pytest.raises(impl.CBORDecodeError):
+        impl.loads(unhexlify('9b') + will_overflow)
 
 
 def test_huge_truncated_string(impl):
-    with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
-        impl.loads(unhexlify('7B37388519251ae9ca'))
+    huge_index = struct.pack('Q', sys.maxsize + 1)
+    with pytest.raises((impl.CBORDecodeError, MemoryError)):
+        impl.loads(unhexlify('7b') + huge_index + unhexlify('70717273'))
+
+
+@pytest.mark.parametrize('dtype_prefix', ['7B', '5b'], ids=['string', 'bytes'])
+def test_huge_truncated_data(impl, dtype_prefix, will_overflow):
+    with pytest.raises((impl.CBORDecodeError, MemoryError)):
+        impl.loads(unhexlify(dtype_prefix) + will_overflow)
+
+
+@pytest.mark.parametrize('tag_dtype', ['7F7B', '5f5B'], ids=['string', 'bytes'])
+def test_huge_truncated_indefinite_data(impl, tag_dtype, will_overflow):
+    huge_index = struct.pack('Q', sys.maxsize + 1)
+    with pytest.raises((impl.CBORDecodeError, MemoryError)):
+        impl.loads(unhexlify(tag_dtype) + huge_index + unhexlify('70717273ff'))
+
+
+@pytest.mark.parametrize('data', ['7f61777f6177ffff', '5f41775f4177ffff'], ids=['string', 'bytes'])
+def test_embedded_indefinite_data(impl, data):
+    with pytest.raises(impl.CBORDecodeValueError):
+        impl.loads(unhexlify(data))
+
+
+@pytest.mark.parametrize('data', ['7f01ff', '5f01ff'], ids=['string', 'bytes'])
+def test_invalid_indefinite_data_item(impl, data):
+    with pytest.raises(impl.CBORDecodeValueError):
+        impl.loads(unhexlify(data))
+
+
+@pytest.mark.parametrize('data', [
+    '7f7bff0000000000000471717272ff', '5f5bff0000000000000471717272ff'
+    ],
+    ids=['string', 'bytes']
+)
+def test_indefinite_overflow(impl, data):
+    with pytest.raises(impl.CBORDecodeValueError):
+        impl.loads(unhexlify(data))
+
+
+def test_invalid_cbor(impl):
+    with pytest.raises(impl.CBORDecodeError):
+        impl.loads(unhexlify(
+            'c788370016b8965bdb2074bff82e5a20e09bec21f8406e86442b87ec3ff245b70a47624dc9cdc6824b2a'
+            '4c52e95ec9d6b0534b71c2b49e4bf9031500cee6869979c297bb5a8b381e98db714108415e5c50db7897'
+            '4c271579b01633a3ef6271be5c225eb2'
+            )
+        )
