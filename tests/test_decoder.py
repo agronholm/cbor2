@@ -639,26 +639,26 @@ def test_immutable_keys(impl, payload, expected):
 # Corrupted or invalid data checks
 
 def test_huge_truncated_array(impl, will_overflow):
-    with pytest.raises(impl.CBORDecodeEOF):
+    with pytest.raises(impl.CBORDecodeError):
         impl.loads(unhexlify('9b') + will_overflow)
 
 
 def test_huge_truncated_string(impl):
     huge_index = struct.pack('Q', sys.maxsize + 1)
-    with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
+    with pytest.raises((impl.CBORDecodeError, MemoryError)):
         impl.loads(unhexlify('7b') + huge_index + unhexlify('70717273'))
 
 
 @pytest.mark.parametrize('dtype_prefix', ['7B', '5b'], ids=['string', 'bytes'])
 def test_huge_truncated_data(impl, dtype_prefix, will_overflow):
-    with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
+    with pytest.raises((impl.CBORDecodeError, MemoryError)):
         impl.loads(unhexlify(dtype_prefix) + will_overflow)
 
 
 @pytest.mark.parametrize('tag_dtype', ['7F7B', '5f5B'], ids=['string', 'bytes'])
 def test_huge_truncated_indefinite_data(impl, tag_dtype, will_overflow):
     huge_index = struct.pack('Q', sys.maxsize + 1)
-    with pytest.raises((impl.CBORDecodeEOF, MemoryError)):
+    with pytest.raises((impl.CBORDecodeError, MemoryError)):
         impl.loads(unhexlify(tag_dtype) + huge_index + unhexlify('70717273ff'))
 
 

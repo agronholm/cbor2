@@ -237,7 +237,7 @@ class CBORDecoder:
                     length = self._decode_length(initial_byte & 0x1f)
                     if length is None or length > sys.maxsize:
                         raise CBORDecodeValueError(
-                                'invalid length for indefinite bytestring chunk {}'.format(length)
+                                'invalid length for indefinite bytestring chunk 0x%x' % length
                                 )
                     value = self.read(length)
                     buf.append(value)
@@ -279,7 +279,7 @@ class CBORDecoder:
                     length = self._decode_length(initial_byte & 0x1f)
                     if length is None or length > sys.maxsize:
                         raise CBORDecodeValueError(
-                                'invalid length for indefinite string chunk {}'.format(length))
+                                'invalid length for indefinite string chunk 0x%x' % length)
                     value = self.read(length).decode('utf-8', self._str_errors)
                     buf.append(value)
                 else:
