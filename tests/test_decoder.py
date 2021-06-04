@@ -369,7 +369,7 @@ def test_bad_datetime(impl):
 
 
 def test_positive_bignum(impl):
-    # Example from RFC 7049 section 3.4.3.
+    # Example from RFC 8949 section 3.4.3.
     decoded = impl.loads(unhexlify('c249010000000000000000'))
     assert decoded == 18446744073709551616
 

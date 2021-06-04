@@ -5,6 +5,13 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**5.4.0** (2021-06-04)
+
+- Fix various bounds checks in the C-backend (Sekenre)
+- More testing of invalid/corrupted data (Sekenre)
+- Support for `String References <http://cbor.schmorp.de/stringref>`_ (xurtis)
+- Update Docs to refer to new RFC8949
+
 **5.3.0** (2021-05-18)
 
 - Removed support for Python < 3.6

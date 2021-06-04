@@ -1,6 +1,9 @@
-.. image:: https://travis-ci.com/agronholm/cbor2.svg?branch=master
-  :target: https://travis-ci.com/agronholm/cbor2
-  :alt: Build Status
+.. image:: https://github.com/agronholm/cbor2/actions/workflows/codeqa-test.yml/badge.svg
+  :target: https://github.com/agronholm/cbor2/actions/workflows/codeqa-test.yml
+  :alt: Testing Status
+.. image:: https://github.com/agronholm/cbor2/actions/workflows/publish.yml/badge.svg
+  :target: https://github.com/agronholm/cbor2/actions/workflows/publish.yml
+  :alt: Publish Status
 .. image:: https://coveralls.io/repos/github/agronholm/cbor2/badge.svg?branch=master
   :target: https://coveralls.io/github/agronholm/cbor2?branch=master
   :alt: Code Coverage
@@ -12,13 +15,14 @@ About
 =====
 
 This library provides encoding and decoding for the Concise Binary Object Representation (CBOR)
-(`RFC 7049`_) serialization format. `Read the docs <https://cbor2.readthedocs.io/>`_ to learn more.
+(`RFC 8949`_) serialization format. The specification is fully compatible with the original RFC 7049.
+`Read the docs <https://cbor2.readthedocs.io/>`_ to learn more.
 
 It is implemented in pure python with an optional C backend.
 
 On PyPy, cbor2 runs with almost identical performance to the C backend.
 
-.. _RFC 7049: https://tools.ietf.org/html/rfc7049
+.. _RFC 8949: https://www.rfc-editor.org/rfc/rfc8949.html
 
 Features
 --------
@@ -27,6 +31,7 @@ Features
 * Support many `CBOR tags`_ with `stdlib objects`_.
 * Generic tag decoding.
 * `Shared value`_ references including cyclic references.
+* `String references`_ compact encoding with repeated strings replaced with indices.
 * Optional C module backend tested on big- and little-endian architectures.
 * Extensible `tagged value handling`_ using ``tag_hook`` and ``object_hook`` on decode and ``default`` on encode.
 * Command-line diagnostic tool, converting CBOR file or stream to JSON ``python -m cbor2.tool``
@@ -36,6 +41,7 @@ Features
 .. _CBOR tags: https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
 .. _stdlib objects: https://cbor2.readthedocs.io/en/latest/usage.html#tag-support
 .. _Shared value: http://cbor.schmorp.de/value-sharing
+.. _String references: http://cbor.schmorp.de/stringref
 .. _tagged value handling: https://cbor2.readthedocs.io/en/latest/customizing.html#using-the-cbor-tags-for-custom-types
 
 Installation
