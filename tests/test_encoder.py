@@ -520,3 +520,8 @@ def test_encode_stringrefs_dict(impl):
         'd81901' 'd81900'
     )
     assert impl.dumps(value, string_referencing=True, canonical=True) == expected
+
+
+def test_negative_tag(impl):
+    with pytest.raises(TypeError):
+        impl.dumps(impl.CBORTag(-1, 'value'))
