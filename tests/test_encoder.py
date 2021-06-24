@@ -522,6 +522,12 @@ def test_encode_stringrefs_dict(impl):
     assert impl.dumps(value, string_referencing=True, canonical=True) == expected
 
 
-def test_negative_tag(impl):
+@pytest.mark.parametrize('tag', [-1, 2**64, 'f'], ids=['too small', 'too large', 'wrong type'])
+def test_invalid_tag(impl, tag):
     with pytest.raises(TypeError):
-        impl.dumps(impl.CBORTag(-1, 'value'))
+        impl.dumps(impl.CBORTag(tag, 'value'))
+
+
+def test_largest_tag(impl):
+    expected = unhexlify('dbffffffffffffffff6176')
+    assert impl.dumps(impl.CBORTag(2**64-1, 'v')) == expected

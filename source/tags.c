@@ -62,11 +62,13 @@ CBORTag_init(CBORTagObject *self, PyObject *args, PyObject *kwargs)
     tag = PyLong_AsUnsignedLongLong(tmp_tag);
 
     if (tag == (uint64_t)-1) {
-        if (PyErr_ExceptionMatches(PyExc_OverflowError)) {
-            PyErr_Clear(); // clear the overflow error
-            PyErr_SetString(PyExc_TypeError, "CBORTag tags must be positive integers less than 2**64");
-        } // otherwise must be some other exception probably type err
-        return -1;
+        if (PyErr_Occurred()){
+            if (PyErr_ExceptionMatches(PyExc_OverflowError)) {
+                PyErr_Clear(); // clear the overflow error
+                PyErr_SetString(PyExc_TypeError, "CBORTag tags must be positive integers less than 2**64");
+            } // otherwise must be some other exception probably type err
+            return -1;
+        } // otherwise it's 2**64-1 which is fine :)
     }
     self->tag = tag;
 
