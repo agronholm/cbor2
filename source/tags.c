@@ -52,11 +52,23 @@ static int
 CBORTag_init(CBORTagObject *self, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {"tag", "value", NULL};
-    PyObject *tmp, *value = NULL;
+    PyObject *tmp, *value, *tmp_tag = NULL;
+    uint64_t tag = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|KO", keywords,
-                &self->tag, &value))
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|OO", keywords,
+                &tmp_tag, &value))
         return -1;
+    // Raises an overflow error if it doesn't work
+    tag = PyLong_AsUnsignedLongLong(tmp_tag);
+
+    if (tag == (uint64_t)-1) {
+        if (PyErr_ExceptionMatches(PyExc_OverflowError)) {
+            PyErr_Clear(); // clear the overflow error
+            PyErr_SetString(PyExc_TypeError, "CBORTag tags must be positive integers less than 2**64");
+        } // otherwise must be some other exception probably type err
+        return -1;
+    }
+    self->tag = tag;
 
     if (value) {
         tmp = self->value;
@@ -67,7 +79,7 @@ CBORTag_init(CBORTagObject *self, PyObject *args, PyObject *kwargs)
     return 0;
 }
 
-
+
 // Special methods ///////////////////////////////////////////////////////////
 
 static PyObject *
