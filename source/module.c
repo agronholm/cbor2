@@ -377,6 +377,26 @@ CBOR2_loads(PyObject *module, PyObject *args, PyObject *kwargs)
 // Cache-init functions //////////////////////////////////////////////////////
 
 int
+_CBOR2_init_array(void)
+{
+    PyObject *array;
+
+    array = PyImport_ImportModule("array");
+    if (!array)
+        goto error;
+    _CBOR2_array = PyObject_GetAttr(array, _CBOR2_str_array);
+    Py_DECREF(array);
+    if (!_CBOR2_array)
+        goto error;
+    return 0;
+
+error:
+    PyErr_SetString(PyExc_ImportError,
+            "unable to import array from array");
+    return -1;
+}
+
+int
 _CBOR2_init_BytesIO(void)
 {
     PyObject *io;
@@ -580,19 +600,23 @@ error:
 
 PyObject *_CBOR2_empty_bytes = NULL;
 PyObject *_CBOR2_empty_str = NULL;
+PyObject *_CBOR2_str_array = NULL;
 PyObject *_CBOR2_str_as_string = NULL;
 PyObject *_CBOR2_str_as_tuple = NULL;
 PyObject *_CBOR2_str_bit_length = NULL;
 PyObject *_CBOR2_str_bytes = NULL;
+PyObject *_CBOR2_str_byteswap = NULL;
 PyObject *_CBOR2_str_BytesIO = NULL;
 PyObject *_CBOR2_str_canonical_encoders = NULL;
 PyObject *_CBOR2_str_compile = NULL;
 PyObject *_CBOR2_str_copy = NULL;
+PyObject *_CBOR2_str_d = NULL;
 PyObject *_CBOR2_str_datestr_re = NULL;
 PyObject *_CBOR2_str_Decimal = NULL;
 PyObject *_CBOR2_str_default_encoders = NULL;
 PyObject *_CBOR2_str_denominator = NULL;
 PyObject *_CBOR2_str_encode_date = NULL;
+PyObject *_CBOR2_str_f = NULL;
 PyObject *_CBOR2_str_Fraction = NULL;
 PyObject *_CBOR2_str_fromtimestamp = NULL;
 PyObject *_CBOR2_str_FrozenDict = NULL;
@@ -633,6 +657,7 @@ PyObject *_CBOR2_CBORDecodeEOF = NULL;
 
 PyObject *_CBOR2_timezone = NULL;
 PyObject *_CBOR2_timezone_utc = NULL;
+PyObject *_CBOR2_array = NULL;
 PyObject *_CBOR2_BytesIO = NULL;
 PyObject *_CBOR2_Decimal = NULL;
 PyObject *_CBOR2_Fraction = NULL;
@@ -652,6 +677,7 @@ cbor2_free(PyObject *m)
 {
     Py_CLEAR(_CBOR2_timezone_utc);
     Py_CLEAR(_CBOR2_timezone);
+    Py_CLEAR(_CBOR2_array);
     Py_CLEAR(_CBOR2_BytesIO);
     Py_CLEAR(_CBOR2_Decimal);
     Py_CLEAR(_CBOR2_Fraction);
@@ -908,18 +934,22 @@ PyInit__cbor2(void)
             !(_CBOR2_str_##name = PyUnicode_InternFromString(#name))) \
         goto error;
 
+    INTERN_STRING(array);
     INTERN_STRING(as_string);
     INTERN_STRING(as_tuple);
     INTERN_STRING(bit_length);
     INTERN_STRING(bytes);
+    INTERN_STRING(byteswap);
     INTERN_STRING(BytesIO);
     INTERN_STRING(canonical_encoders);
     INTERN_STRING(compile);
     INTERN_STRING(copy);
+    INTERN_STRING(d);
     INTERN_STRING(Decimal);
     INTERN_STRING(default_encoders);
     INTERN_STRING(denominator);
     INTERN_STRING(encode_date);
+    INTERN_STRING(f);
     INTERN_STRING(Fraction);
     INTERN_STRING(fromtimestamp);
     INTERN_STRING(FrozenDict);
