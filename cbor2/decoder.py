@@ -427,7 +427,8 @@ class CBORDecoder:
         # Semantic tag 4
         from decimal import Decimal
         exp, sig = self._decode()
-        return self.set_shareable(Decimal(sig) * (10 ** Decimal(exp)))
+        tmp = Decimal(sig).as_tuple()
+        return self.set_shareable(Decimal((tmp.sign, tmp.digits, exp)))
 
     def decode_bigfloat(self):
         # Semantic tag 5

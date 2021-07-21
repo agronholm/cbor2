@@ -384,6 +384,11 @@ def test_fraction(impl):
     assert decoded == Decimal('273.15')
 
 
+def test_decimal_precision(impl):
+    decoded = impl.loads(unhexlify('c482384dc252011f1fe37d0c70ff50456ba8b891997b07d6'))
+    assert decoded == Decimal('9.7703426561852468194804075821069770622934E-38')
+
+
 def test_bigfloat(impl):
     decoded = impl.loads(unhexlify('c5822003'))
     assert decoded == Decimal('1.5')

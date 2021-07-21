@@ -1189,28 +1189,33 @@ static PyObject *
 CBORDecoder_decode_fraction(CBORDecoderObject *self)
 {
     // semantic type 4
-    PyObject *tuple, *tmp, *sig, *exp, *ten, *ret = NULL;
+    PyObject *payload_t, *tmp, *sig, *exp, *ret = NULL;
+    PyObject *decimal_t, *sign, *digits, *args = NULL;
 
     if (!_CBOR2_Decimal && _CBOR2_init_Decimal() == -1)
         return NULL;
     // NOTE: There's no particular necessity for this to be immutable, it's
     // just a performance choice
-    tuple = decode(self, DECODE_IMMUTABLE | DECODE_UNSHARED);
-    if (tuple) {
-        if (PyTuple_CheckExact(tuple) && PyTuple_GET_SIZE(tuple) == 2) {
-            exp = PyTuple_GET_ITEM(tuple, 0);
-            sig = PyTuple_GET_ITEM(tuple, 1);
-            ten = PyObject_CallFunction(_CBOR2_Decimal, "i", 10);
-            if (ten) {
-                tmp = PyNumber_Power(ten, exp, Py_None);
-                if (tmp) {
-                    ret = PyNumber_Multiply(sig, tmp);
-                    Py_DECREF(tmp);
+    payload_t = decode(self, DECODE_IMMUTABLE | DECODE_UNSHARED);
+    if (payload_t) {
+        if (PyTuple_CheckExact(payload_t) && PyTuple_GET_SIZE(payload_t) == 2) {
+            exp = PyTuple_GET_ITEM(payload_t, 0);
+            sig = PyTuple_GET_ITEM(payload_t, 1);
+            tmp = PyObject_CallFunction(_CBOR2_Decimal, "O", sig);
+            if (tmp) {
+                decimal_t = PyObject_CallMethod(tmp, "as_tuple", NULL);
+                if (decimal_t) {
+                    sign = PyTuple_GET_ITEM(decimal_t, 0);
+                    digits = PyTuple_GET_ITEM(decimal_t, 1);
+                    args = PyTuple_Pack(3, sign, digits, exp);
+                    ret = PyObject_CallFunction(_CBOR2_Decimal, "(O)", args);
+                    Py_DECREF(decimal_t);
+                    Py_DECREF(args);
                 }
-                Py_DECREF(ten);
+                Py_DECREF(tmp);
             }
         }
-        Py_DECREF(tuple);
+        Py_DECREF(payload_t);
     }
     set_shareable(self, ret);
     return ret;
