@@ -1606,7 +1606,9 @@ decode_special(CBORDecoderObject *self, uint8_t subtype)
             case 27: return CBORDecoder_decode_float64(self);
             case 31: CBOR2_RETURN_BREAK;
             default:
-                // XXX Raise exception?
+                PyErr_Format(
+                    _CBOR2_CBORDecodeValueError,
+                    "Undefined Reserved major type 7 subtype 0x%x", subtype);
                 break;
         }
     }

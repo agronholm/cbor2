@@ -697,3 +697,13 @@ def test_invalid_cbor(impl):
             '4c271579b01633a3ef6271be5c225eb2'
             )
         )
+
+
+@pytest.mark.parametrize('data, expected', [
+    ('fc', '1c'), ('fd', '1d'), ('fe', '1e')
+    ],
+)
+def test_reserved_special_tags(impl, data, expected):
+    with pytest.raises(impl.CBORDecodeValueError) as exc_info:
+        impl.loads(unhexlify(data))
+    assert exc_info.value.args[0] == "Undefined Reserved major type 7 subtype 0x" + expected

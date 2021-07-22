@@ -369,7 +369,11 @@ class CBORDecoder:
             return CBORSimpleValue(subtype)
 
         # Major tag 7
-        return special_decoders[subtype](self)
+        try:
+            return special_decoders[subtype](self)
+        except KeyError as e:
+            raise CBORDecodeValueError(
+                    "Undefined Reserved major type 7 subtype 0x%x" % subtype) from e
 
     #
     # Semantic decoders (major tag 6)
