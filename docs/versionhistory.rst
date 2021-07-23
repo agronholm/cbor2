@@ -5,6 +5,12 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**5.4.1** (2021-07-23)
+
+- Fix SystemErrors when using C-backend, meaningful exceptions now raised (Sekenre)
+- Fix precision loss when decoding base10 decimal fractions (Sekenre)
+- Made CBORTag handling consistent between python and C-module (Sekenre)
+
 **5.4.0** (2021-06-04)
 
 - Fix various bounds checks in the C-backend (Sekenre)
