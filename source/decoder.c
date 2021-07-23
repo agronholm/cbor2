@@ -1214,7 +1214,11 @@ CBORDecoder_decode_fraction(CBORDecoderObject *self)
                 }
                 Py_DECREF(tmp);
             }
-        }
+        } else {
+            PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                            "Incorrect tag 4 payload");
+            }
         Py_DECREF(payload_t);
     }
     set_shareable(self, ret);
@@ -1246,7 +1250,11 @@ CBORDecoder_decode_bigfloat(CBORDecoderObject *self)
                 }
                 Py_DECREF(two);
             }
-        }
+        } else {
+            PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                            "Incorrect tag 5 payload");
+            }
         Py_DECREF(tuple);
     }
     set_shareable(self, ret);

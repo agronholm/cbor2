@@ -707,3 +707,13 @@ def test_reserved_special_tags(impl, data, expected):
     with pytest.raises(impl.CBORDecodeValueError) as exc_info:
         impl.loads(unhexlify(data))
     assert exc_info.value.args[0] == "Undefined Reserved major type 7 subtype 0x" + expected
+
+
+@pytest.mark.parametrize('data, expected', [
+    ('c400', '4'), ('c500', '5')
+    ],
+)
+def test_decimal_payload_unpacking(impl, data, expected):
+    with pytest.raises(impl.CBORDecodeValueError) as exc_info:
+        impl.loads(unhexlify(data))
+    assert exc_info.value.args[0] == f"Incorrect tag {expected} payload"

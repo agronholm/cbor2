@@ -430,14 +430,20 @@ class CBORDecoder:
     def decode_fraction(self):
         # Semantic tag 4
         from decimal import Decimal
-        exp, sig = self._decode()
+        try:
+            exp, sig = self._decode()
+        except (TypeError, ValueError) as e:
+            raise CBORDecodeValueError("Incorrect tag 4 payload") from e
         tmp = Decimal(sig).as_tuple()
         return self.set_shareable(Decimal((tmp.sign, tmp.digits, exp)))
 
     def decode_bigfloat(self):
         # Semantic tag 5
         from decimal import Decimal
-        exp, sig = self._decode()
+        try:
+            exp, sig = self._decode()
+        except (TypeError, ValueError) as e:
+            raise CBORDecodeValueError("Incorrect tag 5 payload") from e
         return self.set_shareable(Decimal(sig) * (2 ** Decimal(exp)))
 
     def decode_stringref(self):
