@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**5.4.2** (2021-10-14)
+
+- Fix segfault when initializing CBORTag with incorrect arguments (Sekenre)
+- Fix sphinx build warnings (Sekenre)
+
 **5.4.1** (2021-07-23)
 
 - Fix SystemErrors when using C-backend, meaningful exceptions now raised (Sekenre)
@@ -29,7 +34,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 - README: More detail and examples
 - Bugfix: Fix segfault on loading huge arrays with C-backend (Sekenre)
 - Build system: Allow packagers to force C-backend building or disable using env var (jameshilliard)
-- Feature: :module:`cbor2.tool` Command line diagnostic tool (Sekenre)
+- Feature: :py:mod:`cbor2.tool` Command line diagnostic tool (Sekenre)
 - Feature: Ignore semantic tag used for file magic 55799 AKA "Self-Described CBOR" (kalcutter)
 
 **5.1.2** (2020-07-21)

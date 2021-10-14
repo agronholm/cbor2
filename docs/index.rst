@@ -10,5 +10,8 @@ Table of contents
    usage
    customizing
    versionhistory
+   Encoder <modules/encoder>
+   Decoder <modules/decoder>
+   Types <modules/types>
 
 * :ref:`API reference <modindex>`

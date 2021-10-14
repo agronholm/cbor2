@@ -55,7 +55,7 @@ CBORTag_init(CBORTagObject *self, PyObject *args, PyObject *kwargs)
     PyObject *tmp, *value, *tmp_tag = NULL;
     uint64_t tag = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|OO", keywords,
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO", keywords,
                 &tmp_tag, &value))
         return -1;
     // Raises an overflow error if it doesn't work
