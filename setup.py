@@ -73,7 +73,7 @@ setup(
     },
     setup_requires=[
         'setuptools >= 40.7.0',
-        'setuptools_scm >= 1.7.0'
+        'setuptools_scm >= 1.7.0, < 6'
     ],
     **kwargs
     )
