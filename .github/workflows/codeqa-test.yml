@@ -38,6 +38,8 @@ jobs:
         - os: macos-latest
           python-version: "3.9"
         - os: macos-latest
+          python-version: "pypy-3.7"
+        - os: macos-latest
           python-version: "pypy-3.8"
         - os: windows-latest
           python-version: "3.7"
@@ -45,6 +47,8 @@ jobs:
           python-version: "3.8"
         - os: windows-latest
           python-version: "3.9"
+        - os: windows-latest
+          python-version: "pypy-3.7"
         - os: windows-latest
           python-version: "pypy-3.8"
     runs-on: ${{ matrix.os }}
