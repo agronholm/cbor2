@@ -21,7 +21,7 @@ jobs:
     - uses: actions/cache@v2
       with:
         path: ~/.cache/pip
-        key: pip-test-${{ matrix.python-version }}-${{ matrix.os }}
+        key: publish-${{ matrix.os }}
     - name: Install dependencies
       run: pip install cibuildwheel
     - name: Create packages
