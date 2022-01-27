@@ -28,6 +28,9 @@ jobs:
       run: pip install cibuildwheel
     - name: Create packages
       run: python -m cibuildwheel --output-dir wheelhouse
+      env:
+        CIBW_SKIP: pp*
+        CIBW_ARCHS: auto64
     - uses: actions/upload-artifact@v2
       with:
         name: wheels
