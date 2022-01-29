@@ -7,12 +7,14 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+.post[0-9]+"
       - "[0-9]+.[0-9]+.[0-9]+[a-b][0-9]+"
       - "[0-9]+.[0-9]+.[0-9]+rc[0-9]+"
+    branches:
+      - aarch64-wheels
 
 jobs:
   wheels:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
@@ -22,49 +24,18 @@ jobs:
       with:
         path: ~/.cache/pip
         key: publish-${{ matrix.os }}
-    - name: Install dependencies
-      run: pip install cibuildwheel
-    - name: Create packages
-      run: python -m cibuildwheel --output-dir wheelhouse
+    - name: Set up QEMU
+      if: runner.os == 'Linux'
+      uses: docker/setup-qemu-action@v1
+      with:
+        platforms: arm64
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v2.3.1
       env:
         CIBW_SKIP: pp*
         CIBW_ARCHS: auto64
+        CIBW_ARCHS_LINUX: auto64 aarch64
     - uses: actions/upload-artifact@v2
       with:
         name: wheels
         path: wheelhouse/*.whl
-
-  sdist:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.x
-    - name: Install dependencies
-      run: pip install build
-    - name: Create sdist
-      run: python -m build --sdist .
-    - uses: actions/upload-artifact@v2
-      with:
-        name: sdist
-        path: dist/*.tar.gz
-
-  publish:
-    needs:
-      - wheels
-      - sdist
-    runs-on: ubuntu-latest
-    steps:
-    - name: Download generated packaging artifacts
-      uses: actions/download-artifact@v2
-    - name: Move the packages to dist/
-      run: |
-        mkdir dist
-        mv */*.whl */*.tar.gz dist
-    - name: Upload packages
-      uses: pypa/gh-action-pypi-publish@master
-      with:
-        user: __token__
-        password: ${{ secrets.pypi_password }}
