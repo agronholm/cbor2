@@ -1,18 +1,15 @@
-from __future__ import division
-
-import re
 import math
+import re
 import struct
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
+from datetime import date, datetime, time, tzinfo
 from functools import wraps
-from datetime import datetime, date, time, tzinfo
 from io import BytesIO
 from sys import modules
 
-from .types import (
-    CBOREncodeTypeError, CBOREncodeValueError, CBORTag, undefined,
-    CBORSimpleValue, FrozenDict)
+from .types import (CBOREncodeTypeError, CBOREncodeValueError, CBORSimpleValue,
+                    CBORTag, FrozenDict, undefined)
 
 
 def shareable_encoder(func):
@@ -460,7 +457,8 @@ class CBOREncoder:
             if not value.microsecond:
                 timestamp = timegm(value.utctimetuple())
             else:
-                timestamp = timegm(value.utctimetuple()) + value.microsecond / 1000000
+                timestamp = timegm(value.utctimetuple()) + \
+                    value.microsecond / 1000000
             self.encode_semantic(CBORTag(1, timestamp))
         else:
             datestring = value.isoformat().replace('+00:00', 'Z')
@@ -494,7 +492,8 @@ class CBOREncoder:
     def encode_rational(self, value):
         # Semantic tag 30
         with self.disable_value_sharing():
-            self.encode_semantic(CBORTag(30, [value.numerator, value.denominator]))
+            self.encode_semantic(
+                CBORTag(30, [value.numerator, value.denominator]))
 
     def encode_regexp(self, value):
         # Semantic tag 35

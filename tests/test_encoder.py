@@ -1,11 +1,11 @@
 import re
-from io import BytesIO
 from binascii import unhexlify
 from collections import OrderedDict
-from datetime import datetime, timedelta, date, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from email.mime.text import MIMEText
 from fractions import Fraction
+from io import BytesIO
 from ipaddress import ip_address, ip_network
 from uuid import UUID
 
@@ -19,7 +19,7 @@ def test_fp_attr(impl):
     with pytest.raises(ValueError):
         impl.CBOREncoder(None)
     with pytest.raises(ValueError):
-        class A(object):
+        class A:
             pass
         foo = A()
         foo.write = None
@@ -152,12 +152,12 @@ def test_bytearray(impl):
 
 
 @pytest.mark.parametrize('value, expected', [
-    (u'', '60'),
-    (u'a', '6161'),
-    (u'IETF', '6449455446'),
-    (u'"\\', '62225c'),
-    (u'\u00fc', '62c3bc'),
-    (u'\u6c34', '63e6b0b4')
+    ('', '60'),
+    ('a', '6161'),
+    ('IETF', '6449455446'),
+    ('"\\', '62225c'),
+    ('\u00fc', '62c3bc'),
+    ('\u6c34', '63e6b0b4')
 ])
 def test_string(impl, value, expected):
     expected = unhexlify(expected)
@@ -217,10 +217,13 @@ def test_simple_val_as_key(impl):
      'c0781b323031332d30332d32315432303a30343a30302e3338303834315a'),
     (datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))), False,
      'c07819323031332d30332d32315432323a30343a30302b30323a3030'),
-    (datetime(2013, 3, 21, 20, 4, 0), False, 'c074323031332d30332d32315432303a30343a30305a'),
+    (datetime(2013, 3, 21, 20, 4, 0), False,
+     'c074323031332d30332d32315432303a30343a30305a'),
     (datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc), True, 'c11a514b67b0'),
-    (datetime(2013, 3, 21, 20, 4, 0, 123456, tzinfo=timezone.utc), True, 'c1fb41d452d9ec07e6b4'),
-    (datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))), True, 'c11a514b67b0')
+    (datetime(2013, 3, 21, 20, 4, 0, 123456, tzinfo=timezone.utc),
+     True, 'c1fb41d452d9ec07e6b4'),
+    (datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(
+        timedelta(hours=2))), True, 'c11a514b67b0')
 ], ids=[
     'datetime/utc',
     'datetime+micro/utc',
@@ -232,12 +235,14 @@ def test_simple_val_as_key(impl):
 ])
 def test_datetime(impl, value, as_timestamp, expected):
     expected = unhexlify(expected)
-    assert impl.dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc) == expected
+    assert impl.dumps(value, datetime_as_timestamp=as_timestamp,
+                      timezone=timezone.utc) == expected
 
 
 @pytest.mark.parametrize('tz', [None, timezone.utc], ids=['no timezone', 'utc'])
 def test_date_fails(impl, tz):
-    encoder = impl.CBOREncoder(BytesIO(b''), timezone=tz, date_as_datetime=False)
+    encoder = impl.CBOREncoder(
+        BytesIO(b''), timezone=tz, date_as_datetime=False)
     assert date not in encoder._encoders
     with pytest.raises(impl.CBOREncodeError) as exc:
         encoder.encode(date(2013, 3, 21))
@@ -246,7 +251,8 @@ def test_date_fails(impl, tz):
 
 def test_date_as_datetime(impl):
     expected = unhexlify('c074323031332d30332d32315430303a30303a30305a')
-    assert impl.dumps(date(2013, 3, 21), timezone=timezone.utc, date_as_datetime=True) == expected
+    assert impl.dumps(date(2013, 3, 21), timezone=timezone.utc,
+                      date_as_datetime=True) == expected
 
 
 def test_naive_datetime(impl):
@@ -277,7 +283,7 @@ def test_rational(impl):
 
 def test_regex(impl):
     expected = unhexlify('d8236d68656c6c6f2028776f726c6429')
-    assert impl.dumps(re.compile(u'hello (world)')) == expected
+    assert impl.dumps(re.compile('hello (world)')) == expected
 
 
 def test_mime(impl):
@@ -285,7 +291,7 @@ def test_mime(impl):
         'd824787b436f6e74656e742d547970653a20746578742f706c61696e3b20636861727365743d2269736f2d38'
         '3835392d3135220a4d494d452d56657273696f6e3a20312e300a436f6e74656e742d5472616e736665722d456'
         'e636f64696e673a2071756f7465642d7072696e7461626c650a0a48656c6c6f203d413475726f')
-    message = MIMEText(u'Hello \u20acuro', 'plain', 'iso-8859-15')
+    message = MIMEText('Hello \u20acuro', 'plain', 'iso-8859-15')
     assert impl.dumps(message) == expected
 
 
@@ -295,8 +301,9 @@ def test_uuid(impl):
 
 
 @pytest.mark.parametrize('value, expected', [
-    (ip_address(u'192.10.10.1'), 'd9010444c00a0a01'),
-    (ip_address(u'2001:db8:85a3::8a2e:370:7334'), 'd901045020010db885a3000000008a2e03707334'),
+    (ip_address('192.10.10.1'), 'd9010444c00a0a01'),
+    (ip_address('2001:db8:85a3::8a2e:370:7334'),
+     'd901045020010db885a3000000008a2e03707334'),
 ], ids=[
     'ipv4',
     'ipv6',
@@ -307,8 +314,8 @@ def test_ipaddress(impl, value, expected):
 
 
 @pytest.mark.parametrize('value, expected', [
-    (ip_network(u'192.168.0.100/24', False), 'd90105a144c0a800001818'),
-    (ip_network(u'2001:db8:85a3:0:0:8a2e::/96', False),
+    (ip_network('192.168.0.100/24', False), 'd90105a144c0a800001818'),
+    (ip_network('2001:db8:85a3:0:0:8a2e::/96', False),
      'd90105a15020010db885a3000000008a2e000000001860'),
 ], ids=[
     'ipv4',
@@ -321,7 +328,7 @@ def test_ipnetwork(impl, value, expected):
 
 def test_custom_tag(impl):
     expected = unhexlify('d917706548656c6c6f')
-    assert impl.dumps(impl.CBORTag(6000, u'Hello')) == expected
+    assert impl.dumps(impl.CBORTag(6000, 'Hello')) == expected
 
 
 def test_cyclic_array(impl):
@@ -380,7 +387,7 @@ def test_unsupported_type(impl):
 
 
 def test_default(impl):
-    class DummyType(object):
+    class DummyType:
         def __init__(self, state):
             self.state = state
 
@@ -394,7 +401,7 @@ def test_default(impl):
 
 
 def test_default_cyclic(impl):
-    class DummyType(object):
+    class DummyType:
         def __init__(self, value=None):
             self.value = value
 
@@ -423,9 +430,10 @@ def test_dump_to_file(impl, tmpdir):
     ({}, 'a0'),
     (OrderedDict([(b'a', b''), (b'b', b'')]), 'A2416140416240'),
     (OrderedDict([(b'b', b''), (b'a', b'')]), 'A2416140416240'),
-    (OrderedDict([(u'a', u''), (u'b', u'')]), 'a2616160616260'),
-    (OrderedDict([(u'b', u''), (u'a', u'')]), 'a2616160616260'),
-    (OrderedDict([(b'00001', u''), (b'002', u'')]), 'A2433030326045303030303160'),
+    (OrderedDict([('a', ''), ('b', '')]), 'a2616160616260'),
+    (OrderedDict([('b', ''), ('a', '')]), 'a2616160616260'),
+    (OrderedDict([(b'00001', ''), (b'002', '')]),
+     'A2433030326045303030303160'),
     (OrderedDict([(255, 0), (2, 0)]), 'a2020018ff00'),
     (FrozenDict([(b'a', b''), (b'b', b'')]), 'A2416140416240')
 ], ids=['empty', 'bytes in order', 'bytes out of order', 'text in order',
@@ -455,16 +463,16 @@ def test_minimal_floats(impl, value, expected):
 
 
 def test_tuple_key(impl):
-    assert impl.dumps({(2, 1): u''}) == unhexlify('a182020160')
+    assert impl.dumps({(2, 1): ''}) == unhexlify('a182020160')
 
 
 def test_dict_key(impl):
-    assert impl.dumps({FrozenDict({2: 1}): u''}) == unhexlify('a1a1020160')
+    assert impl.dumps({FrozenDict({2: 1}): ''}) == unhexlify('a1a1020160')
 
 
 @pytest.mark.parametrize('frozen', [False, True], ids=['set', 'frozenset'])
 def test_set(impl, frozen):
-    value = {u'a', u'b', u'c'}
+    value = {'a', 'b', 'c'}
     if frozen:
         value = frozenset(value)
 
@@ -475,7 +483,7 @@ def test_set(impl, frozen):
 
 @pytest.mark.parametrize('frozen', [False, True], ids=['set', 'frozenset'])
 def test_canonical_set(impl, frozen):
-    value = {u'y', u'x', u'aa', u'a'}
+    value = {'y', 'x', 'aa', 'a'}
     if frozen:
         value = frozenset(value)
 
@@ -484,15 +492,15 @@ def test_canonical_set(impl, frozen):
 
 
 @pytest.mark.parametrize('value', [
-    u'',
-    u'a',
-    u'abcde',
+    '',
+    'a',
+    'abcde',
     b'\x01\x02\x03\x04',
-    [u'a', u'bb', u'a', u'bb'],
-    [u'a', u'bb', u'ccc', u'dddd', u'a', u'bb'],
-    {u'a': u'm', u'bb': u'nn', u'e': u'm', u'ff': u'nn'},
-    {u'a': u'm', u'bb': u'nn', u'ccc': u'ooo', u'dddd': u'pppp',
-     u'e': u'm', u'ff': u'nn'},
+    ['a', 'bb', 'a', 'bb'],
+    ['a', 'bb', 'ccc', 'dddd', 'a', 'bb'],
+    {'a': 'm', 'bb': 'nn', 'e': 'm', 'ff': 'nn'},
+    {'a': 'm', 'bb': 'nn', 'ccc': 'ooo', 'dddd': 'pppp',
+     'e': 'm', 'ff': 'nn'},
 ], ids=['empty string', 'short string', 'long string', 'bytestring',
         'array of short strings', 'no repeated long strings',
         'dict with short keys and strings',
@@ -505,13 +513,15 @@ def test_encode_stringrefs_unchanged(impl, value):
 
 
 def test_encode_stringrefs_array(impl):
-    value = [u'aaaa', u'aaaa', u'bbbb', u'aaaa', u'bbbb']
-    equivalent = [u'aaaa', impl.CBORTag(25, 0), u'bbbb', impl.CBORTag(25, 0), impl.CBORTag(25, 1)]
-    assert impl.dumps(value, string_referencing=True) == b'\xd9\x01\x00' + impl.dumps(equivalent)
+    value = ['aaaa', 'aaaa', 'bbbb', 'aaaa', 'bbbb']
+    equivalent = ['aaaa', impl.CBORTag(
+        25, 0), 'bbbb', impl.CBORTag(25, 0), impl.CBORTag(25, 1)]
+    assert impl.dumps(
+        value, string_referencing=True) == b'\xd9\x01\x00' + impl.dumps(equivalent)
 
 
 def test_encode_stringrefs_dict(impl):
-    value = {u'aaaa': u'mmmm', u'bbbb': u'bbbb', u'cccc': u'aaaa', u'mmmm': u'aaaa'}
+    value = {'aaaa': 'mmmm', 'bbbb': 'bbbb', 'cccc': 'aaaa', 'mmmm': 'aaaa'}
     expected = unhexlify(
         'd90100' 'a4'
         '6461616161' '646d6d6d6d'
@@ -519,7 +529,8 @@ def test_encode_stringrefs_dict(impl):
         '6463636363' 'd81900'
         'd81901' 'd81900'
     )
-    assert impl.dumps(value, string_referencing=True, canonical=True) == expected
+    assert impl.dumps(value, string_referencing=True,
+                      canonical=True) == expected
 
 
 @pytest.mark.parametrize('tag', [-1, 2**64, 'f'], ids=['too small', 'too large', 'wrong type'])

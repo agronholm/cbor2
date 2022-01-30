@@ -1,9 +1,9 @@
-import sys
 import os
 import platform
+import sys
 
 from pkg_resources import parse_version
-from setuptools import setup, Extension
+from setuptools import Extension, setup
 
 min_glibc = parse_version('2.9')
 
@@ -74,4 +74,4 @@ setup(
         'setuptools_scm >= 1.7.0'
     ],
     **kwargs
-    )
+)

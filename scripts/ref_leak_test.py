@@ -13,21 +13,24 @@ no extra objects existed. The ideal output is obviously "-" in all rows.
 """
 
 import sys
-import objgraph
 import tracemalloc
-from datetime import datetime, timezone, timedelta
-from fractions import Fraction
+from collections import OrderedDict, namedtuple
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from collections import namedtuple, OrderedDict
+from fractions import Fraction
+
+import objgraph
+
 
 def import_cbor2():
     # Similar hack to that used in tests/conftest to get separate C and Python
     # implementations
     import cbor2
-    import cbor2.types
-    import cbor2.encoder
     import cbor2.decoder
-    class Module(object):
+    import cbor2.encoder
+    import cbor2.types
+
+    class Module:
         # Mock module class
         pass
     py_cbor2 = Module()
@@ -35,6 +38,7 @@ def import_cbor2():
         for name in dir(source):
             setattr(py_cbor2, name, getattr(source, name))
     return cbor2, py_cbor2
+
 
 c_cbor2, py_cbor2 = import_cbor2()
 
@@ -56,7 +60,8 @@ TEST_VALUES = [
     ('bigstr',          {},     'foobarbaz ' * 1000),
     ('bytes',           {},     b'foo'),
     ('bigbytes',        {},     b'foobarbaz\x00' * 1000),
-    ('datetime',        {'timezone': UTC}, datetime(2019, 5, 9, 22, 4, 5, 123456)),
+    ('datetime',        {'timezone': UTC},
+     datetime(2019, 5, 9, 22, 4, 5, 123456)),
     ('decimal',         {},     Decimal('1.1')),
     ('fraction',        {},     Fraction(1, 5)),
     ('intlist',         {},     [1, 2, 3]),
@@ -80,6 +85,8 @@ Result = namedtuple('Result', ('encoding', 'decoding', 'roundtrip'))
 
 
 peak = {}
+
+
 def growth():
     return objgraph.growth(limit=None, peak_stats=peak)
 
@@ -211,7 +218,8 @@ def main():
         results[name] = Result(
             encoding=test(lambda: c_cbor2.dumps(value, **kwargs)),
             decoding=test(lambda: c_cbor2.loads(encoded)),
-            roundtrip=test(lambda: c_cbor2.loads(c_cbor2.dumps(value, **kwargs))),
+            roundtrip=test(lambda: c_cbor2.loads(
+                c_cbor2.dumps(value, **kwargs))),
         )
         sys.stderr.write(".")
         sys.stderr.flush()

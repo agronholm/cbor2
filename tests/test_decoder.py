@@ -1,5 +1,7 @@
 import math
 import re
+import struct
+import sys
 from binascii import unhexlify
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -7,8 +9,6 @@ from email.message import Message
 from fractions import Fraction
 from io import BytesIO
 from ipaddress import ip_address, ip_network
-import struct
-import sys
 from uuid import UUID
 
 import pytest
@@ -20,7 +20,7 @@ def test_fp_attr(impl):
     with pytest.raises(ValueError):
         impl.CBORDecoder(None)
     with pytest.raises(ValueError):
-        class A(object):
+        class A:
             pass
         foo = A()
         foo.read = None
@@ -37,7 +37,7 @@ def test_tag_hook_attr(impl):
         with pytest.raises(ValueError):
             impl.CBORDecoder(stream, tag_hook='foo')
         decoder = impl.CBORDecoder(stream)
-        tag_hook = lambda decoder, tag: None  # noqa: E731
+        def tag_hook(decoder, tag): return None  # noqa: E731
         decoder.tag_hook = tag_hook
         assert decoder.tag_hook is tag_hook
         with pytest.raises(AttributeError):
@@ -49,7 +49,7 @@ def test_object_hook_attr(impl):
         with pytest.raises(ValueError):
             impl.CBORDecoder(stream, object_hook='foo')
         decoder = impl.CBORDecoder(stream)
-        object_hook = lambda decoder, data: None  # noqa: E731
+        def object_hook(decoder, data): return None  # noqa: E731
         decoder.object_hook = object_hook
         assert decoder.object_hook is object_hook
         with pytest.raises(AttributeError):
@@ -85,7 +85,7 @@ def test_decode_from_bytes(impl):
         decoder = impl.CBORDecoder(stream)
         assert decoder.decode_from_bytes(b'\x01') == 1
         with pytest.raises(TypeError):
-            decoder.decode_from_bytes(u'foo')
+            decoder.decode_from_bytes('foo')
 
 
 def test_immutable_attr(impl):
@@ -202,12 +202,12 @@ def test_binary(impl, payload, expected):
 
 
 @pytest.mark.parametrize('payload, expected', [
-    ('60', u''),
-    ('6161', u'a'),
-    ('6449455446', u'IETF'),
-    ('62225c', u'\"\\'),
-    ('62c3bc', u'\u00fc'),
-    ('63e6b0b4', u'\u6c34')
+    ('60', ''),
+    ('6161', 'a'),
+    ('6449455446', 'IETF'),
+    ('62225c', '\"\\'),
+    ('62c3bc', '\u00fc'),
+    ('63e6b0b4', '\u6c34')
 ])
 def test_string(impl, payload, expected):
     decoded = impl.loads(unhexlify(payload))
@@ -311,7 +311,8 @@ def test_simple_val_as_key(impl):
     ('c07819323031332d30332d32315432323a30343a30302b30323a3030',
      datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2)))),
     ('c11a514b67b0', datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)),
-    ('c11a514b67b0', datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))))
+    ('c11a514b67b0', datetime(2013, 3, 21, 22,
+     4, 0, tzinfo=timezone(timedelta(hours=2))))
 ], ids=['datetime/utc', 'datetime+micro/utc', 'datetime/eet', 'timestamp/utc', 'timestamp/eet'])
 def test_datetime(impl, payload, expected):
     decoded = impl.loads(unhexlify(payload))
@@ -320,9 +321,11 @@ def test_datetime(impl, payload, expected):
 
 def test_datetime_secfrac(impl):
     decoded = impl.loads(b'\xc0\x78\x162018-08-02T07:00:59.1Z')
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100000, tzinfo=timezone.utc)
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, 100000, tzinfo=timezone.utc)
     decoded = impl.loads(b'\xc0\x78\x172018-08-02T07:00:59.01Z')
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 10000, tzinfo=timezone.utc)
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, 10000, tzinfo=timezone.utc)
     decoded = impl.loads(b'\xc0\x78\x182018-08-02T07:00:59.001Z')
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 1000, tzinfo=timezone.utc)
     decoded = impl.loads(b'\xc0\x78\x192018-08-02T07:00:59.0001Z')
@@ -343,17 +346,22 @@ def test_datetime_secfrac_naive_float_to_int_cast(impl):
 
 
 def test_datetime_secfrac_overflow(impl):
-    decoded = impl.loads(b'\xc0\x78\x2c2018-08-02T07:00:59.100500999999999999+00:00')
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100500, tzinfo=timezone.utc)
-    decoded = impl.loads(b'\xc0\x78\x2c2018-08-02T07:00:59.999999999999999999+00:00')
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 999999, tzinfo=timezone.utc)
+    decoded = impl.loads(
+        b'\xc0\x78\x2c2018-08-02T07:00:59.100500999999999999+00:00')
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, 100500, tzinfo=timezone.utc)
+    decoded = impl.loads(
+        b'\xc0\x78\x2c2018-08-02T07:00:59.999999999999999999+00:00')
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, 999999, tzinfo=timezone.utc)
 
 
 def test_datetime_secfrac_requires_digit(impl):
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(b'\xc0\x78\x1a2018-08-02T07:00:59.+00:00')
     assert isinstance(excinfo.value, ValueError)
-    assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.+00:00'"
+    assert str(
+        excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.+00:00'"
 
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(b'\xc0\x78\x152018-08-02T07:00:59.Z')
@@ -385,7 +393,8 @@ def test_fraction(impl):
 
 
 def test_decimal_precision(impl):
-    decoded = impl.loads(unhexlify('c482384dc252011f1fe37d0c70ff50456ba8b891997b07d6'))
+    decoded = impl.loads(
+        unhexlify('c482384dc252011f1fe37d0c70ff50456ba8b891997b07d6'))
     assert decoded == Decimal('9.7703426561852468194804075821069770622934E-38')
 
 
@@ -401,7 +410,7 @@ def test_rational(impl):
 
 def test_regex(impl):
     decoded = impl.loads(unhexlify('d8236d68656c6c6f2028776f726c6429'))
-    expr = re.compile(u'hello (world)')
+    expr = re.compile('hello (world)')
     assert decoded == expr
 
 
@@ -420,8 +429,9 @@ def test_uuid(impl):
 
 
 @pytest.mark.parametrize('payload, expected', [
-    ('d9010444c00a0a01', ip_address(u'192.10.10.1')),
-    ('d901045020010db885a3000000008a2e03707334', ip_address(u'2001:db8:85a3::8a2e:370:7334')),
+    ('d9010444c00a0a01', ip_address('192.10.10.1')),
+    ('d901045020010db885a3000000008a2e03707334',
+     ip_address('2001:db8:85a3::8a2e:370:7334')),
     ('d9010446010203040506', (260, b'\x01\x02\x03\x04\x05\x06')),
 ], ids=[
     'ipv4',
@@ -438,7 +448,8 @@ def test_ipaddress(impl, payload, expected):
 def test_bad_ipaddress(impl):
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify('d9010443c00a0a'))
-        assert str(exc.value).endswith('invalid ipaddress value %r' % b'\xc0\x0a\x0a')
+        assert str(exc.value).endswith(
+            'invalid ipaddress value %r' % b'\xc0\x0a\x0a')
         assert isinstance(exc, ValueError)
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify('d9010401'))
@@ -449,7 +460,7 @@ def test_bad_ipaddress(impl):
 @pytest.mark.parametrize('payload, expected', [
     ('d90105a144c0a800641818', ip_network('192.168.0.100/24', False)),
     ('d90105a15020010db885a3000000008a2e000000001860',
-     ip_network(u'2001:db8:85a3:0:0:8a2e::/96', False)),
+     ip_network('2001:db8:85a3:0:0:8a2e::/96', False)),
 ], ids=[
     'ipv4',
     'ipv6',
@@ -487,7 +498,8 @@ def test_bad_shared_reference(impl):
 def test_uninitialized_shared_reference(impl):
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify('D81CA1D81D014161'))
-        assert str(exc.value).endswith('shared value 0 has not been initialized')
+        assert str(exc.value).endswith(
+            'shared value 0 has not been initialized')
         assert isinstance(exc, ValueError)
 
 
@@ -495,10 +507,11 @@ def test_immutable_shared_reference(impl):
     # a = (1, 2, 3)
     # b = ((a, a), a)
     # data = dumps(set(b))
-    decoded = impl.loads(unhexlify('d90102d81c82d81c82d81c83010203d81d02d81d02'))
+    decoded = impl.loads(
+        unhexlify('d90102d81c82d81c82d81c83010203d81d02d81d02'))
     a = [item for item in decoded if len(item) == 3][0]
     b = [item for item in decoded if len(item) == 2][0]
-    assert decoded == set(((a, a), a))
+    assert decoded == {(a, a), a}
     assert b[0] is a
     assert b[1] is a
 
@@ -514,7 +527,8 @@ def test_cyclic_map(impl):
 
 
 def test_string_ref(impl):
-    decoded = impl.loads(unhexlify('d9010085656669727374d81900667365636f6e64d81900d81901'))
+    decoded = impl.loads(
+        unhexlify('d9010085656669727374d81900667365636f6e64d81900d81901'))
     assert isinstance(decoded, list)
     assert decoded[0] == "first"
     assert decoded[1] == "first"
@@ -532,7 +546,8 @@ def test_outside_string_ref_namespace(impl):
 
 def test_invalid_string_ref(impl):
     with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify('d9010086656669727374d81900667365636f6e64d81900d81901d81903'))
+        impl.loads(
+            unhexlify('d9010086656669727374d81900667365636f6e64d81900d81901d81903'))
         assert str(exc.value).endswith('string reference 3 not found')
         assert isinstance(exc, ValueError)
 
@@ -552,7 +567,7 @@ def test_unhandled_tag(impl):
 
     """
     decoded = impl.loads(unhexlify('d917706548656c6c6f'))
-    assert decoded == impl.CBORTag(6000, u'Hello')
+    assert decoded == impl.CBORTag(6000, 'Hello')
 
 
 def test_premature_end_of_stream(impl):
@@ -562,7 +577,8 @@ def test_premature_end_of_stream(impl):
     """
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify('437879'))
-        exc.match(r'premature end of stream \(expected to read 3 bytes, got 2 instead\)')
+        exc.match(
+            r'premature end of stream \(expected to read 3 bytes, got 2 instead\)')
         assert isinstance(exc, EOFError)
 
 
@@ -571,11 +587,11 @@ def test_tag_hook(impl):
         return tag.value[::-1]
 
     decoded = impl.loads(unhexlify('d917706548656c6c6f'), tag_hook=reverse)
-    assert decoded == u'olleH'
+    assert decoded == 'olleH'
 
 
 def test_tag_hook_cyclic(impl):
-    class DummyType(object):
+    class DummyType:
         def __init__(self, value):
             self.value = value
 
@@ -585,18 +601,20 @@ def test_tag_hook_cyclic(impl):
         instance.value = decoder.decode_from_bytes(tag.value)
         return instance
 
-    decoded = impl.loads(unhexlify('D81CD90BB849D81CD90BB843D81D00'), tag_hook=unmarshal_dummy)
+    decoded = impl.loads(
+        unhexlify('D81CD90BB849D81CD90BB843D81D00'), tag_hook=unmarshal_dummy)
     assert isinstance(decoded, DummyType)
     assert decoded.value.value is decoded
 
 
 def test_object_hook(impl):
-    class DummyType(object):
+    class DummyType:
         def __init__(self, state):
             self.state = state
 
     payload = unhexlify('A2616103616205')
-    decoded = impl.loads(payload, object_hook=lambda decoder, value: DummyType(value))
+    decoded = impl.loads(
+        payload, object_hook=lambda decoder, value: DummyType(value))
     assert isinstance(decoded, DummyType)
     assert decoded.state == {'a': 3, 'b': 5}
 
@@ -624,7 +642,7 @@ def test_set(impl):
     payload = unhexlify('d9010283616361626161')
     value = impl.loads(payload)
     assert type(value) is set
-    assert value == {u'a', u'b', u'c'}
+    assert value == {'a', 'b', 'c'}
 
 
 @pytest.mark.parametrize('payload, expected', [
@@ -634,7 +652,8 @@ def test_set(impl):
     ('a182010203', {(1, 2): 3}),
     ('a1d901028301020304', {frozenset({1, 2, 3}): 4}),
     ('A17f657374726561646d696e67ff01', {"streaming": 1}),
-    ('d9010282d90102820102d90102820304', {frozenset({1, 2}), frozenset({3, 4})})
+    ('d9010282d90102820102d90102820304', {
+     frozenset({1, 2}), frozenset({3, 4})})
 ])
 def test_immutable_keys(impl, payload, expected):
     value = impl.loads(unhexlify(payload))
@@ -681,7 +700,7 @@ def test_invalid_indefinite_data_item(impl, data):
 
 @pytest.mark.parametrize('data', [
     '7f7bff0000000000000471717272ff', '5f5bff0000000000000471717272ff'
-    ],
+],
     ids=['string', 'bytes']
 )
 def test_indefinite_overflow(impl, data):
@@ -695,13 +714,13 @@ def test_invalid_cbor(impl):
             'c788370016b8965bdb2074bff82e5a20e09bec21f8406e86442b87ec3ff245b70a47624dc9cdc6824b2a'
             '4c52e95ec9d6b0534b71c2b49e4bf9031500cee6869979c297bb5a8b381e98db714108415e5c50db7897'
             '4c271579b01633a3ef6271be5c225eb2'
-            )
+        )
         )
 
 
 @pytest.mark.parametrize('data, expected', [
     ('fc', '1c'), ('fd', '1d'), ('fe', '1e')
-    ],
+],
 )
 def test_reserved_special_tags(impl, data, expected):
     with pytest.raises(impl.CBORDecodeValueError) as exc_info:
@@ -711,7 +730,7 @@ def test_reserved_special_tags(impl, data, expected):
 
 @pytest.mark.parametrize('data, expected', [
     ('c400', '4'), ('c500', '5')
-    ],
+],
 )
 def test_decimal_payload_unpacking(impl, data, expected):
     with pytest.raises(impl.CBORDecodeValueError) as exc_info:

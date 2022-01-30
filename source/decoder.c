@@ -73,7 +73,7 @@ static PyObject * CBORDecoder_decode_set(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_stringref(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_stringref_ns(CBORDecoderObject *);
 
-
+
 // Constructors and destructors //////////////////////////////////////////////
 
 static int
@@ -177,7 +177,7 @@ CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
     return 0;
 }
 
-
+
 // Property accessors ////////////////////////////////////////////////////////
 
 // CBORDecoder._get_fp(self)
@@ -340,7 +340,7 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
         Py_RETURN_FALSE;
 }
 
-
+
 // Utility functions /////////////////////////////////////////////////////////
 
 static int
@@ -489,7 +489,7 @@ string_namespace_add(CBORDecoderObject *self, PyObject *string, uint64_t length)
     return 0;
 }
 
-
+
 // Major decoders ////////////////////////////////////////////////////////////
 
 static PyObject *
@@ -942,7 +942,7 @@ decode_map(CBORDecoderObject *self, uint8_t subtype)
     return ret;
 }
 
-
+
 // Semantic decoders /////////////////////////////////////////////////////////
 
 static PyObject *
@@ -1582,7 +1582,7 @@ CBORDecoder_decode_self_describe_cbor(CBORDecoderObject *self)
     return decode(self, DECODE_NORMAL);
 }
 
-
+
 // Special decoders //////////////////////////////////////////////////////////
 
 static PyObject *
@@ -1778,7 +1778,7 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
     return ret;
 }
 
-
+
 // Decoder class definition //////////////////////////////////////////////////
 
 #define PUBLIC_MAJOR(type)                                                   \

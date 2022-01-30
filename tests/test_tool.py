@@ -1,7 +1,8 @@
-import pytest
 import binascii
 import json
 from io import BytesIO, TextIOWrapper
+
+import pytest
 
 import cbor2.tool
 
@@ -113,7 +114,7 @@ def test_embed_bytes(monkeypatch, tmpdir):
 
 def test_dtypes_from_file(monkeypatch, tmpdir):
     infile = 'tests/examples.cbor.b64'
-    expected = open('tests/examples.json', 'r').read()
+    expected = open('tests/examples.json').read()
     outfile = tmpdir.join('outfile.json')
     argv = ['--sort-keys', '--pretty', '-d', '-o', str(outfile), infile]
     with monkeypatch.context() as m:

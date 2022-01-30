@@ -5,9 +5,8 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
-from .types import (
-    CBORDecodeValueError, CBORDecodeEOF, CBORTag, undefined, break_marker,
-    CBORSimpleValue, FrozenDict)
+from .types import (CBORDecodeEOF, CBORDecodeValueError, CBORSimpleValue,
+                    CBORTag, FrozenDict, break_marker, undefined)
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d{1,6})\d*)?(?:Z|([+-]\d\d):(\d\d))$')
@@ -237,8 +236,8 @@ class CBORDecoder:
                     length = self._decode_length(initial_byte & 0x1f)
                     if length is None or length > sys.maxsize:
                         raise CBORDecodeValueError(
-                                'invalid length for indefinite bytestring chunk 0x%x' % length
-                                )
+                            'invalid length for indefinite bytestring chunk 0x%x' % length
+                        )
                     value = self.read(length)
                     buf.append(value)
                 else:
@@ -246,7 +245,8 @@ class CBORDecoder:
                         "non-bytestring found in indefinite length bytestring")
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError('invalid length for bytestring 0x%x' % length)
+                raise CBORDecodeValueError(
+                    'invalid length for bytestring 0x%x' % length)
             result = self.read(length)
             self._stringref_namespace_add(result, length)
         return self.set_shareable(result)
@@ -279,7 +279,7 @@ class CBORDecoder:
                     length = self._decode_length(initial_byte & 0x1f)
                     if length is None or length > sys.maxsize:
                         raise CBORDecodeValueError(
-                                'invalid length for indefinite string chunk 0x%x' % length)
+                            'invalid length for indefinite string chunk 0x%x' % length)
                     value = self.read(length).decode('utf-8', self._str_errors)
                     buf.append(value)
                 else:
@@ -287,7 +287,8 @@ class CBORDecoder:
                         "non-string found in indefinite length string")
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError('invalid length for string 0x%x' % length)
+                raise CBORDecodeValueError(
+                    'invalid length for string 0x%x' % length)
             result = self.read(length).decode('utf-8', self._str_errors)
             self._stringref_namespace_add(result, length)
         return self.set_shareable(result)
@@ -308,7 +309,8 @@ class CBORDecoder:
                     items.append(value)
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError('invalid length for array 0x%x' % length)
+                raise CBORDecodeValueError(
+                    'invalid length for array 0x%x' % length)
             items = []
             if not self._immutable:
                 self.set_shareable(items)
@@ -373,7 +375,7 @@ class CBORDecoder:
             return special_decoders[subtype](self)
         except KeyError as e:
             raise CBORDecodeValueError(
-                    "Undefined Reserved major type 7 subtype 0x%x" % subtype) from e
+                "Undefined Reserved major type 7 subtype 0x%x" % subtype) from e
 
     #
     # Semantic decoders (major tag 6)
@@ -398,10 +400,11 @@ class CBORDecoder:
             if secfrac is None:
                 microsecond = 0
             else:
-                microsecond = int('{:<06}'.format(secfrac))
+                microsecond = int(f'{secfrac:<06}')
 
             if offset_h:
-                tz = timezone(timedelta(hours=int(offset_h), minutes=int(offset_m)))
+                tz = timezone(
+                    timedelta(hours=int(offset_h), minutes=int(offset_m)))
             else:
                 tz = timezone.utc
 
@@ -410,7 +413,7 @@ class CBORDecoder:
                 int(hour), int(minute), int(second), microsecond, tz))
         else:
             raise CBORDecodeValueError(
-                'invalid datetime string: {!r}'.format(value))
+                f'invalid datetime string: {value!r}')
 
     def decode_epoch_datetime(self):
         # Semantic tag 1

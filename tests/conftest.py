@@ -3,9 +3,9 @@ import struct
 
 import pytest
 
-import cbor2.types
-import cbor2.encoder
 import cbor2.decoder
+import cbor2.encoder
+import cbor2.types
 
 load_exc = ''
 try:
@@ -32,7 +32,7 @@ def will_overflow():
     return struct.pack('Q', huge_length)
 
 
-class Module(object):
+class Module:
     # Mock module class
     pass
 

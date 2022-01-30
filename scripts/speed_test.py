@@ -17,26 +17,28 @@ If the "--csv" argument is given, the script will output the results in CSV
 format to stdout (for piping to whatever you want to use them in).
 """
 
-import io
+import csv
 import re
 import sys
-import csv
-import cbor
 import timeit
-from math import log2, ceil
+from collections import OrderedDict, namedtuple
 from datetime import datetime, timezone
-from fractions import Fraction
 from decimal import Decimal
-from collections import namedtuple, OrderedDict
+from fractions import Fraction
+from math import ceil, log2
+
+import cbor
+
 
 def import_cbor2():
     # Similar hack to that used in tests/conftest to get separate C and Python
     # implementations
     import cbor2
-    import cbor2.types
-    import cbor2.encoder
     import cbor2.decoder
-    class Module(object):
+    import cbor2.encoder
+    import cbor2.types
+
+    class Module:
         # Mock module class
         pass
     py_cbor2 = Module()
@@ -44,6 +46,7 @@ def import_cbor2():
         for name in dir(source):
             setattr(py_cbor2, name, getattr(source, name))
     return cbor2, py_cbor2
+
 
 c_cbor2, py_cbor2 = import_cbor2()
 
@@ -65,7 +68,8 @@ TEST_VALUES = [
     ('bigstr',          {},     'foobarbaz ' * 1000),
     ('bytes',           {},     b'foo'),
     ('bigbytes',        {},     b'foobarbaz\x00' * 1000),
-    ('datetime',        {'timezone': UTC}, datetime(2019, 5, 9, 22, 4, 5, 123456)),
+    ('datetime',        {'timezone': UTC},
+     datetime(2019, 5, 9, 22, 4, 5, 123456)),
     ('decimal',         {},     Decimal('1.1')),
     ('fraction',        {},     Fraction(1, 5)),
     ('intlist',         {},     [1, 2, 3]),
@@ -132,6 +136,8 @@ def print_len(s):
 RED = '\x1b[1;31m'
 GREEN = '\x1b[1;32m'
 RESET = '\x1b[0m'
+
+
 def color_time(t, lim):
     time_str = format_time(t)
     if isinstance(t, Exception):
@@ -181,9 +187,11 @@ def output_table(results):
         '  ',
         ' ' * col_widths[0],
         ' | ',
-        '{value:^{width}}'.format(value='Encoding', width=sum(col_widths[1:4]) + 6),
+        '{value:^{width}}'.format(
+            value='Encoding', width=sum(col_widths[1:4]) + 6),
         ' | ',
-        '{value:^{width}}'.format(value='Decoding', width=sum(col_widths[4:7]) + 6),
+        '{value:^{width}}'.format(
+            value='Decoding', width=sum(col_widths[4:7]) + 6),
         ' |',
     )))
     print(sep)
@@ -219,10 +227,12 @@ def output_csv(results):
     for title, result in results.items():
         writer.writerow((
             title,
-            result.cbor.encoding.time if isinstance(result.cbor.encoding, Timing) else None,
+            result.cbor.encoding.time if isinstance(
+                result.cbor.encoding, Timing) else None,
             result.c_cbor2.encoding.time,
             result.py_cbor2.encoding.time,
-            result.cbor.decoding.time if isinstance(result.cbor.encoding, Timing) else None,
+            result.cbor.decoding.time if isinstance(
+                result.cbor.encoding, Timing) else None,
             result.c_cbor2.decoding.time,
             result.py_cbor2.decoding.time,
         ))

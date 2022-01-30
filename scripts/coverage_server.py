@@ -4,9 +4,10 @@ import os
 import sys
 import webbrowser
 from http.server import SimpleHTTPRequestHandler
+from signal import pause
 from socketserver import TCPServer
 from threading import Thread
-from signal import pause
+
 
 class Httpd(Thread):
     def __init__(self):
@@ -16,6 +17,7 @@ class Httpd(Thread):
 
     def run(self):
         self.server.serve_forever()
+
 
 os.chdir(os.path.dirname(__file__) + '/../coverage/')
 httpd = Httpd()

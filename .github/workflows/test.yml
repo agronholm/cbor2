@@ -1,4 +1,4 @@
-name: Python codeqa/test
+name: Test suite
 
 on:
   push:
@@ -6,25 +6,7 @@ on:
   pull_request:
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.x
-    - uses: actions/cache@v2
-      with:
-        path: ~/.cache/pip
-        key: pip-lint
-    - name: Install dependencies
-      run: pip install flake8
-    - name: Run flake8
-      run: flake8 cbor2 tests
-
   test:
-    needs: [lint]
     strategy:
       fail-fast: false
       matrix:

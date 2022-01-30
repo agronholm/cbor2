@@ -41,7 +41,7 @@
 // it's not fool-proof; there's probably some leaks left. Please file bugs for
 // any leaks you detect!
 
-
+
 // break_marker singleton ////////////////////////////////////////////////////
 
 static PyObject *
@@ -92,7 +92,7 @@ PyObject _break_marker_obj = {
     1, &break_marker_type
 };
 
-
+
 // undefined singleton ///////////////////////////////////////////////////////
 
 static PyObject *
@@ -143,7 +143,7 @@ PyObject _undefined_obj = {
     1, &undefined_type
 };
 
-
+
 // CBORSimpleValue namedtuple ////////////////////////////////////////////////
 
 PyTypeObject CBORSimpleValueType;
@@ -210,7 +210,7 @@ CBORSimpleValue_richcompare(PyObject *a, PyObject *b, int op)
     Py_RETURN_NOTIMPLEMENTED;
 }
 
-
+
 // dump/load functions ///////////////////////////////////////////////////////
 
 static PyObject *
@@ -373,7 +373,7 @@ CBOR2_loads(PyObject *module, PyObject *args, PyObject *kwargs)
     return ret;
 }
 
-
+
 // Cache-init functions //////////////////////////////////////////////////////
 
 int
@@ -575,7 +575,7 @@ error:
     return -1;
 }
 
-
+
 // Module definition /////////////////////////////////////////////////////////
 
 PyObject *_CBOR2_empty_bytes = NULL;

@@ -5,3 +5,35 @@ requires = [
     "setuptools_scm[toml] >= 3.4"
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+addopts = "-rsx --cov --tb=short"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["cbor2"]
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.flake8]
+max-line-length = 99
+exclude = ".tox,build,docs"
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+envlist = py36, py37, py38, py39, pypy3, pre-commit
+skip_missing_interpreters = true
+isolated_build = true
+
+[testenv]
+commands = python -m pytest {posargs}
+extras = test
+
+[testenv:pre-commit]
+deps = pre-commit
+commands = pre-commit run --all-files
+skip_install = true
+"""

@@ -27,12 +27,12 @@ default_encoders = OrderedDict(
         (bytes, lambda x: x.decode(encoding='utf-8', errors='backslashreplace')),
         (decimal.Decimal, str),
         (FrozenDict, lambda x: str(dict(x))),
-        (CBORSimpleValue, lambda x: 'cbor_simple:{:d}'.format(x.value)),
+        (CBORSimpleValue, lambda x: f'cbor_simple:{x.value:d}'),
         (type(undefined), lambda x: 'cbor:undef'),
         (datetime, lambda x: x.isoformat()),
         (fractions.Fraction, str),
         (uuid.UUID, lambda x: x.urn),
-        (CBORTag, lambda x: {'CBORTag:{:d}'.format(x.tag): x.value}),
+        (CBORTag, lambda x: {f'CBORTag:{x.tag:d}': x.value}),
         (set, list),
         (re.compile('').__class__, lambda x: x.pattern),
         (ipaddress.IPv4Address, str),
@@ -50,7 +50,7 @@ def tag_hook(decoder, tag, ignore_tags=set()):
         return decoder.decode_from_bytes(tag.value)
     else:
         if decoder.immutable:
-            return 'CBORtag:{}:{}'.format(tag.tag, tag.value)
+            return f'CBORtag:{tag.tag}:{tag.value}'
         return tag
 
 
@@ -77,11 +77,12 @@ def key_to_str(d, dict_ids=None):
     rval = {}
     if not isinstance(d, dict):
         if isinstance(d, CBORSimpleValue):
-            v = 'cbor_simple:{:d}'.format(d.value)
+            v = f'cbor_simple:{d.value:d}'
             return v
         if isinstance(d, (tuple, list, set)):
             if id(d) in dict_ids:
-                raise ValueError("Cannot convert self-referential data to JSON")
+                raise ValueError(
+                    "Cannot convert self-referential data to JSON")
             else:
                 dict_ids.add(id(d))
             v = [key_to_str(x, dict_ids) for x in d]
@@ -99,7 +100,7 @@ def key_to_str(d, dict_ids=None):
         if isinstance(k, bytes):
             k = k.decode(encoding='utf-8', errors='backslashreplace')
         if isinstance(k, CBORSimpleValue):
-            k = 'cbor_simple:{:d}'.format(k.value)
+            k = f'cbor_simple:{k.value:d}'
         if isinstance(k, (FrozenDict, frozenset, tuple)):
             k = str(k)
         if isinstance(v, dict):
@@ -171,18 +172,19 @@ def main():
         outfile = 1
         closefd = False
 
-    opener = dict(mode='w', encoding='utf-8', errors='backslashreplace', closefd=closefd)
+    opener = dict(mode='w', encoding='utf-8',
+                  errors='backslashreplace', closefd=closefd)
     dumpargs = dict(ensure_ascii=False)
 
     if options.tag_ignore:
         ignore_s = options.tag_ignore.split(',')
-        droptags = set(int(n) for n in ignore_s if (len(n) and n[0].isdigit()))
+        droptags = {int(n) for n in ignore_s if (len(n) and n[0].isdigit())}
     else:
         droptags = set()
 
     my_hook = partial(tag_hook, ignore_tags=droptags)
 
-    with io.open(outfile, **opener) as outfile:
+    with open(outfile, **opener) as outfile:
         for infile in infiles:
             if hasattr(infile, 'buffer') and not decode:
                 infile = infile.buffer

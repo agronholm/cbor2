@@ -103,7 +103,7 @@ Tag   Semantics                                Python type(s)
 Arbitary tags can be represented with the :class:`~cbor2.types.CBORTag` class.
 
 If you want to write a file that is detected as CBOR by the Unix ``file`` utility, wrap your data in
-a `~cbor2.types.CBORTag` object like so::
+a ``~cbor2.types.CBORTag`` object like so::
 
     from cbor2 import dump, CBORTag
 
