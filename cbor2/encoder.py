@@ -8,8 +8,8 @@ from functools import wraps
 from io import BytesIO
 from sys import modules
 
-from .types import (CBOREncodeTypeError, CBOREncodeValueError, CBORSimpleValue,
-                    CBORTag, FrozenDict, undefined)
+from .types import (
+    CBOREncodeTypeError, CBOREncodeValueError, CBORSimpleValue, CBORTag, FrozenDict, undefined)
 
 
 def shareable_encoder(func):

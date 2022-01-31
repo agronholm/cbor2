@@ -5,8 +5,9 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
-from .types import (CBORDecodeEOF, CBORDecodeValueError, CBORSimpleValue,
-                    CBORTag, FrozenDict, break_marker, undefined)
+from .types import (
+    CBORDecodeEOF, CBORDecodeValueError, CBORSimpleValue, CBORTag, FrozenDict, break_marker,
+    undefined)
 
 timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
                           r'(?:\.(\d{1,6})\d*)?(?:Z|([+-]\d\d):(\d\d))$')

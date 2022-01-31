@@ -1,9 +1,8 @@
 from .decoder import CBORDecoder, load, loads  # noqa: F401
 from .encoder import CBOREncoder, dump, dumps, shareable_encoder  # noqa: F401
-from .types import (CBORDecodeEOF, CBORDecodeError,  # noqa: F401
-                    CBORDecodeValueError, CBOREncodeError, CBOREncodeTypeError,
-                    CBOREncodeValueError, CBORError, CBORSimpleValue, CBORTag,
-                    undefined)
+from .types import (  # noqa: F401
+    CBORDecodeEOF, CBORDecodeError, CBORDecodeValueError, CBOREncodeError, CBOREncodeTypeError,
+    CBOREncodeValueError, CBORError, CBORSimpleValue, CBORTag, undefined)
 
 try:
     from _cbor2 import *  # noqa: F401,F403
