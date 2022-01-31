@@ -246,8 +246,7 @@ class CBORDecoder:
                         "non-bytestring found in indefinite length bytestring")
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError(
-                    'invalid length for bytestring 0x%x' % length)
+                raise CBORDecodeValueError('invalid length for bytestring 0x%x' % length)
             result = self.read(length)
             self._stringref_namespace_add(result, length)
         return self.set_shareable(result)
@@ -288,8 +287,7 @@ class CBORDecoder:
                         "non-string found in indefinite length string")
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError(
-                    'invalid length for string 0x%x' % length)
+                raise CBORDecodeValueError('invalid length for string 0x%x' % length)
             result = self.read(length).decode('utf-8', self._str_errors)
             self._stringref_namespace_add(result, length)
         return self.set_shareable(result)
@@ -310,8 +308,7 @@ class CBORDecoder:
                     items.append(value)
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError(
-                    'invalid length for array 0x%x' % length)
+                raise CBORDecodeValueError('invalid length for array 0x%x' % length)
             items = []
             if not self._immutable:
                 self.set_shareable(items)
@@ -404,8 +401,7 @@ class CBORDecoder:
                 microsecond = int(f'{secfrac:<06}')
 
             if offset_h:
-                tz = timezone(
-                    timedelta(hours=int(offset_h), minutes=int(offset_m)))
+                tz = timezone(timedelta(hours=int(offset_h), minutes=int(offset_m)))
             else:
                 tz = timezone.utc
 

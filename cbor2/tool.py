@@ -81,8 +81,7 @@ def key_to_str(d, dict_ids=None):
             return v
         if isinstance(d, (tuple, list, set)):
             if id(d) in dict_ids:
-                raise ValueError(
-                    "Cannot convert self-referential data to JSON")
+                raise ValueError("Cannot convert self-referential data to JSON")
             else:
                 dict_ids.add(id(d))
             v = [key_to_str(x, dict_ids) for x in d]
@@ -172,8 +171,7 @@ def main():
         outfile = 1
         closefd = False
 
-    opener = dict(mode='w', encoding='utf-8',
-                  errors='backslashreplace', closefd=closefd)
+    opener = dict(mode='w', encoding='utf-8', errors='backslashreplace', closefd=closefd)
     dumpargs = dict(ensure_ascii=False)
 
     if options.tag_ignore:

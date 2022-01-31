@@ -457,8 +457,7 @@ class CBOREncoder:
             if not value.microsecond:
                 timestamp = timegm(value.utctimetuple())
             else:
-                timestamp = timegm(value.utctimetuple()) + \
-                    value.microsecond / 1000000
+                timestamp = timegm(value.utctimetuple()) + value.microsecond / 1000000
             self.encode_semantic(CBORTag(1, timestamp))
         else:
             datestring = value.isoformat().replace('+00:00', 'Z')
@@ -492,8 +491,7 @@ class CBOREncoder:
     def encode_rational(self, value):
         # Semantic tag 30
         with self.disable_value_sharing():
-            self.encode_semantic(
-                CBORTag(30, [value.numerator, value.denominator]))
+            self.encode_semantic(CBORTag(30, [value.numerator, value.denominator]))
 
     def encode_regexp(self, value):
         # Semantic tag 35

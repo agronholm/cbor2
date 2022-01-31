@@ -12,6 +12,9 @@ line_length = 99
 multi_line_output = 4
 known_first_party = ["cbor2"]
 
+[tool.autopep8]
+max_line_length = 99
+
 [tool.flake8]
 max-line-length = 99
 exclude = ".tox,build,docs"

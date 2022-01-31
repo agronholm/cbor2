@@ -45,8 +45,7 @@ class CBORTag:
 
     def __init__(self, tag, value):
         if not isinstance(tag, int) or tag not in range(2**64):
-            raise TypeError(
-                'CBORTag tags must be positive integers less than 2**64')
+            raise TypeError('CBORTag tags must be positive integers less than 2**64')
         self.tag = tag
         self.value = value
 
