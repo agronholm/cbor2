@@ -7,13 +7,9 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.isort]
+src_paths = ["src"]
 skip_gitignore = true
-line_length = 99
-multi_line_output = 4
-known_first_party = ["cbor2"]
-
-[tool.autopep8]
-max_line_length = 99
+profile = "black"
 
 [tool.flake8]
 max-line-length = 99
