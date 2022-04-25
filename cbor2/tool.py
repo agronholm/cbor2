@@ -24,21 +24,21 @@ except ImportError:
 
 default_encoders = OrderedDict(
     [
-        (bytes, lambda x: x.decode(encoding='utf-8', errors='backslashreplace')),
+        (bytes, lambda x: x.decode(encoding="utf-8", errors="backslashreplace")),
         (decimal.Decimal, str),
         (FrozenDict, lambda x: str(dict(x))),
-        (CBORSimpleValue, lambda x: f'cbor_simple:{x.value:d}'),
-        (type(undefined), lambda x: 'cbor:undef'),
+        (CBORSimpleValue, lambda x: f"cbor_simple:{x.value:d}"),
+        (type(undefined), lambda x: "cbor:undef"),
         (datetime, lambda x: x.isoformat()),
         (fractions.Fraction, str),
         (uuid.UUID, lambda x: x.urn),
-        (CBORTag, lambda x: {f'CBORTag:{x.tag:d}': x.value}),
+        (CBORTag, lambda x: {f"CBORTag:{x.tag:d}": x.value}),
         (set, list),
-        (re.compile('').__class__, lambda x: x.pattern),
+        (re.compile("").__class__, lambda x: x.pattern),
         (ipaddress.IPv4Address, str),
         (ipaddress.IPv6Address, str),
         (ipaddress.IPv4Network, str),
-        (ipaddress.IPv6Network, str)
+        (ipaddress.IPv6Network, str),
     ]
 )
 
@@ -50,7 +50,7 @@ def tag_hook(decoder, tag, ignore_tags=set()):
         return decoder.decode_from_bytes(tag.value)
     else:
         if decoder.immutable:
-            return f'CBORtag:{tag.tag}:{tag.value}'
+            return f"CBORtag:{tag.tag}:{tag.value}"
         return tag
 
 
@@ -77,7 +77,7 @@ def key_to_str(d, dict_ids=None):
     rval = {}
     if not isinstance(d, dict):
         if isinstance(d, CBORSimpleValue):
-            v = f'cbor_simple:{d.value:d}'
+            v = f"cbor_simple:{d.value:d}"
             return v
         if isinstance(d, (tuple, list, set)):
             if id(d) in dict_ids:
@@ -97,9 +97,9 @@ def key_to_str(d, dict_ids=None):
 
     for k, v in d.items():
         if isinstance(k, bytes):
-            k = k.decode(encoding='utf-8', errors='backslashreplace')
+            k = k.decode(encoding="utf-8", errors="backslashreplace")
         if isinstance(k, CBORSimpleValue):
-            k = f'cbor_simple:{k.value:d}'
+            k = f"cbor_simple:{k.value:d}"
         if isinstance(k, (FrozenDict, frozenset, tuple)):
             k = str(k)
         if isinstance(v, dict):
@@ -111,51 +111,52 @@ def key_to_str(d, dict_ids=None):
 
 
 def main():
-    prog = 'python -m cbor2.tool'
+    prog = "python -m cbor2.tool"
     description = (
-        'A simple command line interface for cbor2 module '
-        'to validate and pretty-print CBOR objects.'
+        "A simple command line interface for cbor2 module "
+        "to validate and pretty-print CBOR objects."
     )
     parser = argparse.ArgumentParser(prog=prog, description=description)
+    parser.add_argument("-o", "--outfile", type=str, help="output file", default="-")
     parser.add_argument(
-        '-o', '--outfile', type=str, help='output file', default='-'
+        "infiles",
+        nargs="*",
+        type=argparse.FileType("rb"),
+        help="Collection of CBOR files to process or - for stdin",
     )
     parser.add_argument(
-        'infiles',
-        nargs='*',
-        type=argparse.FileType('rb'),
-        help='Collection of CBOR files to process or - for stdin',
-    )
-    parser.add_argument(
-        '-k',
-        '--sort-keys',
-        action='store_true',
+        "-k",
+        "--sort-keys",
+        action="store_true",
         default=False,
-        help='sort the output of dictionaries alphabetically by key',
+        help="sort the output of dictionaries alphabetically by key",
     )
     parser.add_argument(
-        '-p',
-        '--pretty', action='store_true', default=False, help='indent the output to look good'
-    )
-    parser.add_argument(
-        '-s',
-        '--sequence',
-        action='store_true',
+        "-p",
+        "--pretty",
+        action="store_true",
         default=False,
-        help='Parse a sequence of concatenated CBOR items',
+        help="indent the output to look good",
     )
     parser.add_argument(
-        '-d',
-        '--decode',
-        action='store_true',
+        "-s",
+        "--sequence",
+        action="store_true",
         default=False,
-        help='CBOR data is base64 encoded (handy for stdin)',
+        help="Parse a sequence of concatenated CBOR items",
     )
     parser.add_argument(
-        '-i',
-        '--tag-ignore',
+        "-d",
+        "--decode",
+        action="store_true",
+        default=False,
+        help="CBOR data is base64 encoded (handy for stdin)",
+    )
+    parser.add_argument(
+        "-i",
+        "--tag-ignore",
         type=str,
-        help='Comma separated list of tags to ignore and only return the value',
+        help="Comma separated list of tags to ignore and only return the value",
     )
     options = parser.parse_args()
 
@@ -167,15 +168,17 @@ def main():
     infiles = options.infiles or [sys.stdin]
 
     closefd = True
-    if outfile == '-':
+    if outfile == "-":
         outfile = 1
         closefd = False
 
-    opener = dict(mode='w', encoding='utf-8', errors='backslashreplace', closefd=closefd)
+    opener = dict(
+        mode="w", encoding="utf-8", errors="backslashreplace", closefd=closefd
+    )
     dumpargs = dict(ensure_ascii=False)
 
     if options.tag_ignore:
-        ignore_s = options.tag_ignore.split(',')
+        ignore_s = options.tag_ignore.split(",")
         droptags = {int(n) for n in ignore_s if (len(n) and n[0].isdigit())}
     else:
         droptags = set()
@@ -184,7 +187,7 @@ def main():
 
     with open(outfile, **opener) as outfile:
         for infile in infiles:
-            if hasattr(infile, 'buffer') and not decode:
+            if hasattr(infile, "buffer") and not decode:
                 infile = infile.buffer
             with infile:
                 if decode:
@@ -201,12 +204,12 @@ def main():
                             sort_keys=sort_keys,
                             indent=(None, 4)[pretty],
                             cls=DefaultEncoder,
-                            **dumpargs
+                            **dumpargs,
                         )
-                        outfile.write('\n')
+                        outfile.write("\n")
                 except (ValueError, EOFError) as e:  # pragma: no cover
                     raise SystemExit(e)
 
 
-if __name__ == '__main__':  # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     main()

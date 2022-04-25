@@ -1,5 +1,4 @@
 import pytest
-
 from cbor2.types import FrozenDict
 
 
@@ -8,7 +7,7 @@ def test_undefined_bool(impl):
 
 
 def test_undefined_repr(impl):
-    assert repr(impl.undefined) == 'undefined'
+    assert repr(impl.undefined) == "undefined"
 
 
 def test_undefined_singleton(impl):
@@ -17,7 +16,7 @@ def test_undefined_singleton(impl):
 
 def test_undefined_init(impl):
     with pytest.raises(TypeError):
-        type(impl.undefined)('foo')
+        type(impl.undefined)("foo")
 
 
 def test_break_bool(impl):
@@ -25,7 +24,7 @@ def test_break_bool(impl):
 
 
 def test_break_repr(impl):
-    assert repr(impl.break_marker) == 'break_marker'
+    assert repr(impl.break_marker) == "break_marker"
 
 
 def test_break_singleton(impl):
@@ -34,25 +33,25 @@ def test_break_singleton(impl):
 
 def test_break_init(impl):
     with pytest.raises(TypeError):
-        type(impl.break_marker)('foo')
+        type(impl.break_marker)("foo")
 
 
 def test_tag_init(impl):
     with pytest.raises(TypeError):
-        impl.CBORTag('foo', 'bar')
+        impl.CBORTag("foo", "bar")
 
 
 def test_tag_attr(impl):
-    tag = impl.CBORTag(1, 'foo')
+    tag = impl.CBORTag(1, "foo")
     assert tag.tag == 1
-    assert tag.value == 'foo'
+    assert tag.value == "foo"
 
 
 def test_tag_compare(impl):
-    tag1 = impl.CBORTag(1, 'foo')
-    tag2 = impl.CBORTag(1, 'foo')
-    tag3 = impl.CBORTag(2, 'bar')
-    tag4 = impl.CBORTag(2, 'baz')
+    tag1 = impl.CBORTag(1, "foo")
+    tag2 = impl.CBORTag(1, "foo")
+    tag3 = impl.CBORTag(2, "bar")
+    tag4 = impl.CBORTag(2, "baz")
     assert tag1 is not tag2
     assert tag1 == tag2
     assert not (tag1 == tag3)
@@ -68,23 +67,23 @@ def test_tag_compare(impl):
 
 
 def test_tag_compare_unimplemented(impl):
-    tag = impl.CBORTag(1, 'foo')
-    assert not tag == (1, 'foo')
+    tag = impl.CBORTag(1, "foo")
+    assert not tag == (1, "foo")
     with pytest.raises(TypeError):
-        tag <= (1, 'foo')
+        tag <= (1, "foo")
 
 
 def test_tag_recursive(impl):
     tag = impl.CBORTag(1, None)
     tag.value = tag
-    assert repr(tag) == 'CBORTag(1, ...)'
+    assert repr(tag) == "CBORTag(1, ...)"
     assert tag is tag.value
     assert tag == tag.value
     assert not (tag != tag.value)
 
 
 def test_tag_repr(impl):
-    assert repr(impl.CBORTag(600, 'blah')) == "CBORTag(600, 'blah')"
+    assert repr(impl.CBORTag(600, "blah")) == "CBORTag(600, 'blah')"
 
 
 def test_simple_value_repr(impl):
@@ -123,7 +122,7 @@ def test_simple_ordering(impl):
 def test_simple_value_too_big(impl):
     with pytest.raises(TypeError) as exc:
         impl.CBORSimpleValue(256)
-        assert str(exc.value) == 'simple value out of range (0..255)'
+        assert str(exc.value) == "simple value out of range (0..255)"
 
 
 def test_frozendict():

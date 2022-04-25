@@ -41,11 +41,11 @@ class CBORTag:
     :param value: encapsulated value (any object)
     """
 
-    __slots__ = 'tag', 'value'
+    __slots__ = "tag", "value"
 
     def __init__(self, tag, value):
         if not isinstance(tag, int) or tag not in range(2**64):
-            raise TypeError('CBORTag tags must be positive integers less than 2**64')
+            raise TypeError("CBORTag tags must be positive integers less than 2**64")
         self.tag = tag
         self.value = value
 
@@ -61,10 +61,10 @@ class CBORTag:
 
     @recursive_repr()
     def __repr__(self):
-        return 'CBORTag({self.tag}, {self.value!r})'.format(self=self)
+        return "CBORTag({self.tag}, {self.value!r})".format(self=self)
 
 
-class CBORSimpleValue(namedtuple('CBORSimpleValue', ['value'])):
+class CBORSimpleValue(namedtuple("CBORSimpleValue", ["value"])):
     """
     Represents a CBOR "simple value".
 
@@ -76,7 +76,7 @@ class CBORSimpleValue(namedtuple('CBORSimpleValue', ['value'])):
 
     def __new__(cls, value):
         if value < 0 or value > 255:
-            raise TypeError('simple value out of range (0..255)')
+            raise TypeError("simple value out of range (0..255)")
         return super().__new__(cls, value)
 
     def __eq__(self, other):
@@ -153,6 +153,7 @@ class UndefinedType:
 
     def __bool__(self):
         return False
+
     __nonzero__ = __bool__  # Py2.7 compat
 
 
@@ -170,6 +171,7 @@ class BreakMarkerType:
 
     def __bool__(self):
         return True
+
     __nonzero__ = __bool__  # Py2.7 compat
 
 
