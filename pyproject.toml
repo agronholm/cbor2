@@ -43,6 +43,9 @@ doc = [
     "sphinx-autodoc-typehints >= 1.2.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["cbor2"]
+
 [tool.isort]
 src_paths = ["src"]
 skip_gitignore = true
