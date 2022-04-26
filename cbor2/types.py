@@ -41,11 +41,11 @@ class CBORTag:
     :param value: encapsulated value (any object)
     """
 
-    __slots__ = 'tag', 'value'
+    __slots__ = "tag", "value"
 
     def __init__(self, tag, value):
         if not isinstance(tag, int) or tag not in range(2**64):
-            raise TypeError('CBORTag tags must be positive integers less than 2**64')
+            raise TypeError("CBORTag tags must be positive integers less than 2**64")
         self.tag = tag
         self.value = value
 
@@ -61,10 +61,10 @@ class CBORTag:
 
     @recursive_repr()
     def __repr__(self):
-        return 'CBORTag({self.tag}, {self.value!r})'.format(self=self)
+        return "CBORTag({self.tag}, {self.value!r})".format(self=self)
 
 
-class CBORSimpleValue(namedtuple('CBORSimpleValue', ['value'])):
+class CBORSimpleValue(namedtuple("CBORSimpleValue", ["value"])):
     """
     Represents a CBOR "simple value".
 
@@ -76,38 +76,38 @@ class CBORSimpleValue(namedtuple('CBORSimpleValue', ['value'])):
 
     def __new__(cls, value):
         if value < 0 or value > 255:
-            raise TypeError('simple value out of range (0..255)')
-        return super(CBORSimpleValue, cls).__new__(cls, value)
+            raise TypeError("simple value out of range (0..255)")
+        return super().__new__(cls, value)
 
     def __eq__(self, other):
         if isinstance(other, int):
             return self.value == other
-        return super(CBORSimpleValue, self).__eq__(other)
+        return super().__eq__(other)
 
     def __ne__(self, other):
         if isinstance(other, int):
             return self.value != other
-        return super(CBORSimpleValue, self).__ne__(other)
+        return super().__ne__(other)
 
     def __lt__(self, other):
         if isinstance(other, int):
             return self.value < other
-        return super(CBORSimpleValue, self).__lt__(other)
+        return super().__lt__(other)
 
     def __le__(self, other):
         if isinstance(other, int):
             return self.value <= other
-        return super(CBORSimpleValue, self).__le__(other)
+        return super().__le__(other)
 
     def __ge__(self, other):
         if isinstance(other, int):
             return self.value >= other
-        return super(CBORSimpleValue, self).__ge__(other)
+        return super().__ge__(other)
 
     def __gt__(self, other):
         if isinstance(other, int):
             return self.value > other
-        return super(CBORSimpleValue, self).__gt__(other)
+        return super().__gt__(other)
 
 
 class FrozenDict(Mapping):
@@ -131,7 +131,7 @@ class FrozenDict(Mapping):
         return self._d[key]
 
     def __repr__(self):
-        return "%s(%s)" % (self.__class__.__name__, self._d)
+        return f"{self.__class__.__name__}({self._d})"
 
     def __hash__(self):
         if self._hash is None:
@@ -146,13 +146,14 @@ class UndefinedType:
         try:
             return undefined
         except NameError:
-            return super(UndefinedType, cls).__new__(cls)
+            return super().__new__(cls)
 
     def __repr__(self):
         return "undefined"
 
     def __bool__(self):
         return False
+
     __nonzero__ = __bool__  # Py2.7 compat
 
 
@@ -163,13 +164,14 @@ class BreakMarkerType:
         try:
             return break_marker
         except NameError:
-            return super(BreakMarkerType, cls).__new__(cls)
+            return super().__new__(cls)
 
     def __repr__(self):
         return "break_marker"
 
     def __bool__(self):
         return True
+
     __nonzero__ = __bool__  # Py2.7 compat
 
 

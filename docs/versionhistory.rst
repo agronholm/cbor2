@@ -99,7 +99,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
 - Added canonical encoding (via ``canonical=True``) (PR by Sekenre)
 - Added support for encoding/decoding sets (semantic tag 258) (PR by Sekenre)
-- Added support for encoding `FrozenDict` (hashable dict) as map keys or set elements (PR by
+- Added support for encoding ``FrozenDict`` (hashable dict) as map keys or set elements (PR by
   Sekenre)
 
 **4.0.1** (2017-08-21)

@@ -1,11 +1,11 @@
-import sys
 import os
 import platform
+import sys
 
 from pkg_resources import parse_version
-from setuptools import setup, Extension
+from setuptools import Extension, setup
 
-min_glibc = parse_version('2.9')
+min_glibc = parse_version("2.9")
 
 
 def check_libc():
@@ -20,15 +20,15 @@ def check_libc():
         # os.confstr() or CS_GNU_LIBC_VERSION not available (or a bad value)...
         return True
 
-    if libc != 'glibc':
+    if libc != "glibc":
         # Attempt to build with musl or other libc
         return True
 
     return parse_version(version) >= min_glibc
 
 
-cpython = platform.python_implementation() == 'CPython'
-windows = sys.platform.startswith('win')
+cpython = platform.python_implementation() == "CPython"
+windows = sys.platform.startswith("win")
 use_c_ext = os.environ.get("CBOR2_BUILD_C_EXTENSION", None)
 if use_c_ext == "1":
     build_c_ext = True
@@ -40,38 +40,32 @@ else:
 # Enable GNU features for libc's like musl, should have no effect
 # on Apple/BSDs
 if build_c_ext and not windows:
-    gnu_flag = ['-D_GNU_SOURCE']
+    gnu_flag = ["-D_GNU_SOURCE"]
 else:
     gnu_flag = []
 
 if build_c_ext:
     _cbor2 = Extension(
-        '_cbor2',
+        "_cbor2",
         # math.h routines are built-in to MSVCRT
-        libraries=['m'] if not windows else [],
-        extra_compile_args=['-std=c99'] + gnu_flag,
+        libraries=["m"] if not windows else [],
+        extra_compile_args=["-std=c99"] + gnu_flag,
         sources=[
-            'source/module.c',
-            'source/encoder.c',
-            'source/decoder.c',
-            'source/tags.c',
-            'source/halffloat.c',
+            "source/module.c",
+            "source/encoder.c",
+            "source/decoder.c",
+            "source/tags.c",
+            "source/halffloat.c",
         ],
-        optional=True
+        optional=True,
     )
-    kwargs = {'ext_modules': [_cbor2]}
+    kwargs = {"ext_modules": [_cbor2]}
 else:
     kwargs = {}
 
 
 setup(
-    use_scm_version={
-        'version_scheme': 'post-release',
-        'local_scheme': 'dirty-tag'
-    },
-    setup_requires=[
-        'setuptools >= 40.7.0',
-        'setuptools_scm >= 1.7.0'
-    ],
+    use_scm_version={"version_scheme": "post-release", "local_scheme": "dirty-tag"},
+    setup_requires=["setuptools >= 40.7.0", "setuptools_scm >= 1.7.0"],
     **kwargs
-    )
+)

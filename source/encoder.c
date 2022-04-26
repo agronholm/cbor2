@@ -43,7 +43,7 @@ static int _CBOREncoder_set_fp(CBOREncoderObject *, PyObject *, void *);
 static int _CBOREncoder_set_default(CBOREncoderObject *, PyObject *, void *);
 static int _CBOREncoder_set_timezone(CBOREncoderObject *, PyObject *, void *);
 
-
+
 // Constructors and destructors //////////////////////////////////////////////
 
 static int
@@ -193,7 +193,7 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
     return 0;
 }
 
-
+
 // Property accessors ////////////////////////////////////////////////////////
 
 // CBOREncoder._get_fp(self)
@@ -317,7 +317,7 @@ _CBOREncoder_get_canonical(CBOREncoderObject *self, void *closure)
         Py_RETURN_FALSE;
 }
 
-
+
 // Utility methods ///////////////////////////////////////////////////////////
 
 static int
@@ -554,7 +554,7 @@ CBOREncoder_find_encoder(CBOREncoderObject *self, PyObject *type)
     return ret;
 }
 
-
+
 // Major encoders ////////////////////////////////////////////////////////////
 
 static PyObject *
@@ -878,7 +878,7 @@ CBOREncoder_encode_map(CBOREncoderObject *self, PyObject *value)
     return encode_container(self, &CBOREncoder__encode_map, value);
 }
 
-
+
 // Semantic encoders /////////////////////////////////////////////////////////
 
 static int
@@ -1538,7 +1538,7 @@ CBOREncoder_encode_ipnetwork(CBOREncoderObject *self, PyObject *value)
     return encode_container(self, &encode_ipnetwork, value);
 }
 
-
+
 // Special encoders //////////////////////////////////////////////////////////
 
 // CBOREncoder.encode_float(self, value)
@@ -1641,7 +1641,7 @@ CBOREncoder_encode_simple_value(CBOREncoderObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-
+
 // Canonical encoding methods ////////////////////////////////////////////////
 
 // CBOREncoder.encode_minimal_float(self, value)
@@ -1948,7 +1948,7 @@ CBOREncoder_encode_canonical_set(CBOREncoderObject *self, PyObject *value)
     return encode_container(self, &encode_canonical_set, value);
 }
 
-
+
 // Main entry points /////////////////////////////////////////////////////////
 
 static inline PyObject *
@@ -2058,7 +2058,7 @@ CBOREncoder_encode_to_bytes(CBOREncoderObject *self, PyObject *value)
     return ret;
 }
 
-
+
 // Encoder class definition //////////////////////////////////////////////////
 
 static PyMemberDef CBOREncoder_members[] = {

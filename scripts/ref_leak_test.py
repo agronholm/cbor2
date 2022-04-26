@@ -13,28 +13,33 @@ no extra objects existed. The ideal output is obviously "-" in all rows.
 """
 
 import sys
-import objgraph
 import tracemalloc
-from datetime import datetime, timezone, timedelta
-from fractions import Fraction
+from collections import OrderedDict, namedtuple
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from collections import namedtuple, OrderedDict
+from fractions import Fraction
+
+import objgraph
+
 
 def import_cbor2():
     # Similar hack to that used in tests/conftest to get separate C and Python
     # implementations
     import cbor2
-    import cbor2.types
-    import cbor2.encoder
     import cbor2.decoder
-    class Module(object):
+    import cbor2.encoder
+    import cbor2.types
+
+    class Module:
         # Mock module class
         pass
+
     py_cbor2 = Module()
     for source in (cbor2.types, cbor2.encoder, cbor2.decoder):
         for name in dir(source):
             setattr(py_cbor2, name, getattr(source, name))
     return cbor2, py_cbor2
+
 
 c_cbor2, py_cbor2 = import_cbor2()
 
@@ -43,43 +48,52 @@ UTC = timezone.utc
 
 TEST_VALUES = [
     # label,            kwargs, value
-    ('None',            {},     None),
-    ('10e0',            {},     1),
-    ('10e12',           {},     1000000000000),
-    ('10e29',           {},     100000000000000000000000000000),
-    ('-10e0',           {},     -1),
-    ('-10e12',          {},     -1000000000000),
-    ('-10e29',          {},     -100000000000000000000000000000),
-    ('float1',          {},     1.0),
-    ('float2',          {},     3.8),
-    ('str',             {},     'foo'),
-    ('bigstr',          {},     'foobarbaz ' * 1000),
-    ('bytes',           {},     b'foo'),
-    ('bigbytes',        {},     b'foobarbaz\x00' * 1000),
-    ('datetime',        {'timezone': UTC}, datetime(2019, 5, 9, 22, 4, 5, 123456)),
-    ('decimal',         {},     Decimal('1.1')),
-    ('fraction',        {},     Fraction(1, 5)),
-    ('intlist',         {},     [1, 2, 3]),
-    ('bigintlist',      {},     [1, 2, 3] * 1000),
-    ('strlist',         {},     ['foo', 'bar',  'baz']),
-    ('bigstrlist',      {},     ['foo', 'bar',  'baz'] * 1000),
-    ('dict',            {},     {'a': 1, 'b': 2, 'c': 3}),
-    ('bigdict',         {},     {'a' * i: i for i in range(1000)}),
-    ('set',             {},     {1, 2, 3}),
-    ('bigset',          {},     set(range(1000))),
-    ('bigdictlist',     {},     [{'a' * i: i for i in range(100)}] * 100),
-    ('objectdict',      {'timezone': UTC},
-     {'name': 'Foo', 'species': 'cat', 'dob': datetime(2013, 5, 20), 'weight': 4.1}),
-    ('objectdictlist',  {'timezone': UTC},
-     [{'name': 'Foo', 'species': 'cat', 'dob': datetime(2013, 5, 20), 'weight': 4.1}] * 100),
+    ("None", {}, None),
+    ("10e0", {}, 1),
+    ("10e12", {}, 1000000000000),
+    ("10e29", {}, 100000000000000000000000000000),
+    ("-10e0", {}, -1),
+    ("-10e12", {}, -1000000000000),
+    ("-10e29", {}, -100000000000000000000000000000),
+    ("float1", {}, 1.0),
+    ("float2", {}, 3.8),
+    ("str", {}, "foo"),
+    ("bigstr", {}, "foobarbaz " * 1000),
+    ("bytes", {}, b"foo"),
+    ("bigbytes", {}, b"foobarbaz\x00" * 1000),
+    ("datetime", {"timezone": UTC}, datetime(2019, 5, 9, 22, 4, 5, 123456)),
+    ("decimal", {}, Decimal("1.1")),
+    ("fraction", {}, Fraction(1, 5)),
+    ("intlist", {}, [1, 2, 3]),
+    ("bigintlist", {}, [1, 2, 3] * 1000),
+    ("strlist", {}, ["foo", "bar", "baz"]),
+    ("bigstrlist", {}, ["foo", "bar", "baz"] * 1000),
+    ("dict", {}, {"a": 1, "b": 2, "c": 3}),
+    ("bigdict", {}, {"a" * i: i for i in range(1000)}),
+    ("set", {}, {1, 2, 3}),
+    ("bigset", {}, set(range(1000))),
+    ("bigdictlist", {}, [{"a" * i: i for i in range(100)}] * 100),
+    (
+        "objectdict",
+        {"timezone": UTC},
+        {"name": "Foo", "species": "cat", "dob": datetime(2013, 5, 20), "weight": 4.1},
+    ),
+    (
+        "objectdictlist",
+        {"timezone": UTC},
+        [{"name": "Foo", "species": "cat", "dob": datetime(2013, 5, 20), "weight": 4.1}]
+        * 100,
+    ),
 ]
 
-Leaks = namedtuple('Leaks', ('count', 'comparison'))
-Tests = namedtuple('Test', ('objgraph', 'malloc'))
-Result = namedtuple('Result', ('encoding', 'decoding', 'roundtrip'))
+Leaks = namedtuple("Leaks", ("count", "comparison"))
+Tests = namedtuple("Test", ("objgraph", "malloc"))
+Result = namedtuple("Result", ("encoding", "decoding", "roundtrip"))
 
 
 peak = {}
+
+
 def growth():
     return objgraph.growth(limit=None, peak_stats=peak)
 
@@ -103,7 +117,7 @@ def test_malloc(op):
             if datetime.now() - start > timedelta(seconds=0.2):
                 break
         after = tracemalloc.take_snapshot().filter_traces([only_op])
-        diff = after.compare_to(before, 'traceback')
+        diff = after.compare_to(before, "traceback")
         diff = [entry for entry in diff if entry.size_diff > 0]
         return count, diff
     finally:
@@ -130,23 +144,27 @@ def test(op):
 
 def format_leaks(result):
     if result.objgraph.comparison:
-        return '%d objs (/%d)' % (
+        return "%d objs (/%d)" % (
             sum(leak[-1] for leak in result.objgraph.comparison),
-            result.objgraph.count)
+            result.objgraph.count,
+        )
     elif result.malloc.comparison and (
-            result.malloc.count < result.malloc.comparison[0].size_diff):
+        result.malloc.count < result.malloc.comparison[0].size_diff
+    ):
         # Running the loop always results in *some* memory allocation, but as
         # long as the bytes allocated are less than the number of loops it's
         # unlikely to be an actual leak
-        return '%d bytes (/%d)' % (
-            result.malloc.comparison[0].size_diff, result.malloc.count)
+        return "%d bytes (/%d)" % (
+            result.malloc.comparison[0].size_diff,
+            result.malloc.count,
+        )
     else:
-        return '-'
+        return "-"
 
 
 def output_table(results):
     # Build table content
-    head = ('Test', 'Encoding', 'Decoding', 'Round-trip')
+    head = ("Test", "Encoding", "Decoding", "Round-trip")
     rows = [head] + [
         (
             label,
@@ -160,33 +178,44 @@ def output_table(results):
     # Format table output
     cols = zip(*rows)
     col_widths = [max(len(row) for row in col) for col in cols]
-    sep = ''.join((
-        '+-',
-        '-+-'.join('-' * width for width in col_widths),
-        '-+',
-    ))
+    sep = "".join(
+        (
+            "+-",
+            "-+-".join("-" * width for width in col_widths),
+            "-+",
+        )
+    )
     print(sep)
-    print(''.join((
-        '| ',
-        ' | '.join(
-            '{value:<{width}}'.format(value=value, width=width)
-            for value, width in zip(head, col_widths)
-        ),
-        ' |',
-    )))
+    print(
+        "".join(
+            (
+                "| ",
+                " | ".join(
+                    "{value:<{width}}".format(value=value, width=width)
+                    for value, width in zip(head, col_widths)
+                ),
+                " |",
+            )
+        )
+    )
     print(sep)
     for row in rows[1:]:
-        print(''.join((
-            '| ',
-            ' | '.join(
-                '{value:<{width}}'.format(value=value, width=width)
-                for value, width in zip(row, col_widths)
-            ),
-            ' |',
-        )))
+        print(
+            "".join(
+                (
+                    "| ",
+                    " | ".join(
+                        "{value:<{width}}".format(value=value, width=width)
+                        for value, width in zip(row, col_widths)
+                    ),
+                    " |",
+                )
+            )
+        )
     print(sep)
     print()
-    print("""\
+    print(
+        """\
 There *will* be false positives in the table above. Ignore leaks involving a
 tiny number of objects (e.g. 1) or a small number of bytes (e.g. < 8Kb) as such
 allocations are quite normal.
@@ -199,7 +228,8 @@ expect to see a few hundred Kb allocated.
 If leaks occur across the board, it's likely to be in something universal like
 dump/load. If it's restricted to a type, check the encoding and decoding
 methods for that type.
-""")
+"""
+    )
 
 
 def main():
@@ -221,5 +251,5 @@ def main():
     sys.stderr.write("\n")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

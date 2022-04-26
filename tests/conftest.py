@@ -1,17 +1,16 @@
 import platform
 import struct
 
+import cbor2.decoder
+import cbor2.encoder
+import cbor2.types
 import pytest
 
-import cbor2.types
-import cbor2.encoder
-import cbor2.decoder
-
-load_exc = ''
+load_exc = ""
 try:
     import _cbor2
 except ModuleNotFoundError as e:
-    if not str(e).startswith('No module'):
+    if not str(e).startswith("No module"):
         load_exc = str(e)
     _cbor2 = None
 
@@ -23,16 +22,16 @@ cpython = pytest.mark.skipif(
 
 @pytest.fixture
 def will_overflow():
-    '''
+    """
     Construct an array/string/bytes length which would cause a memory error
     on decode. This should be less than sys.maxsize (the max integer index)
-    '''
-    bit_size = struct.calcsize('P') * 8
+    """
+    bit_size = struct.calcsize("P") * 8
     huge_length = 1 << (bit_size - 8)
-    return struct.pack('Q', huge_length)
+    return struct.pack("Q", huge_length)
 
 
-class Module(object):
+class Module:
     # Mock module class
     pass
 

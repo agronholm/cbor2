@@ -1,18 +1,21 @@
-from __future__ import division
-
-import re
 import math
+import re
 import struct
 from collections import OrderedDict, defaultdict
 from contextlib import contextmanager
+from datetime import date, datetime, time, tzinfo
 from functools import wraps
-from datetime import datetime, date, time, tzinfo
 from io import BytesIO
 from sys import modules
 
 from .types import (
-    CBOREncodeTypeError, CBOREncodeValueError, CBORTag, undefined,
-    CBORSimpleValue, FrozenDict)
+    CBOREncodeTypeError,
+    CBOREncodeValueError,
+    CBORSimpleValue,
+    CBORTag,
+    FrozenDict,
+    undefined,
+)
 
 
 def shareable_encoder(func):
@@ -27,9 +30,11 @@ def shareable_encoder(func):
 
     If value sharing is disabled, only infinite recursion protection is done.
     """
+
     @wraps(func)
     def wrapper(encoder, value):
         encoder.encode_shared(func, value)
+
     return wrapper
 
 
@@ -59,9 +64,11 @@ def container_encoder(func):
     If string referencing is disabled, all strings and bytearrays will
     be encoded directly.
     """
+
     @wraps(func)
     def wrapper(encoder, value):
         encoder.encode_container(func, value)
+
     return wrapper
 
 
@@ -107,13 +114,30 @@ class CBOREncoder:
     """
 
     __slots__ = (
-        'datetime_as_timestamp', '_timezone', '_default', 'value_sharing',
-        '_fp_write', '_shared_containers', '_encoders', '_canonical',
-        'string_referencing', 'string_namespacing', '_string_references')
+        "datetime_as_timestamp",
+        "_timezone",
+        "_default",
+        "value_sharing",
+        "_fp_write",
+        "_shared_containers",
+        "_encoders",
+        "_canonical",
+        "string_referencing",
+        "string_namespacing",
+        "_string_references",
+    )
 
-    def __init__(self, fp, datetime_as_timestamp=False, timezone=None,
-                 value_sharing=False, default=None, canonical=False,
-                 date_as_datetime=False, string_referencing=False):
+    def __init__(
+        self,
+        fp,
+        datetime_as_timestamp=False,
+        timezone=None,
+        value_sharing=False,
+        default=None,
+        canonical=False,
+        date_as_datetime=False,
+        string_referencing=False,
+    ):
         self.fp = fp
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone
@@ -139,7 +163,8 @@ class CBOREncoder:
                     raise CBOREncodeValueError(
                         "invalid deferred encoder type {!r} (must be a "
                         "2-tuple of module name and type name, e.g. "
-                        "('collections', 'defaultdict'))".format(type_))
+                        "('collections', 'defaultdict'))".format(type_)
+                    )
                 imported_type = getattr(modules.get(modname), typename, None)
                 if imported_type is not None:
                     del self._encoders[type_]
@@ -162,9 +187,9 @@ class CBOREncoder:
     def fp(self, value):
         try:
             if not callable(value.write):
-                raise ValueError('fp.write is not callable')
+                raise ValueError("fp.write is not callable")
         except AttributeError:
-            raise ValueError('fp object has no write method')
+            raise ValueError("fp object has no write method")
         else:
             self._fp_write = value.write
 
@@ -177,7 +202,7 @@ class CBOREncoder:
         if value is None or isinstance(value, tzinfo):
             self._timezone = value
         else:
-            raise ValueError('timezone must be None or a tzinfo instance')
+            raise ValueError("timezone must be None or a tzinfo instance")
 
     @property
     def default(self):
@@ -188,7 +213,7 @@ class CBOREncoder:
         if value is None or callable(value):
             self._default = value
         else:
-            raise ValueError('default must be None or a callable')
+            raise ValueError("default must be None or a callable")
 
     @property
     def canonical(self):
@@ -245,13 +270,12 @@ class CBOREncoder:
         """
         obj_type = obj.__class__
         encoder = (
-            self._encoders.get(obj_type) or
-            self._find_encoder(obj_type) or
-            self._default
+            self._encoders.get(obj_type)
+            or self._find_encoder(obj_type)
+            or self._default
         )
         if not encoder:
-            raise CBOREncodeTypeError(
-                'cannot serialize type %s' % obj_type.__name__)
+            raise CBOREncodeTypeError("cannot serialize type %s" % obj_type.__name__)
 
         encoder(self, obj)
 
@@ -286,9 +310,10 @@ class CBOREncoder:
             if self.value_sharing:
                 # Mark the container as shareable
                 self._shared_containers[value_id] = (
-                    value, len(self._shared_containers)
+                    value,
+                    len(self._shared_containers),
                 )
-                self.encode_length(6, 0x1c)
+                self.encode_length(6, 0x1C)
                 encoder(self, value)
             else:
                 self._shared_containers[value_id] = (value, None)
@@ -300,12 +325,12 @@ class CBOREncoder:
             if self.value_sharing:
                 # Generate a reference to the previous index instead of
                 # encoding this again
-                self.encode_length(6, 0x1d)
+                self.encode_length(6, 0x1D)
                 self.encode_int(index)
             else:
                 raise CBOREncodeValueError(
-                    'cyclic data structure detected but value sharing is '
-                    'disabled')
+                    "cyclic data structure detected but value sharing is " "disabled"
+                )
 
     def _stringref(self, value):
         """
@@ -340,15 +365,15 @@ class CBOREncoder:
     def encode_length(self, major_tag, length):
         major_tag <<= 5
         if length < 24:
-            self._fp_write(struct.pack('>B', major_tag | length))
+            self._fp_write(struct.pack(">B", major_tag | length))
         elif length < 256:
-            self._fp_write(struct.pack('>BB', major_tag | 24, length))
+            self._fp_write(struct.pack(">BB", major_tag | 24, length))
         elif length < 65536:
-            self._fp_write(struct.pack('>BH', major_tag | 25, length))
+            self._fp_write(struct.pack(">BH", major_tag | 25, length))
         elif length < 4294967296:
-            self._fp_write(struct.pack('>BL', major_tag | 26, length))
+            self._fp_write(struct.pack(">BL", major_tag | 26, length))
         else:
-            self._fp_write(struct.pack('>BQ', major_tag | 27, length))
+            self._fp_write(struct.pack(">BQ", major_tag | 27, length))
 
     def encode_int(self, value):
         # Big integers (2 ** 64 and over)
@@ -359,7 +384,7 @@ class CBOREncoder:
                 major_type = 0x03
                 value = -value - 1
 
-            payload = value.to_bytes((value.bit_length() + 7) // 8, 'big')
+            payload = value.to_bytes((value.bit_length() + 7) // 8, "big")
             self.encode_semantic(CBORTag(major_type, payload))
         elif value >= 0:
             self.encode_length(0, value)
@@ -382,7 +407,7 @@ class CBOREncoder:
             if self._stringref(value):
                 return
 
-        encoded = value.encode('utf-8')
+        encoded = value.encode("utf-8")
         self.encode_length(3, len(encoded))
         self._fp_write(encoded)
 
@@ -413,8 +438,7 @@ class CBOREncoder:
     def encode_canonical_map(self, value):
         "Reorder keys according to Canonical CBOR specification"
         keyed_keys = (
-            (self.encode_sortable_key(key), key, value)
-            for key, value in value.items()
+            (self.encode_sortable_key(key), key, value) for key, value in value.items()
         )
         self.encode_length(5, len(value))
         for sortkey, realkey, value in sorted(keyed_keys):
@@ -452,18 +476,20 @@ class CBOREncoder:
                 value = value.replace(tzinfo=self._timezone)
             else:
                 raise CBOREncodeValueError(
-                    'naive datetime {!r} encountered and no default timezone '
-                    'has been set'.format(value))
+                    "naive datetime {!r} encountered and no default timezone "
+                    "has been set".format(value)
+                )
 
         if self.datetime_as_timestamp:
             from calendar import timegm
+
             if not value.microsecond:
                 timestamp = timegm(value.utctimetuple())
             else:
                 timestamp = timegm(value.utctimetuple()) + value.microsecond / 1000000
             self.encode_semantic(CBORTag(1, timestamp))
         else:
-            datestring = value.isoformat().replace('+00:00', 'Z')
+            datestring = value.isoformat().replace("+00:00", "Z")
             self.encode_semantic(CBORTag(0, datestring))
 
     def encode_date(self, value):
@@ -473,9 +499,9 @@ class CBOREncoder:
     def encode_decimal(self, value):
         # Semantic tag 4
         if value.is_nan():
-            self._fp_write(b'\xf9\x7e\x00')
+            self._fp_write(b"\xf9\x7e\x00")
         elif value.is_infinite():
-            self._fp_write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+            self._fp_write(b"\xf9\x7c\x00" if value > 0 else b"\xf9\xfc\x00")
         else:
             dt = value.as_tuple()
             sig = 0
@@ -519,10 +545,7 @@ class CBOREncoder:
 
     def encode_canonical_set(self, value):
         # Semantic tag 258
-        values = sorted(
-            (self.encode_sortable_key(key), key)
-            for key in value
-        )
+        values = sorted((self.encode_sortable_key(key), key) for key in value)
         self.encode_semantic(CBORTag(258, [key[1] for key in values]))
 
     def encode_ipaddress(self, value):
@@ -532,7 +555,8 @@ class CBOREncoder:
     def encode_ipnetwork(self, value):
         # Semantic tag 261
         self.encode_semantic(
-            CBORTag(261, {value.network_address.packed: value.prefixlen}))
+            CBORTag(261, {value.network_address.packed: value.prefixlen})
+        )
 
     #
     # Special encoders (major tag 7)
@@ -540,29 +564,29 @@ class CBOREncoder:
 
     def encode_simple_value(self, value):
         if value.value < 20:
-            self._fp_write(struct.pack('>B', 0xe0 | value.value))
+            self._fp_write(struct.pack(">B", 0xE0 | value.value))
         else:
-            self._fp_write(struct.pack('>BB', 0xf8, value.value))
+            self._fp_write(struct.pack(">BB", 0xF8, value.value))
 
     def encode_float(self, value):
         # Handle special values efficiently
         if math.isnan(value):
-            self._fp_write(b'\xf9\x7e\x00')
+            self._fp_write(b"\xf9\x7e\x00")
         elif math.isinf(value):
-            self._fp_write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+            self._fp_write(b"\xf9\x7c\x00" if value > 0 else b"\xf9\xfc\x00")
         else:
-            self._fp_write(struct.pack('>Bd', 0xfb, value))
+            self._fp_write(struct.pack(">Bd", 0xFB, value))
 
     def encode_minimal_float(self, value):
         # Handle special values efficiently
         if math.isnan(value):
-            self._fp_write(b'\xf9\x7e\x00')
+            self._fp_write(b"\xf9\x7e\x00")
         elif math.isinf(value):
-            self._fp_write(b'\xf9\x7c\x00' if value > 0 else b'\xf9\xfc\x00')
+            self._fp_write(b"\xf9\x7c\x00" if value > 0 else b"\xf9\xfc\x00")
         else:
             # Try each encoding in turn from longest to shortest
-            encoded = struct.pack('>Bd', 0xfb, value)
-            for format, tag in [('>Bf', 0xfa), ('>Be', 0xf9)]:
+            encoded = struct.pack(">Bd", 0xFB, value)
+            for format, tag in [(">Bf", 0xFA), (">Be", 0xF9)]:
                 try:
                     new_encoded = struct.pack(format, tag, value)
                     # Check if encoding as low-byte float loses precision
@@ -576,56 +600,60 @@ class CBOREncoder:
             self._fp_write(encoded)
 
     def encode_boolean(self, value):
-        self._fp_write(b'\xf5' if value else b'\xf4')
+        self._fp_write(b"\xf5" if value else b"\xf4")
 
     def encode_none(self, value):
-        self._fp_write(b'\xf6')
+        self._fp_write(b"\xf6")
 
     def encode_undefined(self, value):
-        self._fp_write(b'\xf7')
+        self._fp_write(b"\xf7")
 
 
-default_encoders = OrderedDict([
-    (bytes,                         CBOREncoder.encode_bytestring),
-    (bytearray,                     CBOREncoder.encode_bytearray),
-    (str,                           CBOREncoder.encode_string),
-    (int,                           CBOREncoder.encode_int),
-    (float,                         CBOREncoder.encode_float),
-    (('decimal', 'Decimal'),        CBOREncoder.encode_decimal),
-    (bool,                          CBOREncoder.encode_boolean),
-    (type(None),                    CBOREncoder.encode_none),
-    (tuple,                         CBOREncoder.encode_array),
-    (list,                          CBOREncoder.encode_array),
-    (dict,                          CBOREncoder.encode_map),
-    (defaultdict,                   CBOREncoder.encode_map),
-    (OrderedDict,                   CBOREncoder.encode_map),
-    (FrozenDict,                    CBOREncoder.encode_map),
-    (type(undefined),               CBOREncoder.encode_undefined),
-    (datetime,                      CBOREncoder.encode_datetime),
-    (type(re.compile('')),          CBOREncoder.encode_regexp),
-    (('fractions', 'Fraction'),     CBOREncoder.encode_rational),
-    (('email.message', 'Message'),  CBOREncoder.encode_mime),
-    (('uuid', 'UUID'),              CBOREncoder.encode_uuid),
-    (('ipaddress', 'IPv4Address'),  CBOREncoder.encode_ipaddress),
-    (('ipaddress', 'IPv6Address'),  CBOREncoder.encode_ipaddress),
-    (('ipaddress', 'IPv4Network'),  CBOREncoder.encode_ipnetwork),
-    (('ipaddress', 'IPv6Network'),  CBOREncoder.encode_ipnetwork),
-    (CBORSimpleValue,               CBOREncoder.encode_simple_value),
-    (CBORTag,                       CBOREncoder.encode_semantic),
-    (set,                           CBOREncoder.encode_set),
-    (frozenset,                     CBOREncoder.encode_set),
-])
+default_encoders = OrderedDict(
+    [
+        (bytes, CBOREncoder.encode_bytestring),
+        (bytearray, CBOREncoder.encode_bytearray),
+        (str, CBOREncoder.encode_string),
+        (int, CBOREncoder.encode_int),
+        (float, CBOREncoder.encode_float),
+        (("decimal", "Decimal"), CBOREncoder.encode_decimal),
+        (bool, CBOREncoder.encode_boolean),
+        (type(None), CBOREncoder.encode_none),
+        (tuple, CBOREncoder.encode_array),
+        (list, CBOREncoder.encode_array),
+        (dict, CBOREncoder.encode_map),
+        (defaultdict, CBOREncoder.encode_map),
+        (OrderedDict, CBOREncoder.encode_map),
+        (FrozenDict, CBOREncoder.encode_map),
+        (type(undefined), CBOREncoder.encode_undefined),
+        (datetime, CBOREncoder.encode_datetime),
+        (type(re.compile("")), CBOREncoder.encode_regexp),
+        (("fractions", "Fraction"), CBOREncoder.encode_rational),
+        (("email.message", "Message"), CBOREncoder.encode_mime),
+        (("uuid", "UUID"), CBOREncoder.encode_uuid),
+        (("ipaddress", "IPv4Address"), CBOREncoder.encode_ipaddress),
+        (("ipaddress", "IPv6Address"), CBOREncoder.encode_ipaddress),
+        (("ipaddress", "IPv4Network"), CBOREncoder.encode_ipnetwork),
+        (("ipaddress", "IPv6Network"), CBOREncoder.encode_ipnetwork),
+        (CBORSimpleValue, CBOREncoder.encode_simple_value),
+        (CBORTag, CBOREncoder.encode_semantic),
+        (set, CBOREncoder.encode_set),
+        (frozenset, CBOREncoder.encode_set),
+    ]
+)
 
 
-canonical_encoders = OrderedDict([
-    (float,       CBOREncoder.encode_minimal_float),
-    (dict,        CBOREncoder.encode_canonical_map),
-    (defaultdict, CBOREncoder.encode_canonical_map),
-    (OrderedDict, CBOREncoder.encode_canonical_map),
-    (FrozenDict,  CBOREncoder.encode_canonical_map),
-    (set,         CBOREncoder.encode_canonical_set),
-    (frozenset,   CBOREncoder.encode_canonical_set),
-])
+canonical_encoders = OrderedDict(
+    [
+        (float, CBOREncoder.encode_minimal_float),
+        (dict, CBOREncoder.encode_canonical_map),
+        (defaultdict, CBOREncoder.encode_canonical_map),
+        (OrderedDict, CBOREncoder.encode_canonical_map),
+        (FrozenDict, CBOREncoder.encode_canonical_map),
+        (set, CBOREncoder.encode_canonical_set),
+        (frozenset, CBOREncoder.encode_canonical_set),
+    ]
+)
 
 
 def dumps(obj, **kwargs):

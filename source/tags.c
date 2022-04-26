@@ -4,7 +4,7 @@
 #include "structmember.h"
 #include "tags.h"
 
-
+
 // Constructors and destructors //////////////////////////////////////////////
 
 static int
@@ -138,7 +138,7 @@ CBORTag_richcompare(PyObject *aobj, PyObject *bobj, int op)
     return ret;
 }
 
-
+
 // C API /////////////////////////////////////////////////////////////////////
 
 PyObject *
@@ -174,7 +174,7 @@ CBORTag_SetValue(PyObject *tag, PyObject *value)
     return 0;
 }
 
-
+
 // Tag class definition //////////////////////////////////////////////////////
 
 static PyMemberDef CBORTag_members[] = {

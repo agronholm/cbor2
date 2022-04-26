@@ -6,11 +6,19 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 from .types import (
-    CBORDecodeValueError, CBORDecodeEOF, CBORTag, undefined, break_marker,
-    CBORSimpleValue, FrozenDict)
+    CBORDecodeEOF,
+    CBORDecodeValueError,
+    CBORSimpleValue,
+    CBORTag,
+    FrozenDict,
+    break_marker,
+    undefined,
+)
 
-timestamp_re = re.compile(r'^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)'
-                          r'(?:\.(\d{1,6})\d*)?(?:Z|([+-]\d\d):(\d\d))$')
+timestamp_re = re.compile(
+    r"^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)"
+    r"(?:\.(\d{1,6})\d*)?(?:Z|([+-]\d\d):(\d\d))$"
+)
 
 
 class CBORDecoder:
@@ -39,11 +47,17 @@ class CBORDecoder:
     """
 
     __slots__ = (
-        '_tag_hook', '_object_hook', '_share_index', '_shareables', '_fp_read',
-        '_immutable', '_str_errors', '_stringref_namespace')
+        "_tag_hook",
+        "_object_hook",
+        "_share_index",
+        "_shareables",
+        "_fp_read",
+        "_immutable",
+        "_str_errors",
+        "_stringref_namespace",
+    )
 
-    def __init__(self, fp, tag_hook=None, object_hook=None,
-                 str_errors='strict'):
+    def __init__(self, fp, tag_hook=None, object_hook=None, str_errors="strict"):
         self.fp = fp
         self.tag_hook = tag_hook
         self.object_hook = object_hook
@@ -70,9 +84,9 @@ class CBORDecoder:
     def fp(self, value):
         try:
             if not callable(value.read):
-                raise ValueError('fp.read is not callable')
+                raise ValueError("fp.read is not callable")
         except AttributeError:
-            raise ValueError('fp object has no read method')
+            raise ValueError("fp object has no read method")
         else:
             self._fp_read = value.read
 
@@ -85,7 +99,7 @@ class CBORDecoder:
         if value is None or callable(value):
             self._tag_hook = value
         else:
-            raise ValueError('tag_hook must be None or a callable')
+            raise ValueError("tag_hook must be None or a callable")
 
     @property
     def object_hook(self):
@@ -96,7 +110,7 @@ class CBORDecoder:
         if value is None or callable(value):
             self._object_hook = value
         else:
-            raise ValueError('object_hook must be None or a callable')
+            raise ValueError("object_hook must be None or a callable")
 
     @property
     def str_errors(self):
@@ -104,12 +118,13 @@ class CBORDecoder:
 
     @str_errors.setter
     def str_errors(self, value):
-        if value in ('strict', 'error', 'replace'):
+        if value in ("strict", "error", "replace"):
             self._str_errors = value
         else:
             raise ValueError(
                 "invalid str_errors value {!r} (must be one of 'strict', "
-                "'error', or 'replace')".format(value))
+                "'error', or 'replace')".format(value)
+            )
 
     def set_shareable(self, value):
         """
@@ -149,8 +164,9 @@ class CBORDecoder:
         data = self._fp_read(amount)
         if len(data) < amount:
             raise CBORDecodeEOF(
-                'premature end of stream (expected to read {} bytes, got {} '
-                'instead)'.format(amount, len(data)))
+                "premature end of stream (expected to read {} bytes, got {} "
+                "instead)".format(amount, len(data))
+            )
 
         return data
 
@@ -203,16 +219,17 @@ class CBORDecoder:
         elif subtype == 24:
             return self.read(1)[0]
         elif subtype == 25:
-            return struct.unpack('>H', self.read(2))[0]
+            return struct.unpack(">H", self.read(2))[0]
         elif subtype == 26:
-            return struct.unpack('>L', self.read(4))[0]
+            return struct.unpack(">L", self.read(4))[0]
         elif subtype == 27:
-            return struct.unpack('>Q', self.read(8))[0]
+            return struct.unpack(">Q", self.read(8))[0]
         elif subtype == 31 and allow_indefinite:
             return None
         else:
             raise CBORDecodeValueError(
-                'unknown unsigned integer subtype 0x%x' % subtype)
+                "unknown unsigned integer subtype 0x%x" % subtype
+            )
 
     def decode_uint(self, subtype):
         # Major tag 0
@@ -230,23 +247,27 @@ class CBORDecoder:
             buf = []
             while True:
                 initial_byte = self.read(1)[0]
-                if initial_byte == 0xff:
-                    result = b''.join(buf)
+                if initial_byte == 0xFF:
+                    result = b"".join(buf)
                     break
                 elif initial_byte >> 5 == 2:
-                    length = self._decode_length(initial_byte & 0x1f)
+                    length = self._decode_length(initial_byte & 0x1F)
                     if length is None or length > sys.maxsize:
                         raise CBORDecodeValueError(
-                                'invalid length for indefinite bytestring chunk 0x%x' % length
-                                )
+                            "invalid length for indefinite bytestring chunk 0x%x"
+                            % length
+                        )
                     value = self.read(length)
                     buf.append(value)
                 else:
                     raise CBORDecodeValueError(
-                        "non-bytestring found in indefinite length bytestring")
+                        "non-bytestring found in indefinite length bytestring"
+                    )
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError('invalid length for bytestring 0x%x' % length)
+                raise CBORDecodeValueError(
+                    "invalid length for bytestring 0x%x" % length
+                )
             result = self.read(length)
             self._stringref_namespace_add(result, length)
         return self.set_shareable(result)
@@ -272,23 +293,25 @@ class CBORDecoder:
             buf = []
             while True:
                 initial_byte = self.read(1)[0]
-                if initial_byte == 0xff:
-                    result = ''.join(buf)
+                if initial_byte == 0xFF:
+                    result = "".join(buf)
                     break
                 elif initial_byte >> 5 == 3:
-                    length = self._decode_length(initial_byte & 0x1f)
+                    length = self._decode_length(initial_byte & 0x1F)
                     if length is None or length > sys.maxsize:
                         raise CBORDecodeValueError(
-                                'invalid length for indefinite string chunk 0x%x' % length)
-                    value = self.read(length).decode('utf-8', self._str_errors)
+                            "invalid length for indefinite string chunk 0x%x" % length
+                        )
+                    value = self.read(length).decode("utf-8", self._str_errors)
                     buf.append(value)
                 else:
                     raise CBORDecodeValueError(
-                        "non-string found in indefinite length string")
+                        "non-string found in indefinite length string"
+                    )
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError('invalid length for string 0x%x' % length)
-            result = self.read(length).decode('utf-8', self._str_errors)
+                raise CBORDecodeValueError("invalid length for string 0x%x" % length)
+            result = self.read(length).decode("utf-8", self._str_errors)
             self._stringref_namespace_add(result, length)
         return self.set_shareable(result)
 
@@ -308,7 +331,7 @@ class CBORDecoder:
                     items.append(value)
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError('invalid length for array 0x%x' % length)
+                raise CBORDecodeValueError("invalid length for array 0x%x" % length)
             items = []
             if not self._immutable:
                 self.set_shareable(items)
@@ -373,7 +396,8 @@ class CBORDecoder:
             return special_decoders[subtype](self)
         except KeyError as e:
             raise CBORDecodeValueError(
-                    "Undefined Reserved major type 7 subtype 0x%x" % subtype) from e
+                "Undefined Reserved major type 7 subtype 0x%x" % subtype
+            ) from e
 
     #
     # Semantic decoders (major tag 6)
@@ -398,19 +422,27 @@ class CBORDecoder:
             if secfrac is None:
                 microsecond = 0
             else:
-                microsecond = int('{:<06}'.format(secfrac))
+                microsecond = int(f"{secfrac:<06}")
 
             if offset_h:
                 tz = timezone(timedelta(hours=int(offset_h), minutes=int(offset_m)))
             else:
                 tz = timezone.utc
 
-            return self.set_shareable(datetime(
-                int(year), int(month), int(day),
-                int(hour), int(minute), int(second), microsecond, tz))
+            return self.set_shareable(
+                datetime(
+                    int(year),
+                    int(month),
+                    int(day),
+                    int(hour),
+                    int(minute),
+                    int(second),
+                    microsecond,
+                    tz,
+                )
+            )
         else:
-            raise CBORDecodeValueError(
-                'invalid datetime string: {!r}'.format(value))
+            raise CBORDecodeValueError(f"invalid datetime string: {value!r}")
 
     def decode_epoch_datetime(self):
         # Semantic tag 1
@@ -420,6 +452,7 @@ class CBORDecoder:
     def decode_positive_bignum(self):
         # Semantic tag 2
         from binascii import hexlify
+
         value = self._decode()
         return self.set_shareable(int(hexlify(value), 16))
 
@@ -430,6 +463,7 @@ class CBORDecoder:
     def decode_fraction(self):
         # Semantic tag 4
         from decimal import Decimal
+
         try:
             exp, sig = self._decode()
         except (TypeError, ValueError) as e:
@@ -440,6 +474,7 @@ class CBORDecoder:
     def decode_bigfloat(self):
         # Semantic tag 5
         from decimal import Decimal
+
         try:
             exp, sig = self._decode()
         except (TypeError, ValueError) as e:
@@ -449,13 +484,13 @@ class CBORDecoder:
     def decode_stringref(self):
         # Semantic tag 25
         if self._stringref_namespace is None:
-            raise CBORDecodeValueError('string reference outside of namespace')
+            raise CBORDecodeValueError("string reference outside of namespace")
 
         index = self._decode()
         try:
             value = self._stringref_namespace[index]
         except IndexError:
-            raise CBORDecodeValueError('string reference %d not found' % index)
+            raise CBORDecodeValueError("string reference %d not found" % index)
 
         return value
 
@@ -475,17 +510,19 @@ class CBORDecoder:
         try:
             shared = self._shareables[value]
         except IndexError:
-            raise CBORDecodeValueError('shared reference %d not found' % value)
+            raise CBORDecodeValueError("shared reference %d not found" % value)
 
         if shared is None:
             raise CBORDecodeValueError(
-                'shared value %d has not been initialized' % value)
+                "shared value %d has not been initialized" % value
+            )
         else:
             return shared
 
     def decode_rational(self):
         # Semantic tag 30
         from fractions import Fraction
+
         return self.set_shareable(Fraction(*self._decode()))
 
     def decode_regexp(self):
@@ -495,11 +532,13 @@ class CBORDecoder:
     def decode_mime(self):
         # Semantic tag 36
         from email.parser import Parser
+
         return self.set_shareable(Parser().parsestr(self._decode()))
 
     def decode_uuid(self):
         # Semantic tag 37
         from uuid import UUID
+
         return self.set_shareable(UUID(bytes=self._decode()))
 
     def decode_stringref_namespace(self):
@@ -520,6 +559,7 @@ class CBORDecoder:
     def decode_ipaddress(self):
         # Semantic tag 260
         from ipaddress import ip_address
+
         buf = self.decode()
         if not isinstance(buf, bytes) or len(buf) not in (4, 6, 16):
             raise CBORDecodeValueError("invalid ipaddress value %r" % buf)
@@ -532,6 +572,7 @@ class CBORDecoder:
     def decode_ipnetwork(self):
         # Semantic tag 261
         from ipaddress import ip_network
+
         net_map = self.decode()
         if isinstance(net_map, Mapping) and len(net_map) == 1:
             for net in net_map.items():
@@ -555,14 +596,14 @@ class CBORDecoder:
 
     def decode_float16(self):
         payload = self.read(2)
-        value = struct.unpack('>e', payload)[0]
+        value = struct.unpack(">e", payload)[0]
         return self.set_shareable(value)
 
     def decode_float32(self):
-        return self.set_shareable(struct.unpack('>f', self.read(4))[0])
+        return self.set_shareable(struct.unpack(">f", self.read(4))[0])
 
     def decode_float64(self):
-        return self.set_shareable(struct.unpack('>d', self.read(8))[0])
+        return self.set_shareable(struct.unpack(">d", self.read(8))[0])
 
 
 major_decoders = {
@@ -589,23 +630,23 @@ special_decoders = {
 }
 
 semantic_decoders = {
-    0:     CBORDecoder.decode_datetime_string,
-    1:     CBORDecoder.decode_epoch_datetime,
-    2:     CBORDecoder.decode_positive_bignum,
-    3:     CBORDecoder.decode_negative_bignum,
-    4:     CBORDecoder.decode_fraction,
-    5:     CBORDecoder.decode_bigfloat,
-    25:    CBORDecoder.decode_stringref,
-    28:    CBORDecoder.decode_shareable,
-    29:    CBORDecoder.decode_sharedref,
-    30:    CBORDecoder.decode_rational,
-    35:    CBORDecoder.decode_regexp,
-    36:    CBORDecoder.decode_mime,
-    37:    CBORDecoder.decode_uuid,
-    256:   CBORDecoder.decode_stringref_namespace,
-    258:   CBORDecoder.decode_set,
-    260:   CBORDecoder.decode_ipaddress,
-    261:   CBORDecoder.decode_ipnetwork,
+    0: CBORDecoder.decode_datetime_string,
+    1: CBORDecoder.decode_epoch_datetime,
+    2: CBORDecoder.decode_positive_bignum,
+    3: CBORDecoder.decode_negative_bignum,
+    4: CBORDecoder.decode_fraction,
+    5: CBORDecoder.decode_bigfloat,
+    25: CBORDecoder.decode_stringref,
+    28: CBORDecoder.decode_shareable,
+    29: CBORDecoder.decode_sharedref,
+    30: CBORDecoder.decode_rational,
+    35: CBORDecoder.decode_regexp,
+    36: CBORDecoder.decode_mime,
+    37: CBORDecoder.decode_uuid,
+    256: CBORDecoder.decode_stringref_namespace,
+    258: CBORDecoder.decode_set,
+    260: CBORDecoder.decode_ipaddress,
+    261: CBORDecoder.decode_ipnetwork,
     55799: CBORDecoder.decode_self_describe_cbor,
 }
 

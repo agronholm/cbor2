@@ -1,5 +1,5 @@
-.. image:: https://github.com/agronholm/cbor2/actions/workflows/codeqa-test.yml/badge.svg
-  :target: https://github.com/agronholm/cbor2/actions/workflows/codeqa-test.yml
+.. image:: https://github.com/agronholm/cbor2/actions/workflows/test.yml/badge.svg
+  :target: https://github.com/agronholm/cbor2/actions/workflows/test.yml
   :alt: Testing Status
 .. image:: https://github.com/agronholm/cbor2/actions/workflows/publish.yml/badge.svg
   :target: https://github.com/agronholm/cbor2/actions/workflows/publish.yml
