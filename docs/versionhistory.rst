@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Removed support for Python < 3.7
+
 **5.4.2** (2021-10-14)
 
 - Fix segfault when initializing CBORTag with incorrect arguments (Sekenre)
