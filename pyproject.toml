@@ -1,10 +1,50 @@
 [build-system]
 requires = [
-    "setuptools >= 42",
-    "wheel >= 0.29.0",
-    "setuptools_scm[toml] >= 3.4"
+    "setuptools >= 61",
+    "setuptools_scm[toml] >= 6.4"
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "cbor2"
+description = "CBOR (de)serializer with extensive tag support"
+readme = "README.rst"
+authors = [{name = "Alex Grönholm", email = "alex.gronholm@nextday.fi"}]
+maintainers = [{name = "Kio Smallwood (Sekenre)", email = "kio@mothers-arms.co.uk"}]
+license = {text = "MIT"}
+keywords = ["serialization cbor"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+]
+requires-python = ">= 3.6"
+dynamic = ["version"]
+
+[project.urls]
+Documentation = "https://cbor2.readthedocs.org/en/latest/"
+"Source Code" = "https://github.com/agronholm/cbor2"
+"Issue Tracker" = "https://github.com/agronholm/cbor2/issues"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+doc = [
+    "sphinx_rtd_theme",
+    "sphinx-autodoc-typehints >= 1.2.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["cbor2"]
 
 [tool.isort]
 src_paths = ["src"]
