@@ -5,9 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.4.3** (2022-05-03)
 
 - Removed support for Python < 3.7
+- Various build system improvements for binary wheels (agronholm)
+- Migrated project to use ``pyproject.toml`` and pre-commit hooks (agronholm)
 
 **5.4.2** (2021-10-14)
 
