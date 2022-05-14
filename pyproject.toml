@@ -28,6 +28,7 @@ requires-python = ">= 3.7"
 dynamic = ["version"]
 
 [project.urls]
+Changelog = "https://cbor2.readthedocs.io/en/latest/versionhistory.html"
 Documentation = "https://cbor2.readthedocs.org/en/latest/"
 "Source Code" = "https://github.com/agronholm/cbor2"
 "Issue Tracker" = "https://github.com/agronholm/cbor2/issues"
