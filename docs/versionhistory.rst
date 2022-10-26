@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Added official Python 3.11 support
+
 **5.4.3** (2022-05-03)
 
 - Removed support for Python < 3.7
