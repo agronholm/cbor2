@@ -454,6 +454,8 @@ class CBORDecoder:
         from binascii import hexlify
 
         value = self._decode()
+        if not isinstance(value, bytes):
+            raise CBORDecodeValueError("invalid bignum value " + str(value))
         return self.set_shareable(int(hexlify(value), 16))
 
     def decode_negative_bignum(self):
