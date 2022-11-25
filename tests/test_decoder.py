@@ -698,15 +698,10 @@ def test_load_from_file(impl, tmpdir):
     assert obj == [1, 10]
 
 
-def test_nested_exception(impl):
-    with pytest.raises((impl.CBORDecodeError, TypeError)) as exc:
-        impl.loads(unhexlify("A1D9177082010201"))
-        exc.match(
-            r"(unhashable type: '(_?cbor2\.)?CBORTag'"
-            r"|"
-            r"'(_?cbor2\.)?CBORTag' objects are unhashable)"
-        )
-        assert isinstance(exc, TypeError)
+def test_nested_dict(impl):
+    value = impl.loads(unhexlify("A1D9177082010201"))
+    assert type(value) is dict
+    assert value == {impl.CBORTag(6000, (1,2)): 1}
 
 
 def test_set(impl):
