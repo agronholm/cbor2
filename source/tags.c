@@ -139,6 +139,15 @@ CBORTag_richcompare(PyObject *aobj, PyObject *bobj, int op)
 }
 
 
+static Py_hash_t
+CBORTag_hash(CBORTagObject *self)
+{
+    PyObject *tmp = PyTuple_Pack(2, self->tag, self->value);
+    Py_hash_t ret = PyObject_Hash(tmp);
+    return ret;
+}
+
+
 // C API /////////////////////////////////////////////////////////////////////
 
 PyObject *
@@ -205,5 +214,6 @@ PyTypeObject CBORTagType = {
     .tp_clear = (inquiry) CBORTag_clear,
     .tp_members = CBORTag_members,
     .tp_repr = (reprfunc) CBORTag_repr,
+    .tp_hash = (hashfunc) CBORTag_hash,
     .tp_richcompare = CBORTag_richcompare,
 };
