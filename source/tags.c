@@ -142,7 +142,7 @@ CBORTag_richcompare(PyObject *aobj, PyObject *bobj, int op)
 static Py_hash_t
 CBORTag_hash(CBORTagObject *self)
 {
-    PyObject *tmp = PyTuple_Pack(2, self->tag, self->value);
+    PyObject *tmp = Py_BuildValue("(iO)", self->tag, self->value);
     Py_hash_t ret = PyObject_Hash(tmp);
     return ret;
 }
