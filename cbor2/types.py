@@ -63,6 +63,9 @@ class CBORTag:
     def __repr__(self):
         return "CBORTag({self.tag}, {self.value!r})".format(self=self)
 
+    def __hash__(self):
+        return hash((self.tag, self.value))
+
 
 class CBORSimpleValue(namedtuple("CBORSimpleValue", ["value"])):
     """
