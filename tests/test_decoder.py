@@ -701,7 +701,7 @@ def test_load_from_file(impl, tmpdir):
 def test_nested_dict(impl):
     value = impl.loads(unhexlify("A1D9177082010201"))
     assert type(value) is dict
-    assert value == {impl.CBORTag(6000, (1,2)): 1}
+    assert value == {impl.CBORTag(6000, (1, 2)): 1}
 
 
 def test_set(impl):
