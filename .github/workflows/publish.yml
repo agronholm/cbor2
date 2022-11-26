@@ -10,7 +10,7 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+rc[0-9]+"
 
 jobs:
-  wheels:
+  binary-wheels:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -55,7 +55,7 @@ jobs:
 
   publish:
     needs:
-      - wheels
+      - binary-wheels
       - sdist-purewheel
     runs-on: ubuntu-latest
     steps:
