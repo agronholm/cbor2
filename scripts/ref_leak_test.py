@@ -85,7 +85,7 @@ TEST_VALUES = [
         * 100,
     ),
     ("tag", {}, c_cbor2.CBORTag(1, 1)),
-    ("nestedtag", {}, {c_cbor2.CBORTag(1, 1) : 1}),
+    ("nestedtag", {}, {c_cbor2.CBORTag(1, 1): 1}),
 ]
 
 Leaks = namedtuple("Leaks", ("count", "comparison"))
