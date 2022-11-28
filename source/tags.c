@@ -109,7 +109,8 @@ CBORTag_richcompare(PyObject *aobj, PyObject *bobj, int op)
     } else {
         a = (CBORTagObject *)aobj;
         b = (CBORTagObject *)bobj;
-if (a == b) {
+
+        if (a == b) {
             // Special case: both are the same object
             switch (op) {
                 case Py_EQ: case Py_LE: case Py_GE: ret = Py_True; break;

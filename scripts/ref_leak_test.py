@@ -21,8 +21,6 @@ from fractions import Fraction
 
 import objgraph
 
-import cbor2
-
 
 def import_cbor2():
     # Similar hack to that used in tests/conftest to get separate C and Python
