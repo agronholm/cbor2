@@ -144,6 +144,7 @@ CBORTag_hash(CBORTagObject *self)
 {
     PyObject *tmp = Py_BuildValue("(iO)", self->tag, self->value);
     Py_hash_t ret = PyObject_Hash(tmp);
+    Py_CLEAR(tmp);
     return ret;
 }
 
