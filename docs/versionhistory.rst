@@ -5,9 +5,12 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.4.4** (2022-11-28)
 
-- Added official Python 3.11 support
+- Added official Python 3.11 support (agronholm)
+- Raise proper exception on invalid bignums (Øyvind Rønningstad)
+- Make Tagged item usable as a map key (Niels Mündler)
+- Documentation tweaks (Adam Johnson)
 
 **5.4.3** (2022-05-03)
 
