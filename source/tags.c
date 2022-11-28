@@ -148,8 +148,7 @@ CBORTag_hash(CBORTagObject *self)
         return -1;
     }
     Py_hash_t ret = PyObject_Hash(tmp);
-    Py_CLEAR(self->value);
-    Py_CLEAR(tmp);
+    Py_DECREF(tmp);
     return ret;
 }
 
