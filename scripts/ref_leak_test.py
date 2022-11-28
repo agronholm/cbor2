@@ -21,6 +21,8 @@ from fractions import Fraction
 
 import objgraph
 
+import cbor2
+
 
 def import_cbor2():
     # Similar hack to that used in tests/conftest to get separate C and Python
@@ -84,6 +86,8 @@ TEST_VALUES = [
         [{"name": "Foo", "species": "cat", "dob": datetime(2013, 5, 20), "weight": 4.1}]
         * 100,
     ),
+    ("tag", {}, c_cbor2.CBORTag(1, 1)),
+    ("nestedtag", {}, {c_cbor2.CBORTag(1, 1) : 1}),
 ]
 
 Leaks = namedtuple("Leaks", ("count", "comparison"))
@@ -237,7 +241,7 @@ def main():
     sys.stderr.write("Testing")
     sys.stderr.flush()
     for name, kwargs, value in TEST_VALUES:
-        encoded = py_cbor2.dumps(value, **kwargs)
+        encoded = c_cbor2.dumps(value, **kwargs)
         results[name] = Result(
             encoding=test(lambda: c_cbor2.dumps(value, **kwargs)),
             decoding=test(lambda: c_cbor2.loads(encoded)),
