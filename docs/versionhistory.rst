@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**5.4.6** (2022-12-07)
+
+- Fix MemoryError when decoding Tags on 32bit architecture. (Sekenre)
+
 **5.4.5** (2022-11-29)
 
 - Added official Python 3.11 support (agronholm)
