@@ -142,7 +142,7 @@ CBORTag_richcompare(PyObject *aobj, PyObject *bobj, int op)
 static Py_hash_t
 CBORTag_hash(CBORTagObject *self)
 {
-    PyObject *tmp = Py_BuildValue("(iO)", self->tag, self->value);
+    PyObject *tmp = Py_BuildValue("(KO)", self->tag, self->value);
     if(!tmp){
         PyErr_NoMemory();
         return -1;
