@@ -143,8 +143,7 @@ static Py_hash_t
 CBORTag_hash(CBORTagObject *self)
 {
     PyObject *tmp = Py_BuildValue("(KO)", self->tag, self->value);
-    if(!tmp){
-        PyErr_NoMemory();
+    if(!tmp){ // if tmp is NULL, Py_BuildValue has already set the error
         return -1;
     }
     Py_hash_t ret = PyObject_Hash(tmp);
