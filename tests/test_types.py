@@ -1,4 +1,5 @@
 import pytest
+
 from cbor2.types import FrozenDict
 
 
