@@ -3,7 +3,7 @@ Basic usage
 
 Serializing and deserializing with cbor2 is pretty straightforward::
 
-    from cbor2 import dumps, loads
+    from cbor2 import dumps, loads, load
 
     # Serialize an object as a bytestring
     data = dumps(['hello', 'world'])
@@ -12,6 +12,7 @@ Serializing and deserializing with cbor2 is pretty straightforward::
     obj = loads(data)
 
     # Efficiently deserialize from a file
+    
     with open('input.cbor', 'rb') as fp:
         obj = load(fp)
 
