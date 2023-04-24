@@ -12,7 +12,6 @@ Serializing and deserializing with cbor2 is pretty straightforward::
     obj = loads(data)
 
     # Efficiently deserialize from a file
-    
     with open('input.cbor', 'rb') as fp:
         obj = load(fp)
 
