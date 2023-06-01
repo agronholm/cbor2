@@ -67,4 +67,3 @@ compound_types_strategy = strategies.recursive(
     ),
     max_leaves=MAX_LEAVES,
 )
-# email.message
