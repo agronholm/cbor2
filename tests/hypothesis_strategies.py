@@ -1,4 +1,5 @@
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict, defaultdict
+
 from cbor2.types import FrozenDict
 from hypothesis import strategies
 
@@ -31,10 +32,12 @@ basic_types_strategy = strategies.one_of(
     strategies.binary().map(bytearray),
 )
 
+
 @strategies.composite
 def arbitrary_length_tuple(draw, child_types):
     i = draw(strategies.integers(min_value=0, max_value=MAX_SIZE))
     return tuple(draw(child_types) for _ in range(i))
+
 
 dict_keys_strategy = strategies.one_of(
     basic_immutable_strategy, arbitrary_length_tuple(basic_immutable_strategy)
@@ -56,7 +59,7 @@ compound_types_strategy = strategies.recursive(
             dict_keys_strategy,
             children,
             dict_class=lambda *a: defaultdict(None, *a),
-            max_size=MAX_SIZE
+            max_size=MAX_SIZE,
         ),
         strategies.dictionaries(
             dict_keys_strategy, children, dict_class=OrderedDict, max_size=MAX_SIZE
