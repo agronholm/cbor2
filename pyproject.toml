@@ -38,6 +38,7 @@ Documentation = "https://cbor2.readthedocs.org/en/latest/"
 test = [
     "pytest",
     "pytest-cov",
+    "hypothesis",
 ]
 doc = [
     "sphinx_rtd_theme",
