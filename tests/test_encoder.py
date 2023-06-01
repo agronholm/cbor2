@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from email.mime.text import MIMEText
 from fractions import Fraction
+from hypothesis import given
 from io import BytesIO
 from ipaddress import ip_address, ip_network
 from uuid import UUID
@@ -12,6 +13,8 @@ from uuid import UUID
 import pytest
 from cbor2 import shareable_encoder
 from cbor2.types import FrozenDict
+
+from .hypothesis_strategies import compound_types_strategy
 
 
 def test_fp_attr(impl):
@@ -640,3 +643,12 @@ def test_invalid_tag(impl, tag):
 def test_largest_tag(impl):
     expected = unhexlify("dbffffffffffffffff6176")
     assert impl.dumps(impl.CBORTag(2**64 - 1, "v")) == expected
+
+
+@given(compound_types_strategy)
+def test_invariant_encode_decode(impl, val):
+    """
+    Tests that an encode and decode is invariant (the value is the same after
+    undergoing an encode and decode)
+    """
+    assert impl.loads(impl.dumps(val)) == val
