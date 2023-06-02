@@ -12,7 +12,6 @@ from ipaddress import ip_address, ip_network
 from uuid import UUID
 
 import pytest
-
 from cbor2.types import FrozenDict
 
 
