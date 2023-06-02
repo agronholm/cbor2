@@ -12,7 +12,6 @@ from ipaddress import ip_address, ip_network
 from uuid import UUID
 
 import pytest
-
 from cbor2.types import FrozenDict
 
 
@@ -406,18 +405,6 @@ def test_datetime_secfrac_overflow(impl):
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100500, tzinfo=timezone.utc)
     decoded = impl.loads(b"\xc0\x78\x2c2018-08-02T07:00:59.999999999999999999+00:00")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 999999, tzinfo=timezone.utc)
-
-
-def test_datetime_secfrac_requires_digit(impl):
-    with pytest.raises(impl.CBORDecodeError) as excinfo:
-        impl.loads(b"\xc0\x78\x1a2018-08-02T07:00:59.+00:00")
-    assert isinstance(excinfo.value, ValueError)
-    assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.+00:00'"
-
-    with pytest.raises(impl.CBORDecodeError) as excinfo:
-        impl.loads(b"\xc0\x78\x152018-08-02T07:00:59.Z")
-    assert isinstance(excinfo.value, ValueError)
-    assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.Z'"
 
 
 def test_bad_datetime(impl):

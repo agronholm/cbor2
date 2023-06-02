@@ -2,7 +2,7 @@ import re
 import struct
 import sys
 from collections.abc import Mapping
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from io import BytesIO
 
 from .types import (
@@ -13,11 +13,6 @@ from .types import (
     FrozenDict,
     break_marker,
     undefined,
-)
-
-timestamp_re = re.compile(
-    r"^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)"
-    r"(?:\.(\d{1,6})\d*)?(?:Z|([+-]\d\d):(\d\d))$"
 )
 
 
@@ -406,42 +401,9 @@ class CBORDecoder:
     def decode_datetime_string(self):
         # Semantic tag 0
         value = self._decode()
-        match = timestamp_re.match(value)
-        if match:
-            (
-                year,
-                month,
-                day,
-                hour,
-                minute,
-                second,
-                secfrac,
-                offset_h,
-                offset_m,
-            ) = match.groups()
-            if secfrac is None:
-                microsecond = 0
-            else:
-                microsecond = int(f"{secfrac:<06}")
-
-            if offset_h:
-                tz = timezone(timedelta(hours=int(offset_h), minutes=int(offset_m)))
-            else:
-                tz = timezone.utc
-
-            return self.set_shareable(
-                datetime(
-                    int(year),
-                    int(month),
-                    int(day),
-                    int(hour),
-                    int(minute),
-                    int(second),
-                    microsecond,
-                    tz,
-                )
-            )
-        else:
+        try:
+            return self.set_shareable(datetime.fromisoformat(value))
+        except ValueError:
             raise CBORDecodeValueError(f"invalid datetime string: {value!r}")
 
     def decode_epoch_datetime(self):
