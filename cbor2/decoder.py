@@ -402,6 +402,7 @@ class CBORDecoder:
         # Semantic tag 0
         value = self._decode()
         try:
+            value = value.replace("Z", "+00:00")
             return self.set_shareable(datetime.fromisoformat(value))
         except ValueError:
             raise CBORDecodeValueError(f"invalid datetime string: {value!r}")
