@@ -435,6 +435,14 @@ def test_datetime_timezone(impl):
     assert decoded == datetime(
         2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=-30))
     )
+    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59+01:30")
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=90))
+    )
+    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59-01:30")
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=-90))
+    )
 
 
 def test_positive_bignum(impl):
