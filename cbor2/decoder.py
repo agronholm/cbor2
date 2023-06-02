@@ -426,13 +426,12 @@ class CBORDecoder:
                 microsecond = int(f"{secfrac:<06}")
 
             if offset_h:
-                hours = int(offset_h)
-                minutes = int(offset_m)
                 if offset_sign == "-":
-                    if hours:
-                        hours *= -1
-                    else:
-                        minutes *= -1
+                    sign = -1
+                else:
+                    sign = 1
+                hours = int(offset_h) * sign
+                minutes = int(offset_m) * sign
                 tz = timezone(timedelta(hours=hours, minutes=minutes))
             else:
                 tz = timezone.utc
