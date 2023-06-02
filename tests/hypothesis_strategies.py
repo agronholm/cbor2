@@ -1,4 +1,5 @@
 from collections import OrderedDict, defaultdict
+from datetime import timedelta, timezone
 
 from cbor2.types import FrozenDict
 from hypothesis import strategies
@@ -6,6 +7,12 @@ from hypothesis import strategies
 # Tune these for test run time
 MAX_SIZE = 5
 MAX_LEAVES = 2
+
+# Seconds in timezones get rounded when serialised, so we can only test whole minute
+# timezones for invariance
+timezones = strategies.integers(min_value=-(24 * 60 - 1), max_value=24 * 60 - 1).map(
+    lambda m: timezone(timedelta(minutes=m))
+)
 
 basic_immutable_strategy = strategies.one_of(
     strategies.none(),
@@ -16,8 +23,7 @@ basic_immutable_strategy = strategies.one_of(
     # nan != nan, so we can't test invariance with it
     strategies.floats(allow_nan=False),
     strategies.decimals(allow_nan=False),
-    # TODO: fix seconds in timezones
-    # strategies.datetimes(timezones=strategies.timezones()),
+    strategies.datetimes(timezones=timezones),
     # TODO: this needs to be fetched from impl fixture instead of imported
     # strategies.just(undefined),
     strategies.fractions(),
