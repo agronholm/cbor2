@@ -12,6 +12,7 @@ from ipaddress import ip_address, ip_network
 from uuid import UUID
 
 import pytest
+
 from cbor2.types import FrozenDict
 
 
@@ -805,6 +806,11 @@ def test_invalid_cbor(impl):
                 "50db78974c271579b01633a3ef6271be5c225eb2"
             )
         )
+
+
+def test_invalid_utf8(impl):
+    with pytest.raises(impl.CBORDecodeError):
+        impl.loads(b"\x61\x98")
 
 
 @pytest.mark.parametrize(

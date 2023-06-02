@@ -302,7 +302,12 @@ class CBORDecoder:
                         raise CBORDecodeValueError(
                             "invalid length for indefinite string chunk 0x%x" % length
                         )
-                    value = self.read(length).decode("utf-8", self._str_errors)
+                    try:
+                        value = self.read(length).decode("utf-8", self._str_errors)
+                    except UnicodeDecodeError as e:
+                        raise CBORDecodeValueError(
+                            "Invalid value for utf-8 string"
+                        ) from e
                     buf.append(value)
                 else:
                     raise CBORDecodeValueError(
@@ -311,7 +316,10 @@ class CBORDecoder:
         else:
             if length > sys.maxsize:
                 raise CBORDecodeValueError("invalid length for string 0x%x" % length)
-            result = self.read(length).decode("utf-8", self._str_errors)
+            try:
+                result = self.read(length).decode("utf-8", self._str_errors)
+            except UnicodeDecodeError as e:
+                raise CBORDecodeValueError("Invalid value for utf-8 string") from e
             self._stringref_namespace_add(result, length)
         return self.set_shareable(result)
 
