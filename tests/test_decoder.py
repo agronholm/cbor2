@@ -426,6 +426,17 @@ def test_bad_datetime(impl):
     assert str(excinfo.value) == "invalid datetime string: '0000-123-01'"
 
 
+def test_datetime_timezone(impl):
+    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59+00:30")
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=30))
+    )
+    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59-00:30")
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=-30))
+    )
+
+
 def test_positive_bignum(impl):
     # Example from RFC 8949 section 3.4.3.
     decoded = impl.loads(unhexlify("c249010000000000000000"))

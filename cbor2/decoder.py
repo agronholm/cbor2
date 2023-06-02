@@ -17,7 +17,7 @@ from .types import (
 
 timestamp_re = re.compile(
     r"^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)"
-    r"(?:\.(\d{1,6})\d*)?(?:Z|([+-]\d\d):(\d\d))$"
+    r"(?:\.(\d{1,6})\d*)?(?:Z|([+-])(\d\d):(\d\d))$"
 )
 
 
@@ -416,6 +416,7 @@ class CBORDecoder:
                 minute,
                 second,
                 secfrac,
+                offset_sign,
                 offset_h,
                 offset_m,
             ) = match.groups()
@@ -425,7 +426,14 @@ class CBORDecoder:
                 microsecond = int(f"{secfrac:<06}")
 
             if offset_h:
-                tz = timezone(timedelta(hours=int(offset_h), minutes=int(offset_m)))
+                hours = int(offset_h)
+                minutes = int(offset_m)
+                if offset_sign == "-":
+                    if hours:
+                        hours *= -1
+                    else:
+                        minutes *= -1
+                tz = timezone(timedelta(hours=hours, minutes=minutes))
             else:
                 tz = timezone.utc
 
