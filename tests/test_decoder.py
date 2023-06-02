@@ -12,7 +12,6 @@ from ipaddress import ip_address, ip_network
 from uuid import UUID
 
 import pytest
-
 from cbor2.types import FrozenDict
 
 
@@ -425,6 +424,17 @@ def test_bad_datetime(impl):
         impl.loads(unhexlify("c06b303030302d3132332d3031"))
     assert isinstance(excinfo.value, ValueError)
     assert str(excinfo.value) == "invalid datetime string: '0000-123-01'"
+
+
+def test_datetime_timezone(impl):
+    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59+00:30")
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=30))
+    )
+    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59-00:30")
+    assert decoded == datetime(
+        2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=-30))
+    )
 
 
 def test_positive_bignum(impl):
