@@ -43,6 +43,9 @@ doc = [
     "sphinx_rtd_theme",
     "sphinx-autodoc-typehints >= 1.2.0",
 ]
+benchmarks = [
+    "pytest-benchmark==4.0.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["cbor2"]
