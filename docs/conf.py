@@ -3,7 +3,10 @@ from importlib.metadata import version as get_version
 
 from packaging.version import parse
 
-extensions = ["sphinx.ext.autodoc", "sphinx.ext.intersphinx"]
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
+]
 
 templates_path = ["_templates"]
 source_suffix = ".rst"
@@ -24,7 +27,6 @@ highlight_language = "python"
 todo_include_todos = False
 
 html_theme = "sphinx_rtd_theme"
-html_static_path = ["_static"]
 htmlhelp_basename = project.replace("-", "") + "doc"
 
 intersphinx_mapping = {"python": ("https://docs.python.org/", None)}
