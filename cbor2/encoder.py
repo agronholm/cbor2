@@ -329,7 +329,7 @@ class CBOREncoder:
                 self.encode_int(index)
             else:
                 raise CBOREncodeValueError(
-                    "cyclic data structure detected but value sharing is " "disabled"
+                    "cyclic data structure detected but value sharing is disabled"
                 )
 
     def _stringref(self, value):

@@ -14,7 +14,7 @@ from .types import (  # noqa: F401
 )
 
 try:
-    from _cbor2 import *  # noqa: F401,F403
+    from _cbor2 import *  # noqa: F403
 except ImportError:
     # Couldn't import the optimized C version; ignore the failure and leave the
     # pure Python implementations in place.
@@ -30,7 +30,7 @@ else:
         import _cbor2
 
         from .encoder import canonical_encoders, default_encoders
-        from .types import CBORSimpleValue, CBORTag, undefined  # noqa: F8
+        from .types import CBORSimpleValue, CBORTag, undefined  # noqa: F811
 
         _cbor2.default_encoders = OrderedDict(
             [

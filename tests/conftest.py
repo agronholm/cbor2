@@ -1,10 +1,11 @@
 import platform
 import struct
 
+import pytest
+
 import cbor2.decoder
 import cbor2.encoder
 import cbor2.types
-import pytest
 
 load_exc = ""
 try:

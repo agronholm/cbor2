@@ -10,9 +10,10 @@ from ipaddress import ip_address, ip_network
 from uuid import UUID
 
 import pytest
+from hypothesis import given
+
 from cbor2 import shareable_encoder
 from cbor2.types import FrozenDict
-from hypothesis import given
 
 from .hypothesis_strategies import compound_types_strategy
 
