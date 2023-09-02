@@ -33,6 +33,8 @@ jobs:
         cache-dependency-path: pyproject.toml
     - name: Install dependencies
       run: pip install -e .[test] coveralls
+      env:
+        CFLAGS: "-UNDEBUG"
     - name: Test with pytest
       run: pytest
     - name: Upload Coverage
