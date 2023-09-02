@@ -38,7 +38,6 @@ Documentation = "https://cbor2.readthedocs.org/en/latest/"
 [project.optional-dependencies]
 test = [
     "pytest",
-    "pytest-cov",
     "hypothesis",
 ]
 doc = [
@@ -62,7 +61,7 @@ max-line-length = 99
 exclude = ".tox,build,docs"
 
 [tool.pytest.ini_options]
-addopts = "-rsx --cov --tb=short"
+addopts = "-rsx --tb=short"
 testpaths = ["tests"]
 
 [tool.coverage.run]
