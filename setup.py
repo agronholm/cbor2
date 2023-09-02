@@ -2,10 +2,9 @@ import os
 import platform
 import sys
 
-from pkg_resources import parse_version
 from setuptools import Extension, setup
 
-min_glibc = parse_version("2.9")
+min_glibc = (2, 9)
 
 
 def check_libc():
@@ -15,16 +14,17 @@ def check_libc():
     # https://github.com/pypa/pip/blob/20.1.1/src/pip/_internal/utils/glibc.py#L21-L36
     try:
         # os.confstr("CS_GNU_LIBC_VERSION") returns a string like "glibc 2.17":
-        libc, version = os.confstr("CS_GNU_LIBC_VERSION").split()
+        libc_name, libc_version = os.confstr("CS_GNU_LIBC_VERSION").split()
     except (AttributeError, OSError, ValueError):
         # os.confstr() or CS_GNU_LIBC_VERSION not available (or a bad value)...
         return True
 
-    if libc != "glibc":
+    if libc_name != "glibc":
         # Attempt to build with musl or other libc
         return True
 
-    return parse_version(version) >= min_glibc
+    libc_version_tuple = tuple(int(x) for x in libc_version.split(".")[:2])
+    return libc_version_tuple >= min_glibc
 
 
 cpython = platform.python_implementation() == "CPython"
