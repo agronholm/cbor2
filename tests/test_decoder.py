@@ -12,6 +12,7 @@ from ipaddress import ip_address, ip_network
 from uuid import UUID
 
 import pytest
+
 from cbor2.types import FrozenDict
 
 
@@ -40,7 +41,7 @@ def test_tag_hook_attr(impl):
         decoder = impl.CBORDecoder(stream)
 
         def tag_hook(decoder, tag):
-            return None  # noqa: E731
+            return None
 
         decoder.tag_hook = tag_hook
         assert decoder.tag_hook is tag_hook
@@ -55,7 +56,7 @@ def test_object_hook_attr(impl):
         decoder = impl.CBORDecoder(stream)
 
         def object_hook(decoder, data):
-            return None  # noqa: E731
+            return None
 
         decoder.object_hook = object_hook
         assert decoder.object_hook is object_hook
@@ -526,7 +527,9 @@ def test_ipaddress(impl, payload, expected):
 def test_bad_ipaddress(impl):
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify("d9010443c00a0a"))
-        assert str(exc.value).endswith("invalid ipaddress value %r" % b"\xc0\x0a\x0a")
+        assert str(exc.value).endswith(
+            "invalid ipaddress value {!r}".format(b"\xc0\x0a\x0a")
+        )
         assert isinstance(exc, ValueError)
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify("d9010401"))
@@ -719,14 +722,14 @@ def test_load_from_file(impl, tmpdir):
 
 def test_nested_dict(impl):
     value = impl.loads(unhexlify("A1D9177082010201"))
-    assert type(value) is dict
+    assert type(value) is dict  # noqa: E721
     assert value == {impl.CBORTag(6000, (1, 2)): 1}
 
 
 def test_set(impl):
     payload = unhexlify("d9010283616361626161")
     value = impl.loads(payload)
-    assert type(value) is set
+    assert type(value) is set  # noqa: E721
     assert value == {"a", "b", "c"}
 
 

@@ -161,9 +161,9 @@ class CBOREncoder:
                     modname, typename = type_
                 except (TypeError, ValueError):
                     raise CBOREncodeValueError(
-                        "invalid deferred encoder type {!r} (must be a "
+                        f"invalid deferred encoder type {type_!r} (must be a "
                         "2-tuple of module name and type name, e.g. "
-                        "('collections', 'defaultdict'))".format(type_)
+                        "('collections', 'defaultdict'))"
                     )
                 imported_type = getattr(modules.get(modname), typename, None)
                 if imported_type is not None:
@@ -329,7 +329,7 @@ class CBOREncoder:
                 self.encode_int(index)
             else:
                 raise CBOREncodeValueError(
-                    "cyclic data structure detected but value sharing is " "disabled"
+                    "cyclic data structure detected but value sharing is disabled"
                 )
 
     def _stringref(self, value):
@@ -476,8 +476,8 @@ class CBOREncoder:
                 value = value.replace(tzinfo=self._timezone)
             else:
                 raise CBOREncodeValueError(
-                    "naive datetime {!r} encountered and no default timezone "
-                    "has been set".format(value)
+                    f"naive datetime {value!r} encountered and no default timezone "
+                    "has been set"
                 )
 
         if self.datetime_as_timestamp:

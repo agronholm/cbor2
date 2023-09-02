@@ -50,14 +50,16 @@ benchmarks = [
 [tool.setuptools.packages.find]
 include = ["cbor2"]
 
-[tool.isort]
-src_paths = ["src"]
-skip_gitignore = true
-profile = "black"
-
-[tool.flake8]
-max-line-length = 99
-exclude = ".tox,build,docs"
+[tool.ruff]
+line-length = 99
+select = [
+    "E", "F", "W",  # default flake-8
+    "I",            # isort
+    "ISC",          # flake8-implicit-str-concat
+    "PGH",          # pygrep-hooks
+    "RUF100",       # unused noqa (yesqa)
+    "UP",           # pyupgrade
+]
 
 [tool.pytest.ini_options]
 addopts = "-rsx --tb=short"

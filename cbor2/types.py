@@ -61,7 +61,7 @@ class CBORTag:
 
     @recursive_repr()
     def __repr__(self):
-        return "CBORTag({self.tag}, {self.value!r})".format(self=self)
+        return f"CBORTag({self.tag}, {self.value!r})"
 
     def __hash__(self):
         return hash((self.tag, self.value))

@@ -122,8 +122,8 @@ class CBORDecoder:
             self._str_errors = value
         else:
             raise ValueError(
-                "invalid str_errors value {!r} (must be one of 'strict', "
-                "'error', or 'replace')".format(value)
+                f"invalid str_errors value {value!r} (must be one of 'strict', "
+                "'error', or 'replace')"
             )
 
     def set_shareable(self, value):
@@ -164,8 +164,8 @@ class CBORDecoder:
         data = self._fp_read(amount)
         if len(data) < amount:
             raise CBORDecodeEOF(
-                "premature end of stream (expected to read {} bytes, got {} "
-                "instead)".format(amount, len(data))
+                f"premature end of stream (expected to read {amount} bytes, got {len(data)} "
+                "instead)"
             )
 
         return data

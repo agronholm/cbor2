@@ -1,20 +1,23 @@
-from .decoder import CBORDecoder, load, loads  # noqa: F401
-from .encoder import CBOREncoder, dump, dumps, shareable_encoder  # noqa: F401
-from .types import (  # noqa: F401
-    CBORDecodeEOF,
-    CBORDecodeError,
-    CBORDecodeValueError,
-    CBOREncodeError,
-    CBOREncodeTypeError,
-    CBOREncodeValueError,
-    CBORError,
-    CBORSimpleValue,
-    CBORTag,
-    undefined,
-)
+from .decoder import CBORDecoder as CBORDecoder
+from .decoder import load as load
+from .decoder import loads as loads
+from .encoder import CBOREncoder as CBOREncoder
+from .encoder import dump as dump
+from .encoder import dumps as dumps
+from .encoder import shareable_encoder as shareable_encoder
+from .types import CBORDecodeEOF as CBORDecodeEOF
+from .types import CBORDecodeError as CBORDecodeError
+from .types import CBORDecodeValueError as CBORDecodeValueError
+from .types import CBOREncodeError as CBOREncodeError
+from .types import CBOREncodeTypeError as CBOREncodeTypeError
+from .types import CBOREncodeValueError as CBOREncodeValueError
+from .types import CBORError as CBORError
+from .types import CBORSimpleValue as CBORSimpleValue
+from .types import CBORTag as CBORTag
+from .types import undefined as undefined
 
 try:
-    from _cbor2 import *  # noqa: F401,F403
+    from _cbor2 import *  # noqa: F403
 except ImportError:
     # Couldn't import the optimized C version; ignore the failure and leave the
     # pure Python implementations in place.
@@ -30,7 +33,7 @@ else:
         import _cbor2
 
         from .encoder import canonical_encoders, default_encoders
-        from .types import CBORSimpleValue, CBORTag, undefined  # noqa: F8
+        from .types import CBORSimpleValue, CBORTag, undefined  # noqa: F811
 
         _cbor2.default_encoders = OrderedDict(
             [
