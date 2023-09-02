@@ -12,14 +12,13 @@ readme = "README.rst"
 authors = [{name = "Alex Grönholm", email = "alex.gronholm@nextday.fi"}]
 maintainers = [{name = "Kio Smallwood (Sekenre)", email = "kio@mothers-arms.co.uk"}]
 license = {text = "MIT"}
-keywords = ["serialization cbor"]
+keywords = ["serialization", "cbor"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -74,16 +73,16 @@ show_missing = true
 [tool.tox]
 legacy_tox_ini = """
 [tox]
-envlist = py37, py38, py39, py310, py311, py312, pypy3
+envlist = py38, py39, py310, py311, py312, pypy3
 skip_missing_interpreters = true
-isolated_build = true
+minversion = 4.0.0
 
 [testenv]
 commands = python -m pytest {posargs}
+package = editable
 extras = test
 
 [testenv:docs]
-depends =
 extras = doc
 commands = sphinx-build -W -n docs build/sphinx
 """
