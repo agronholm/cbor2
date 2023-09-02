@@ -14,15 +14,15 @@ v = pkg_resources.get_distribution(project).parsed_version
 version = v.base_version
 release = v.public
 
-language = None
+language = "en"
 
 exclude_patterns = ["_build"]
 pygments_style = "sphinx"
-highlight_language = "python"
+highlight_language = "default"
 todo_include_todos = False
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 htmlhelp_basename = project.replace("-", "") + "doc"
 
-intersphinx_mapping = {"python": ("http://docs.python.org/", None)}
+intersphinx_mapping = {"python": ("https://docs.python.org/", None)}

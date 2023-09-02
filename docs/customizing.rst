@@ -92,7 +92,7 @@ it from being serialized twice (instead writing a reference to the data stream):
 
 On the decoder side, you will need to initialize an empty instance for shared value lookup before
 the object's state (which may contain references to it) is decoded.
-This is done with the :meth:`~cbor2.encoder.CBORDecoder.set_shareable` method::
+This is done with the :meth:`~cbor2.decoder.CBORDecoder.set_shareable` method::
 
     def tag_hook(decoder, tag, shareable_index=None):
         # Return all other tags as-is

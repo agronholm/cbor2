@@ -51,7 +51,7 @@ Cyclic (recursive) data structures
 ----------------------------------
 
 If the encoder encounters a shareable object (ie. list or dict) that it has seen before, it will
-by default raise :exc:`~cbor2.encoder.CBOREncodeError` indicating that a cyclic reference has been
+by default raise :exc:`~cbor2.types.CBOREncodeError` indicating that a cyclic reference has been
 detected and value sharing was not enabled. CBOR has, however, an extension specification that
 allows the encoder to reference a previously encoded value without processing it again. This makes
 it possible to serialize such cyclic references, but value sharing has to be enabled by passing

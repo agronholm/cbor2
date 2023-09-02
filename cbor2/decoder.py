@@ -34,9 +34,9 @@ class CBORDecoder:
 
     :param tag_hook:
         callable that takes 2 arguments: the decoder instance, and the
-        :class:`CBORTag` to be decoded. This callback is invoked for any tags
+        :class:`.CBORTag` to be decoded. This callback is invoked for any tags
         for which there is no built-in decoder. The return value is substituted
-        for the :class:`CBORTag` object in the deserialized output
+        for the :class:`.CBORTag` object in the deserialized output
     :param object_hook:
         callable that takes 2 arguments: the decoder instance, and a
         dictionary. This callback is invoked for each deserialized

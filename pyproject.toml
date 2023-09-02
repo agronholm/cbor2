@@ -81,4 +81,9 @@ isolated_build = true
 [testenv]
 commands = python -m pytest {posargs}
 extras = test
+
+[testenv:docs]
+depends =
+extras = doc
+commands = sphinx-build -W -n docs build/sphinx
 """
