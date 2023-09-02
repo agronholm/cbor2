@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-import pkg_resources
+from importlib.metadata import version as get_version
+
+from packaging.version import parse
 
 extensions = ["sphinx.ext.autodoc", "sphinx.ext.intersphinx"]
 
@@ -10,7 +12,7 @@ project = "cbor2"
 author = "Alex Grönholm"
 copyright = "2016, " + author
 
-v = pkg_resources.get_distribution(project).parsed_version
+v = parse(get_version(project))
 version = v.base_version
 release = v.public
 
@@ -21,7 +23,7 @@ pygments_style = "sphinx"
 highlight_language = "default"
 todo_include_todos = False
 
-html_theme = "sphinx_rtd_theme"
+html_theme = "nature"
 html_static_path = ["_static"]
 htmlhelp_basename = project.replace("-", "") + "doc"
 

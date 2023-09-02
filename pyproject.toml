@@ -42,7 +42,7 @@ test = [
     "hypothesis",
 ]
 doc = [
-    "sphinx_rtd_theme",
+    "packaging",
     "sphinx-autodoc-typehints >= 1.2.0",
 ]
 benchmarks = [
