@@ -54,7 +54,7 @@ Installation
 Requirements
 ------------
 
-* Python >= 3.7 (or `PyPy3`_ 3.7+)
+* Python >= 3.8 (or `PyPy3`_ 3.8+)
 * C-extension: Any C compiler that can build Python extensions.
   Any modern libc with the exception of Glibc<2.9
 

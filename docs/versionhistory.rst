@@ -8,6 +8,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 **UNRELEASED**
 
 - Added support for Python 3.12
+- Dropped support for Python 3.7
 
 **5.4.6** (2022-12-07)
 
