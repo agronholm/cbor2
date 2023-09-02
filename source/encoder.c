@@ -200,9 +200,12 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
 static PyObject *
 _CBOREncoder_get_fp(CBOREncoderObject *self, void *closure)
 {
-    PyObject *ret = PyMethod_GET_SELF(self->write);
-    Py_INCREF(ret);
-    return ret;
+    PyObject *fp = PyObject_GetAttrString(self->write, "__self__");
+    if (fp) {
+        return fp;
+    } else {
+        Py_RETURN_NONE;
+    }
 }
 
 

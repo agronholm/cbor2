@@ -9,6 +9,9 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
 - Added support for Python 3.12
 - Dropped support for Python 3.7
+- Fixed bug in the ``fp`` attribute of the built-in version of ``CBORDecoder`` and
+  ``CBOREncoder`` where the getter returns an invalid pointer if the ``read`` method of
+  the file was a built-in method
 
 **5.4.6** (2022-12-07)
 

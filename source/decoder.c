@@ -184,9 +184,12 @@ CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
 static PyObject *
 _CBORDecoder_get_fp(CBORDecoderObject *self, void *closure)
 {
-    PyObject *ret = PyMethod_GET_SELF(self->read);
-    Py_INCREF(ret);
-    return ret;
+    PyObject *fp = PyObject_GetAttrString(self->read, "__self__");
+    if (fp) {
+        return fp;
+    } else {
+        Py_RETURN_NONE;
+    }
 }
 
 
