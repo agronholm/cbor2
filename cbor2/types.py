@@ -1,7 +1,13 @@
+from __future__ import annotations
+
 from collections import namedtuple
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator
 from functools import total_ordering
 from reprlib import recursive_repr
+from typing import Any, Mapping, TypeVar
+
+KT = TypeVar("KT")
+VT_co = TypeVar("VT_co", covariant=True)
 
 
 class CBORError(Exception):
@@ -43,27 +49,29 @@ class CBORTag:
 
     __slots__ = "tag", "value"
 
-    def __init__(self, tag, value):
+    def __init__(self, tag: str | int, value: Any) -> None:
         if not isinstance(tag, int) or tag not in range(2**64):
             raise TypeError("CBORTag tags must be positive integers less than 2**64")
         self.tag = tag
         self.value = value
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, CBORTag):
             return (self.tag, self.value) == (other.tag, other.value)
+
         return NotImplemented
 
-    def __le__(self, other):
+    def __le__(self, other: object) -> bool:
         if isinstance(other, CBORTag):
             return (self.tag, self.value) <= (other.tag, other.value)
+
         return NotImplemented
 
     @recursive_repr()
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"CBORTag({self.tag}, {self.value!r})"
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.tag, self.value))
 
 
@@ -75,102 +83,126 @@ class CBORSimpleValue(namedtuple("CBORSimpleValue", ["value"])):
     """
 
     __slots__ = ()
-    __hash__ = namedtuple.__hash__
 
-    def __new__(cls, value):
+    value: int
+
+    def __hash__(self) -> int:
+        return hash(self.value)
+
+    def __new__(cls, value: int) -> CBORSimpleValue:
         if value < 0 or value > 255:
             raise TypeError("simple value out of range (0..255)")
+
         return super().__new__(cls, value)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, int):
             return self.value == other
-        return super().__eq__(other)
+        elif isinstance(other, CBORSimpleValue):
+            return self.value == other.value
 
-    def __ne__(self, other):
+        return NotImplemented
+
+    def __ne__(self, other: object) -> bool:
         if isinstance(other, int):
             return self.value != other
-        return super().__ne__(other)
+        elif isinstance(other, CBORSimpleValue):
+            return self.value != other.value
 
-    def __lt__(self, other):
+        return NotImplemented
+
+    def __lt__(self, other: object) -> bool:
         if isinstance(other, int):
             return self.value < other
-        return super().__lt__(other)
+        elif isinstance(other, CBORSimpleValue):
+            return self.value < other.value
 
-    def __le__(self, other):
+        return NotImplemented
+
+    def __le__(self, other: object) -> bool:
         if isinstance(other, int):
             return self.value <= other
-        return super().__le__(other)
+        elif isinstance(other, CBORSimpleValue):
+            return self.value <= other.value
 
-    def __ge__(self, other):
+        return NotImplemented
+
+    def __ge__(self, other: object) -> bool:
         if isinstance(other, int):
             return self.value >= other
-        return super().__ge__(other)
+        elif isinstance(other, CBORSimpleValue):
+            return self.value >= other.value
 
-    def __gt__(self, other):
+        return NotImplemented
+
+    def __gt__(self, other: object) -> bool:
         if isinstance(other, int):
             return self.value > other
-        return super().__gt__(other)
+        elif isinstance(other, CBORSimpleValue):
+            return self.value > other.value
+
+        return NotImplemented
 
 
-class FrozenDict(Mapping):
+class FrozenDict(Mapping[KT, VT_co]):
     """
     A hashable, immutable mapping type.
 
     The arguments to ``FrozenDict`` are processed just like those to ``dict``.
     """
 
-    def __init__(self, *args, **kwargs):
-        self._d = dict(*args, **kwargs)
-        self._hash = None
+    def __init__(self, *args: Mapping[KT, VT_co] | Iterable[tuple[KT, VT_co]]) -> None:
+        self._d: dict[KT, VT_co] = dict(*args)
+        self._hash: int | None = None
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[KT]:
         return iter(self._d)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._d)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: KT) -> VT_co:
         return self._d[key]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._d})"
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         if self._hash is None:
             self._hash = hash((frozenset(self), frozenset(self.values())))
+
         return self._hash
 
 
 class UndefinedType:
     __slots__ = ()
 
-    def __new__(cls):
+    def __new__(cls: type[UndefinedType]) -> UndefinedType:
         try:
             return undefined
         except NameError:
             return super().__new__(cls)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "undefined"
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return False
 
 
 class BreakMarkerType:
     __slots__ = ()
 
-    def __new__(cls):
+    def __new__(cls: type[BreakMarkerType]) -> BreakMarkerType:
         try:
             return break_marker
         except NameError:
             return super().__new__(cls)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "break_marker"
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return True
 
 

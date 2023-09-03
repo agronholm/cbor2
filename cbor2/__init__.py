@@ -27,7 +27,7 @@ else:
     # variants, but we still need to create the encoder dictionaries for the C
     # variant here (this is much simpler than doing so in C, and doesn't affect
     # overall performance as it's a one-off initialization cost).
-    def _init_cbor2():
+    def _init_cbor2() -> None:
         from collections import OrderedDict
 
         import _cbor2
