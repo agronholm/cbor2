@@ -32,28 +32,25 @@ jobs:
         cache: pip
         cache-dependency-path: pyproject.toml
     - name: Install dependencies
-      run: pip install -e .[test] coveralls
+      run: pip install -e .[test]
       env:
         CFLAGS: "-UNDEBUG"
     - name: Test with pytest
-      run: pytest
+      run: |
+        coverage run -m pytest -v
+        coverage xml
     - name: Upload Coverage
-      run: coveralls --service=github
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        COVERALLS_FLAG_NAME: ${{ matrix.test-name }}
-        COVERALLS_PARALLEL: true
+      uses: coverallsapp/github-action@v2
+      with:
+        parallel: true
+        file: coverage.xml
 
   coveralls:
     name: Finish Coveralls
     needs: test
     runs-on: ubuntu-latest
     steps:
-    - name: Set up Python
-      uses: actions/setup-python@v4
-    - name: Install dependencies
-      run: pip install coveralls
-    - name: Notify Coveralls
-      run: coveralls --service=github --finish
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Finished
+      uses: coverallsapp/github-action@v2
+      with:
+        parallel-finished: true

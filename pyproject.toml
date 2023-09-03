@@ -36,6 +36,7 @@ Documentation = "https://cbor2.readthedocs.org/en/latest/"
 
 [project.optional-dependencies]
 test = [
+    "coverage >= 7",
     "pytest",
     "hypothesis",
 ]
