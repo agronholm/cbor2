@@ -89,7 +89,7 @@ TEST_VALUES = [
 ]
 
 Leaks = namedtuple("Leaks", ("count", "comparison"))
-Tests = namedtuple("Test", ("objgraph", "malloc"))
+Tests = namedtuple("Tests", ("objgraph", "malloc"))
 Result = namedtuple("Result", ("encoding", "decoding", "roundtrip"))
 
 
