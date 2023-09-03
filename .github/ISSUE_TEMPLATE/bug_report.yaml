@@ -19,7 +19,7 @@ body:
             I have checked that my bug is still present in the latest release
           required: true
   - type: input
-    id: anyio-version
+    id: cbor2-version
     attributes:
       label: cbor2 version
       description: What version of cbor2 were you running?
