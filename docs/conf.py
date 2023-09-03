@@ -24,7 +24,6 @@ highlight_language = "default"
 todo_include_todos = False
 
 html_theme = "nature"
-html_static_path = ["_static"]
 htmlhelp_basename = project.replace("-", "") + "doc"
 
 intersphinx_mapping = {"python": ("https://docs.python.org/", None)}
