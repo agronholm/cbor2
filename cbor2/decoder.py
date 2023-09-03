@@ -32,17 +32,6 @@ class CBORDecoder:
     When the class is constructed manually, the main entry points are
     :meth:`decode` and :meth:`decode_from_bytes`.
 
-    :param tag_hook:
-        callable that takes 2 arguments: the decoder instance, and the
-        :class:`.CBORTag` to be decoded. This callback is invoked for any tags
-        for which there is no built-in decoder. The return value is substituted
-        for the :class:`.CBORTag` object in the deserialized output
-    :param object_hook:
-        callable that takes 2 arguments: the decoder instance, and a
-        dictionary. This callback is invoked for each deserialized
-        :class:`dict` object. The return value is substituted for the dict in
-        the deserialized output.
-
     .. _CBOR: https://cbor.io/
     """
 
@@ -51,6 +40,7 @@ class CBORDecoder:
         "_object_hook",
         "_share_index",
         "_shareables",
+        "_fp",
         "_fp_read",
         "_immutable",
         "_str_errors",
@@ -58,6 +48,27 @@ class CBORDecoder:
     )
 
     def __init__(self, fp, tag_hook=None, object_hook=None, str_errors="strict"):
+        """
+        :param fp:
+            the file to read from (any file-like object opened for reading in binary
+            mode)
+        :param tag_hook:
+            callable that takes 2 arguments: the decoder instance, and the
+            :class:`.CBORTag` to be decoded. This callback is invoked for any tags
+            for which there is no built-in decoder. The return value is substituted
+            for the :class:`.CBORTag` object in the deserialized output
+        :param object_hook:
+            callable that takes 2 arguments: the decoder instance, and a
+            dictionary. This callback is invoked for each deserialized
+            :class:`dict` object. The return value is substituted for the dict in
+            the deserialized output.
+        :param str_errors:
+            determines how to handle unicode decoding errors (see the `Error Handlers`_
+            section in the standard library documentation for details)
+
+        .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
+
+        """
         self.fp = fp
         self.tag_hook = tag_hook
         self.object_hook = object_hook

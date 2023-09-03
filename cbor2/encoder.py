@@ -83,33 +83,6 @@ class CBOREncoder:
     When the class is constructed manually, the main entry points are
     :meth:`encode` and :meth:`encode_to_bytes`.
 
-    :param bool datetime_as_timestamp:
-        set to ``True`` to serialize datetimes as UNIX timestamps (this makes
-        datetimes more concise on the wire, but loses the timezone information)
-    :param datetime.tzinfo timezone:
-        the default timezone to use for serializing naive datetimes; if this is
-        not specified naive datetimes will throw a :exc:`ValueError` when
-        encoding is attempted
-    :param bool value_sharing:
-        set to ``True`` to allow more efficient serializing of repeated values
-        and, more importantly, cyclic data structures, at the cost of extra
-        line overhead
-    :param default:
-        a callable that is called by the encoder with two arguments (the
-        encoder instance and the value being encoded) when no suitable encoder
-        has been found, and should use the methods on the encoder to encode any
-        objects it wants to add to the data stream
-    :param bool canonical:
-        when True, use "canonical" CBOR representation; this typically involves
-        sorting maps, sets, etc. into a pre-determined order ensuring that
-        serializations are comparable without decoding
-    :param bool date_as_datetime: set to ``True`` to serialize date objects as
-        datetimes (CBOR tag 0), which was the default behavior in previous
-        releases (cbor2 <= 4.1.2).
-    :param bool string_referencing:
-        set to ``True`` to allow more efficient serializing of repeated
-        string values
-
     .. _CBOR: https://cbor.io/
     """
 
@@ -138,6 +111,37 @@ class CBOREncoder:
         date_as_datetime=False,
         string_referencing=False,
     ):
+        """
+        :param fp:
+            the file to write to (any file-like object opened for writing in binary
+            mode)
+        :param datetime_as_timestamp:
+            set to ``True`` to serialize datetimes as UNIX timestamps (this makes
+            datetimes more concise on the wire, but loses the timezone information)
+        :param timezone:
+            the default timezone to use for serializing naive datetimes; if this is not
+            specified naive datetimes will throw a :exc:`ValueError` when encoding is
+            attempted
+        :param value_sharing:
+            set to ``True`` to allow more efficient serializing of repeated values and,
+            more importantly, cyclic data structures, at the cost of extra line overhead
+        :param default:
+            a callable that is called by the encoder with two arguments (the encoder
+            instance and the value being encoded) when no suitable encoder has been
+            found, and should use the methods on the encoder to encode any objects it
+            wants to add to the data stream
+        :param canonical:
+            when ``True``, use "canonical" CBOR representation; this typically involves
+            sorting maps, sets, etc. into a pre-determined order ensuring that
+            serializations are comparable without decoding
+        :param date_as_datetime:
+            set to ``True`` to serialize date objects as datetimes (CBOR tag 0), which
+            was the default behavior in previous releases (cbor2 <= 4.1.2).
+        :param string_referencing:
+            set to ``True`` to allow more efficient serializing of repeated string
+            values
+
+        """
         self.fp = fp
         self.datetime_as_timestamp = datetime_as_timestamp
         self.timezone = timezone

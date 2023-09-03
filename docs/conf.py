@@ -3,7 +3,11 @@ from importlib.metadata import version as get_version
 
 from packaging.version import parse
 
-extensions = ["sphinx.ext.autodoc", "sphinx.ext.intersphinx"]
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
+    "sphinx_autodoc_typehints",
+]
 
 templates_path = ["_templates"]
 source_suffix = ".rst"
@@ -22,6 +26,9 @@ exclude_patterns = ["_build"]
 pygments_style = "sphinx"
 highlight_language = "default"
 todo_include_todos = False
+autodoc_default_options = {
+    "special-members": "__init__",
+}
 
 html_theme = "nature"
 htmlhelp_basename = project.replace("-", "") + "doc"
