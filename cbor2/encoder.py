@@ -436,7 +436,7 @@ class CBOREncoder:
 
     @container_encoder
     def encode_canonical_map(self, value):
-        "Reorder keys according to Canonical CBOR specification"
+        """Reorder keys according to Canonical CBOR specification"""
         keyed_keys = (
             (self.encode_sortable_key(key), key, value) for key, value in value.items()
         )

@@ -5,31 +5,31 @@ from reprlib import recursive_repr
 
 
 class CBORError(Exception):
-    "Base class for errors that occur during CBOR encoding or decoding."
+    """Base class for errors that occur during CBOR encoding or decoding."""
 
 
 class CBOREncodeError(CBORError):
-    "Raised for exceptions occurring during CBOR encoding."
+    """Raised for exceptions occurring during CBOR encoding."""
 
 
 class CBOREncodeTypeError(CBOREncodeError, TypeError):
-    "Raised when attempting to encode a type that cannot be serialized."
+    """Raised when attempting to encode a type that cannot be serialized."""
 
 
 class CBOREncodeValueError(CBOREncodeError, ValueError):
-    "Raised when the CBOR encoder encounters an invalid value."
+    """Raised when the CBOR encoder encounters an invalid value."""
 
 
 class CBORDecodeError(CBORError):
-    "Raised for exceptions occurring during CBOR decoding."
+    """Raised for exceptions occurring during CBOR decoding."""
 
 
 class CBORDecodeValueError(CBORDecodeError, ValueError):
-    "Raised when the CBOR stream being decoded contains an invalid value."
+    """Raised when the CBOR stream being decoded contains an invalid value."""
 
 
 class CBORDecodeEOF(CBORDecodeError, EOFError):
-    "Raised when decoding unexpectedly reaches EOF."
+    """Raised when decoding unexpectedly reaches EOF."""
 
 
 @total_ordering
