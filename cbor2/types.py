@@ -157,8 +157,6 @@ class UndefinedType:
     def __bool__(self):
         return False
 
-    __nonzero__ = __bool__  # Py2.7 compat
-
 
 class BreakMarkerType:
     __slots__ = ()
@@ -174,8 +172,6 @@ class BreakMarkerType:
 
     def __bool__(self):
         return True
-
-    __nonzero__ = __bool__  # Py2.7 compat
 
 
 #: Represents the "undefined" value.
