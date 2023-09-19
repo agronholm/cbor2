@@ -30,7 +30,7 @@ autodoc_default_options = {
     "special-members": "__init__",
 }
 
-html_theme = "nature"
+html_theme = "sphinx_rtd_theme"
 htmlhelp_basename = project.replace("-", "") + "doc"
 
 intersphinx_mapping = {"python": ("https://docs.python.org/", None)}
