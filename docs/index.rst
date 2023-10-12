@@ -1,5 +1,8 @@
+CBOR2
+=====
+
 .. include:: ../README.rst
-   :start-line: 10
+   :start-line: 16
 
 Table of contents
 -----------------
@@ -9,9 +12,5 @@ Table of contents
 
    usage
    customizing
+   api
    versionhistory
-   Encoder <modules/encoder>
-   Decoder <modules/decoder>
-   Types <modules/types>
-
-* :ref:`API reference <modindex>`

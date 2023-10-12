@@ -26,9 +26,8 @@ exclude_patterns = ["_build"]
 pygments_style = "sphinx"
 highlight_language = "default"
 todo_include_todos = False
-autodoc_default_options = {
-    "special-members": "__init__",
-}
+autodoc_default_options = {"members": True}
+autodoc_mock_imports = ["typing_extensions"]
 
 html_theme = "sphinx_rtd_theme"
 htmlhelp_basename = project.replace("-", "") + "doc"

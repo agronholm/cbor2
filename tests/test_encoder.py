@@ -12,8 +12,7 @@ from uuid import UUID
 import pytest
 from hypothesis import given
 
-from cbor2 import shareable_encoder
-from cbor2.types import FrozenDict
+from cbor2 import FrozenDict, shareable_encoder
 
 from .hypothesis_strategies import compound_types_strategy
 

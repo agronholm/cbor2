@@ -7,6 +7,9 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- The ``cbor2.encoder``, ``cbor2.decoder`` or ``cbor2.types`` modules were deprecated – import
+  their contents directly from ``cbor2`` from now on. The old modules will be removed in the next
+  major release.
 - Added support for Python 3.12
 - Added type annotations
 - Dropped support for Python 3.7

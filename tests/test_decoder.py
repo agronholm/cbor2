@@ -13,7 +13,7 @@ from uuid import UUID
 
 import pytest
 
-from cbor2.types import FrozenDict
+from cbor2 import FrozenDict
 
 
 def test_fp_attr(impl):
