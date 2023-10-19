@@ -3,7 +3,7 @@ from datetime import timedelta, timezone
 
 from hypothesis import strategies
 
-from cbor2.types import FrozenDict
+from cbor2 import FrozenDict
 
 # Tune these for test run time
 MAX_SIZE = 5

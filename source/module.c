@@ -402,7 +402,7 @@ _CBOR2_init_FrozenDict(void)
     PyObject *cbor2_types;
 
     // from cbor2.types import FrozenDict
-    cbor2_types = PyImport_ImportModule("cbor2.types");
+    cbor2_types = PyImport_ImportModule("cbor2._types");
     if (!cbor2_types)
         goto error;
     _CBOR2_FrozenDict = PyObject_GetAttr(cbor2_types, _CBOR2_str_FrozenDict);
@@ -412,7 +412,7 @@ _CBOR2_init_FrozenDict(void)
     return 0;
 error:
     PyErr_SetString(PyExc_ImportError,
-            "unable to import FrozenDict from cbor2.types");
+            "unable to import FrozenDict from cbor2._types");
     return -1;
 }
 

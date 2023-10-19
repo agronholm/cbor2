@@ -1,6 +1,8 @@
 Customizing encoding and decoding
 =================================
 
+.. py:currentmodule:: cbor2
+
 Both the encoder and decoder can be customized to support a wider range of types.
 
 On the encoder side, this is accomplished by passing a callback as the ``default`` constructor
@@ -18,7 +20,7 @@ only, it is recommended to use ``tag_hook`` for this purpose.
 Using the CBOR tags for custom types
 ------------------------------------
 
-The most common way to use ``default`` is to call :meth:`~cbor2.encoder.CBOREncoder.encode`
+The most common way to use ``default`` is to call :meth:`CBOREncoder.encode`
 to add a custom tag in the data stream, with the payload as the value::
 
     class Point:
@@ -79,7 +81,7 @@ make it possible to add special markers into the data stream which can be later 
 substituted with the object marked earlier.
 
 To do this, in ``default`` hooks used with the encoder you will need to use the
-:meth:`~cbor2.encoder.shareable_encoder` decorator on your ``default`` hook function. It will
+:meth:`shareable_encoder` decorator on your ``default`` hook function. It will
 automatically automatically add the object to the shared values registry on the encoder and prevent
 it from being serialized twice (instead writing a reference to the data stream)::
 
@@ -92,7 +94,7 @@ it from being serialized twice (instead writing a reference to the data stream):
 
 On the decoder side, you will need to initialize an empty instance for shared value lookup before
 the object's state (which may contain references to it) is decoded.
-This is done with the :meth:`~cbor2.decoder.CBORDecoder.set_shareable` method::
+This is done with the :meth:`CBORDecoder.set_shareable` method::
 
     def tag_hook(decoder, tag, shareable_index=None):
         # Return all other tags as-is

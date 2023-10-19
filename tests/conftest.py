@@ -3,9 +3,9 @@ import struct
 
 import pytest
 
-import cbor2.decoder
-import cbor2.encoder
-import cbor2.types
+import cbor2._decoder
+import cbor2._encoder
+import cbor2._types
 
 load_exc = ""
 try:
@@ -46,7 +46,7 @@ def impl(request):
         # implementations, even if the top-level package has imported the
         # _cbor2 module
         module = Module()
-        for source in (cbor2.types, cbor2.encoder, cbor2.decoder):
+        for source in (cbor2._types, cbor2._encoder, cbor2._decoder):
             for name in dir(source):
                 setattr(module, name, getattr(source, name))
         return module

@@ -95,4 +95,9 @@ extras = test
 [testenv:docs]
 extras = doc
 commands = sphinx-build -W -n docs build/sphinx
+package = wheel
+
+[testenv:.pkg-docs]
+setenv =
+  CBOR2_BUILD_C_EXTENSION=0
 """

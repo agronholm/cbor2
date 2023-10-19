@@ -16,8 +16,7 @@ from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from . import CBORDecoder, CBORSimpleValue, CBORTag, load, undefined
-from .types import FrozenDict
+from . import CBORDecoder, CBORSimpleValue, CBORTag, FrozenDict, load, undefined
 
 if TYPE_CHECKING:
     from typing import Literal, TypeAlias
