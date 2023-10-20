@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.5.0** (2023-10-21)
 
 - The ``cbor2.encoder``, ``cbor2.decoder`` or ``cbor2.types`` modules were deprecated – import
   their contents directly from ``cbor2`` from now on. The old modules will be removed in the next
