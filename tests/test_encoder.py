@@ -268,10 +268,7 @@ def test_simple_val_as_key(impl):
 )
 def test_datetime(impl, value, as_timestamp, expected):
     expected = unhexlify(expected)
-    assert (
-        impl.dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc)
-        == expected
-    )
+    assert impl.dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc) == expected
 
 
 @pytest.mark.parametrize("tz", [None, timezone.utc], ids=["no timezone", "utc"])
@@ -285,10 +282,7 @@ def test_date_fails(impl, tz):
 
 def test_date_as_datetime(impl):
     expected = unhexlify("c074323031332d30332d32315430303a30303a30305a")
-    assert (
-        impl.dumps(date(2013, 3, 21), timezone=timezone.utc, date_as_datetime=True)
-        == expected
-    )
+    assert impl.dumps(date(2013, 3, 21), timezone=timezone.utc, date_as_datetime=True) == expected
 
 
 def test_naive_datetime(impl):
@@ -610,9 +604,7 @@ def test_encode_stringrefs_array(impl):
         impl.CBORTag(25, 0),
         impl.CBORTag(25, 1),
     ]
-    assert impl.dumps(value, string_referencing=True) == b"\xd9\x01\x00" + impl.dumps(
-        equivalent
-    )
+    assert impl.dumps(value, string_referencing=True) == b"\xd9\x01\x00" + impl.dumps(equivalent)
 
 
 def test_encode_stringrefs_dict(impl):
@@ -632,9 +624,7 @@ def test_encode_stringrefs_dict(impl):
     assert impl.dumps(value, string_referencing=True, canonical=True) == expected
 
 
-@pytest.mark.parametrize(
-    "tag", [-1, 2**64, "f"], ids=["too small", "too large", "wrong type"]
-)
+@pytest.mark.parametrize("tag", [-1, 2**64, "f"], ids=["too small", "too large", "wrong type"])
 def test_invalid_tag(impl, tag):
     with pytest.raises(TypeError):
         impl.dumps(impl.CBORTag(tag, "value"))

@@ -32,9 +32,7 @@ def test_default():
 )
 def test_self_referencing(payload):
     decoded = cbor2.loads(binascii.unhexlify(payload))
-    with pytest.raises(
-        ValueError, match="Cannot convert self-referential data to JSON"
-    ):
+    with pytest.raises(ValueError, match="Cannot convert self-referential data to JSON"):
         cbor2.tool.key_to_str(decoded)
 
 

@@ -81,8 +81,7 @@ TEST_VALUES = [
     (
         "objectdictlist",
         {"timezone": UTC},
-        [{"name": "Foo", "species": "cat", "dob": datetime(2013, 5, 20), "weight": 4.1}]
-        * 100,
+        [{"name": "Foo", "species": "cat", "dob": datetime(2013, 5, 20), "weight": 4.1}] * 100,
     ),
     ("tag", {}, c_cbor2.CBORTag(1, 1)),
     ("nestedtag", {}, {c_cbor2.CBORTag(1, 1): 1}),
