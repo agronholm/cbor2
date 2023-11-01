@@ -90,8 +90,8 @@ class CBORSimpleValue(namedtuple("CBORSimpleValue", ["value"])):
         return hash(self.value)
 
     def __new__(cls, value: int) -> CBORSimpleValue:
-        if value < 0 or value > 255:
-            raise TypeError("simple value out of range (0..255)")
+        if value < 0 or value > 255 or 23 < value < 32:
+            raise TypeError("simple value out of range (0..23, 32..255)")
 
         return super().__new__(cls, value)
 

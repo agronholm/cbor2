@@ -174,8 +174,8 @@ CBORSimpleValue_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "n", keywords, &val))
         return NULL;
 
-    if (val < 0 || val > 255) {
-        PyErr_SetString(PyExc_TypeError, "simple value out of range (0..255)");
+    if (val < 0 || val > 255 || (val > 23 && val < 32)) {
+        PyErr_SetString(PyExc_TypeError, "simple value out of range (0..23, 32..255)");
         return NULL;
     }
 
