@@ -22,11 +22,7 @@ def grouper(iterable, n, fillvalue=None):
 def sigtable():
     print("static const uint32_t sigtable[] = {")
     values = (
-        0
-        if i == 0
-        else convertsig(i)
-        if 1 <= i < 1024
-        else 0x38000000 + ((i - 1024) << 13)
+        0 if i == 0 else convertsig(i) if 1 <= i < 1024 else 0x38000000 + ((i - 1024) << 13)
         for i in range(2048)
     )
     values = (f"{i:#010x}" for i in values)

@@ -180,18 +180,14 @@ class CBOREncoder:
         self._shared_containers: dict[
             int, tuple[object, int | None]
         ] = {}  # indexes used for value sharing
-        self._string_references: dict[
-            str | bytes, int
-        ] = {}  # indexes used for string references
+        self._string_references: dict[str | bytes, int] = {}  # indexes used for string references
         self._encoders = default_encoders.copy()
         if canonical:
             self._encoders.update(canonical_encoders)
         if date_as_datetime:
             self._encoders[date] = CBOREncoder.encode_date
 
-    def _find_encoder(
-        self, obj_type: type
-    ) -> Callable[[CBOREncoder, Any], None] | None:
+    def _find_encoder(self, obj_type: type) -> Callable[[CBOREncoder, Any], None] | None:
         for type_or_tuple, enc in list(self._encoders.items()):
             if type(type_or_tuple) is tuple:
                 try:
@@ -310,11 +306,7 @@ class CBOREncoder:
             the object to encode
         """
         obj_type = obj.__class__
-        encoder = (
-            self._encoders.get(obj_type)
-            or self._find_encoder(obj_type)
-            or self._default
-        )
+        encoder = self._encoders.get(obj_type) or self._find_encoder(obj_type) or self._default
         if not encoder:
             raise CBOREncodeTypeError("cannot serialize type %s" % obj_type.__name__)
 
@@ -335,9 +327,7 @@ class CBOREncoder:
             self.fp = old_fp
             return fp.getvalue()
 
-    def encode_container(
-        self, encoder: Callable[[CBOREncoder, Any], Any], value: Any
-    ) -> None:
+    def encode_container(self, encoder: Callable[[CBOREncoder, Any], Any], value: Any) -> None:
         if self.string_namespacing:
             # Create a new string reference domain
             self.encode_length(6, 256)
@@ -345,9 +335,7 @@ class CBOREncoder:
         with self.disable_string_namespacing():
             self.encode_shared(encoder, value)
 
-    def encode_shared(
-        self, encoder: Callable[[CBOREncoder, Any], Any], value: Any
-    ) -> None:
+    def encode_shared(self, encoder: Callable[[CBOREncoder, Any], Any], value: Any) -> None:
         value_id = id(value)
         try:
             index = self._shared_containers[id(value)][1]
@@ -482,9 +470,7 @@ class CBOREncoder:
     @container_encoder
     def encode_canonical_map(self, value: Mapping[Any, Any]) -> None:
         """Reorder keys according to Canonical CBOR specification"""
-        keyed_keys = (
-            (self.encode_sortable_key(key), key, value) for key, value in value.items()
-        )
+        keyed_keys = ((self.encode_sortable_key(key), key, value) for key, value in value.items())
         self.encode_length(5, len(value))
         for sortkey, realkey, value in sorted(keyed_keys):
             if self.string_referencing:
@@ -521,8 +507,7 @@ class CBOREncoder:
                 value = value.replace(tzinfo=self._timezone)
             else:
                 raise CBOREncodeValueError(
-                    f"naive datetime {value!r} encountered and no default timezone "
-                    "has been set"
+                    f"naive datetime {value!r} encountered and no default timezone " "has been set"
                 )
 
         if self.datetime_as_timestamp:
@@ -600,9 +585,7 @@ class CBOREncoder:
 
     def encode_ipnetwork(self, value: IPv4Network | IPv6Network) -> None:
         # Semantic tag 261
-        self.encode_semantic(
-            CBORTag(261, {value.network_address.packed: value.prefixlen})
-        )
+        self.encode_semantic(CBORTag(261, {value.network_address.packed: value.prefixlen}))
 
     #
     # Special encoders (major tag 7)

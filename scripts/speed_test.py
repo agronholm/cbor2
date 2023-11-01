@@ -89,8 +89,7 @@ TEST_VALUES = [
     (
         "objectdictlist",
         {"timezone": UTC},
-        [{"name": "Foo", "species": "cat", "dob": datetime(2013, 5, 20), "weight": 4.1}]
-        * 100,
+        [{"name": "Foo", "species": "cat", "dob": datetime(2013, 5, 20), "weight": 4.1}] * 100,
     ),
 ]
 
@@ -122,9 +121,7 @@ def time(op, repeat=3):
     return Timing(min(t.repeat(repeat, number)) / number, repeat, number)
 
 
-def format_time(
-    t, suffixes=("s", "ms", "µs", "ns"), zero="0s", template="{time:.1f}{suffix}"
-):
+def format_time(t, suffixes=("s", "ms", "µs", "ns"), zero="0s", template="{time:.1f}{suffix}"):
     if isinstance(t, Exception):
         return "-"
     else:
@@ -133,9 +130,7 @@ def format_time(
         except ValueError:
             return zero
         else:
-            return template.format(
-                time=t.time * 2 ** (index * 10), suffix=suffixes[index]
-            )
+            return template.format(time=t.time * 2 ** (index * 10), suffix=suffixes[index])
 
 
 def print_len(s):
@@ -204,13 +199,9 @@ def output_table(results):
                 "  ",
                 " " * col_widths[0],
                 " | ",
-                "{value:^{width}}".format(
-                    value="Encoding", width=sum(col_widths[1:4]) + 6
-                ),
+                "{value:^{width}}".format(value="Encoding", width=sum(col_widths[1:4]) + 6),
                 " | ",
-                "{value:^{width}}".format(
-                    value="Decoding", width=sum(col_widths[4:7]) + 6
-                ),
+                "{value:^{width}}".format(value="Decoding", width=sum(col_widths[4:7]) + 6),
                 " |",
             )
         )
@@ -264,14 +255,10 @@ def output_csv(results):
         writer.writerow(
             (
                 title,
-                result.cbor.encoding.time
-                if isinstance(result.cbor.encoding, Timing)
-                else None,
+                result.cbor.encoding.time if isinstance(result.cbor.encoding, Timing) else None,
                 result.c_cbor2.encoding.time,
                 result.py_cbor2.encoding.time,
-                result.cbor.decoding.time
-                if isinstance(result.cbor.encoding, Timing)
-                else None,
+                result.cbor.decoding.time if isinstance(result.cbor.encoding, Timing) else None,
                 result.c_cbor2.decoding.time,
                 result.py_cbor2.decoding.time,
             )
