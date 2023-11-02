@@ -198,7 +198,7 @@ def test_special(impl, special_values):
     assert impl.dumps(value) == expected
 
 
-@pytest.fixture(params=[(0, "e0"), (2, "e2"), (19, "f3"), (32, "f820")])
+@pytest.fixture(params=[(0, "e0"), (2, "e2"), (23, "f7"), (32, "f820")])
 def simple_values(request, impl):
     value, expected = request.param
     return impl.CBORSimpleValue(value), expected

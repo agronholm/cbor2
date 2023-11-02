@@ -1631,7 +1631,7 @@ CBOREncoder_encode_simple_value(CBOREncoderObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "B", &value))
         return NULL;
-    if (value < 20) {
+    if (value < 24) {
         value |= 0xE0;
         if (fp_write(self, (char *)&value, 1) == -1)
             return NULL;

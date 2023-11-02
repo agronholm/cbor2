@@ -9,6 +9,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
 - Fixed ``CBORSimpleValue`` allowing the use of reserved values (24 to 31) which resulted in
   invalid byte sequences
+- Fixed encoding of simple values from 20 to 23 producing the wrong byte sequences
 
 **5.5.0** (2023-10-21)
 
