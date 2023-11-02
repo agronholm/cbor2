@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.5.1** (2023-11-02)
 
 - Fixed ``CBORSimpleValue`` allowing the use of reserved values (24 to 31) which resulted in
   invalid byte sequences
