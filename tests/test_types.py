@@ -120,10 +120,12 @@ def test_simple_ordering(impl):
     assert expected == sorted(randints)
 
 
-def test_simple_value_too_big(impl):
+@pytest.mark.parametrize("value", [-1, 24, 31, 256])
+def test_simple_value_out_of_range(impl, value):
     with pytest.raises(TypeError) as exc:
-        impl.CBORSimpleValue(256)
-        assert str(exc.value) == "simple value out of range (0..255)"
+        impl.CBORSimpleValue(value)
+
+    assert str(exc.value) == "simple value out of range (0..23, 32..255)"
 
 
 def test_frozendict():
