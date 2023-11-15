@@ -131,9 +131,9 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
     int value_sharing = 0, timestamp_format = 0, enc_style = 0,
 	date_as_datetime = 0, string_referencing = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOppp", keywords,
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOBpp", keywords,
                 &fp, &timestamp_format, &tz, &value_sharing,
-                &default_handler, &enc_style, &date_as_datetime,
+                &default_handler, &self->enc_style, &date_as_datetime,
                 &string_referencing))
         return -1;
     // Predicate values are returned as ints, but need to be stored as bool or ubyte
@@ -141,8 +141,7 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
 	self->timestamp_format = true;
     if (value_sharing == 1)
 	self->value_sharing = true;
-    if (enc_style == 1)
-	self->enc_style = 1;
+
     if (string_referencing == 1) {
         self->string_referencing = true;
         self->string_namespacing = true;
