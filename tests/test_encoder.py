@@ -93,6 +93,8 @@ def test_canonical_attr(impl):
         assert not enc.canonical
         enc = impl.CBOREncoder(stream, canonical=True)
         assert enc.canonical
+        enc = impl.CBOREncoder(stream, canonical=2)
+        assert enc.canonical
 
 
 def test_dump(impl):
