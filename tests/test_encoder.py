@@ -1,5 +1,5 @@
-import re
 import calendar
+import re
 from binascii import unhexlify
 from collections import OrderedDict
 from datetime import date, datetime, timedelta, timezone
@@ -444,10 +444,8 @@ def test_encoder_replacement(impl):
         millis = int(dt.microsecond / 1000.0) / 1000.0
         return calendar.timegm(dt.astimezone(timezone.utc).timetuple()) + millis
 
-
     def encode_datetime(self, obj: datetime):
         self.encode_float(to_epoch(obj))
-
 
     dt = datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)
     expected = unhexlify("fb41d452d9ec000000")
