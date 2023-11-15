@@ -1,4 +1,5 @@
 import re
+import calendar
 from binascii import unhexlify
 from collections import OrderedDict
 from datetime import date, datetime, timedelta, timezone
@@ -434,6 +435,27 @@ def test_unsupported_type(impl):
         impl.dumps(lambda: None)
         exc.match("cannot serialize type function")
         assert isinstance(exc, TypeError)
+
+
+def test_encoder_replacement(impl):
+    def to_epoch(dt: datetime) -> float:
+        millis = int(dt.microsecond / 1000.0) / 1000.0
+        return calendar.timegm(dt.astimezone(timezone.utc).timetuple()) + millis
+
+
+    def encode_datetime(self, obj: datetime):
+        self.encode_float(to_epoch(obj))
+
+
+    dt = datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)
+    expected = unhexlify("fb41d452d9ec000000")
+    with BytesIO() as fp:
+        encoder = impl.CBOREncoder(fp, canonical=2)
+        encoder._encoders[datetime] = encode_datetime
+        encoder.encode(dt)
+        serialized = fp.getvalue()
+
+    assert serialized == expected
 
 
 def test_default(impl):
