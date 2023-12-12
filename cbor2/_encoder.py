@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 
 def shareable_encoder(
-    func: Callable[[CBOREncoder, Any], None]
+    func: Callable[[CBOREncoder, Any], None],
 ) -> Callable[[CBOREncoder, Any], None]:
     """
     Wrap the given encoder function to gracefully handle cyclic data
@@ -60,7 +60,7 @@ def shareable_encoder(
 
 
 def container_encoder(
-    func: Callable[[CBOREncoder, Any], Any]
+    func: Callable[[CBOREncoder, Any], Any],
 ) -> Callable[[CBOREncoder, Any], Any]:
     """
     The given encoder is a container with child values. Handle cyclic or
