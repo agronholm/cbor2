@@ -649,6 +649,9 @@ decode_definite_string(CBORDecoderObject *self, Py_ssize_t length)
                 buf, length, PyBytes_AS_STRING(self->str_errors));
     PyMem_Free(buf);
 
+    if (!ret)
+        return NULL;
+
     if (string_namespace_add(self, ret, length) == -1) {
         Py_DECREF(ret);
         return NULL;

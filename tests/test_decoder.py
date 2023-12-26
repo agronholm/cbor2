@@ -818,9 +818,17 @@ def test_decimal_payload_unpacking(impl, data, expected):
             b"\xd8\x1e\x84\xff\xff\xff\xff",
             TypeError,
             r"__new__\(\) takes from 1 to 3 positional arguments but 5 were given",
-        )
+            id="fractional",
+        ),
+        pytest.param(
+            b"\xae\xae\xae\xae\xae\xae\xae\xae\xae\x01\x08\xc2\x98C\xd9\x01\x00\xd8$"
+            b"\x9f\x00\x00\xae\xae\xff\xc2l\xa7\x99",
+            Exception,
+            "premature end of stream",
+            id="unicode",
+        ),
     ],
 )
 def test_invalid_data(impl, payload, exception, pattern) -> None:
     with pytest.raises(exception, match=pattern):
-        impl.loads(b"\xd8\x1e\x84\xff\xff\xff\xff")
+        impl.loads(payload)

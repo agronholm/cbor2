@@ -8,6 +8,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 **UNRELEASED**
 
 - Fixed ``SystemError`` when decoding a ``Fractional`` with a bad number of arguments
+- Fixed a segmentation fault when decoding invalid unicode data
 
 **5.5.1** (2023-11-02)
 
