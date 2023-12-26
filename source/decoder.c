@@ -1367,16 +1367,14 @@ CBORDecoder_decode_rational(CBORDecoderObject *self)
     // NOTE: see semantic type 4
     tuple = decode(self, DECODE_IMMUTABLE | DECODE_UNSHARED);
     if (tuple) {
-        if (PyTuple_CheckExact(tuple) && PyTuple_GET_SIZE(tuple) == 2) {
-            ret = PyObject_CallFunctionObjArgs(
-                    _CBOR2_Fraction,
-                    PyTuple_GET_ITEM(tuple, 0),
-                    PyTuple_GET_ITEM(tuple, 1),
-                    NULL);
+        if (PyTuple_CheckExact(tuple)) {
+            ret = PyObject_Call(_CBOR2_Fraction, tuple, NULL);
+            if (ret) {
+                set_shareable(self, ret);
+            }
         }
         Py_DECREF(tuple);
     }
-    set_shareable(self, ret);
     return ret;
 }
 

@@ -809,3 +809,18 @@ def test_decimal_payload_unpacking(impl, data, expected):
     with pytest.raises(impl.CBORDecodeValueError) as exc_info:
         impl.loads(unhexlify(data))
     assert exc_info.value.args[0] == f"Incorrect tag {expected} payload"
+
+
+@pytest.mark.parametrize(
+    "payload, exception, pattern",
+    [
+        pytest.param(
+            b"\xd8\x1e\x84\xff\xff\xff\xff",
+            TypeError,
+            r"__new__\(\) takes from 1 to 3 positional arguments but 5 were given",
+        )
+    ],
+)
+def test_invalid_data(impl, payload, exception, pattern) -> None:
+    with pytest.raises(exception, match=pattern):
+        impl.loads(b"\xd8\x1e\x84\xff\xff\xff\xff")
