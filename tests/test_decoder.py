@@ -690,6 +690,15 @@ def test_object_hook(impl):
     assert decoded.state == {"a": 3, "b": 5}
 
 
+def test_object_hook_exception(impl):
+    def object_hook(decoder, data):
+        raise RuntimeError("foo")
+
+    payload = unhexlify("A2616103616205")
+    with pytest.raises(RuntimeError, match="foo"):
+        impl.loads(payload, object_hook=object_hook)
+
+
 def test_load_from_file(impl, tmpdir):
     path = tmpdir.join("testdata.cbor")
     path.write_binary(b"\x82\x01\x0a")

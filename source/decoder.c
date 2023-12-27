@@ -939,11 +939,12 @@ decode_map(CBORDecoderObject *self, uint8_t subtype)
     }
     if (ret && self->object_hook != Py_None) {
         map = PyObject_CallFunctionObjArgs(self->object_hook, self, ret, NULL);
-        if (map) {
-            set_shareable(self, map);
-            Py_DECREF(ret);
-            ret = map;
-        }
+        if (!map)
+            return NULL;
+
+        set_shareable(self, map);
+        Py_DECREF(ret);
+        ret = map;
     }
     return ret;
 }
