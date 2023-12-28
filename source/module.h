@@ -97,6 +97,7 @@ extern PyObject *_CBOR2_re_compile;
 extern PyObject *_CBOR2_datestr_re;
 extern PyObject *_CBOR2_ip_address;
 extern PyObject *_CBOR2_ip_network;
+extern PyObject *_CBOR2_thread_locals;
 
 // Initializers for the cached references above
 int _CBOR2_init_timezone_utc(void); // also handles timezone
@@ -108,6 +109,7 @@ int _CBOR2_init_UUID(void);
 int _CBOR2_init_Parser(void);
 int _CBOR2_init_re_compile(void); // also handles datestr_re
 int _CBOR2_init_ip_address(void);
+int _CBOR2_init_thread_locals(void);
 
 int init_default_encoders(void);
 int init_canonical_encoders(void);

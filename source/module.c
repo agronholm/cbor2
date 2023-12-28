@@ -576,6 +576,27 @@ error:
 }
 
 
+int
+_CBOR2_init_thread_locals(void)
+{
+    PyObject *threading = PyImport_ImportModule("threading");
+    if (!threading)
+        return -1;
+
+    PyObject *local = PyObject_GetAttrString(threading, "local");
+    Py_DECREF(threading);
+    if (!local)
+        return -1;
+
+    _CBOR2_thread_locals = PyObject_CallObject(local, NULL);
+    Py_DECREF(local);
+    if (!_CBOR2_thread_locals)
+        return -1;
+
+    return 0;
+}
+
+
 // Module definition /////////////////////////////////////////////////////////
 
 PyObject *_CBOR2_empty_bytes = NULL;
@@ -643,6 +664,7 @@ PyObject *_CBOR2_re_compile = NULL;
 PyObject *_CBOR2_datestr_re = NULL;
 PyObject *_CBOR2_ip_address = NULL;
 PyObject *_CBOR2_ip_network = NULL;
+PyObject *_CBOR2_thread_locals = NULL;
 
 PyObject *_CBOR2_default_encoders = NULL;
 PyObject *_CBOR2_canonical_encoders = NULL;
@@ -661,6 +683,7 @@ cbor2_free(PyObject *m)
     Py_CLEAR(_CBOR2_datestr_re);
     Py_CLEAR(_CBOR2_ip_address);
     Py_CLEAR(_CBOR2_ip_network);
+    Py_CLEAR(_CBOR2_thread_locals);
     Py_CLEAR(_CBOR2_CBOREncodeError);
     Py_CLEAR(_CBOR2_CBOREncodeTypeError);
     Py_CLEAR(_CBOR2_CBOREncodeValueError);
