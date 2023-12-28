@@ -184,7 +184,7 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
         PyObject *encode_date = PyObject_GetAttr((PyObject *) &CBOREncoderType, _CBOR2_str_encode_date);
         if (!encode_date)
             return -1;
-        PyObject *datetime_class = PyDateTimeAPI->DateType;
+        PyObject *datetime_class = (PyObject*)PyDateTimeAPI->DateType;
         if (PyObject_SetItem(self->encoders, datetime_class, encode_date) == -1)
             return -1;
         Py_DECREF(encode_date);

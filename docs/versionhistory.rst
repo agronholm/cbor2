@@ -12,6 +12,8 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 - Fixed ``SystemError`` in the C extension when the decoder object hook raises an
   exception
 - Fixed a segmentation fault when decoding invalid unicode data
+- Fixed infinite recursion when trying to hash a CBOR tag whose value points to the tag
+  itself
 
 **5.5.1** (2023-11-02)
 

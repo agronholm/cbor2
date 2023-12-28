@@ -74,13 +74,20 @@ def test_tag_compare_unimplemented(impl):
         tag <= (1, "foo")
 
 
-def test_tag_recursive(impl):
+def test_tag_recursive_repr(impl):
     tag = impl.CBORTag(1, None)
     tag.value = tag
     assert repr(tag) == "CBORTag(1, ...)"
     assert tag is tag.value
     assert tag == tag.value
     assert not (tag != tag.value)
+
+
+def test_tag_recursive_hash(impl):
+    tag = impl.CBORTag(1, None)
+    tag.value = tag
+    with pytest.raises(RuntimeError, match="This CBORTag is not hashable"):
+        hash(tag)
 
 
 def test_tag_repr(impl):

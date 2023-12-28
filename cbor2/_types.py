@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections import namedtuple
 from collections.abc import Iterable, Iterator
 from functools import total_ordering
@@ -8,6 +9,8 @@ from typing import Any, Mapping, TypeVar
 
 KT = TypeVar("KT")
 VT_co = TypeVar("VT_co", covariant=True)
+
+thread_locals = threading.local()
 
 
 class CBORError(Exception):
@@ -72,7 +75,24 @@ class CBORTag:
         return f"CBORTag({self.tag}, {self.value!r})"
 
     def __hash__(self) -> int:
-        return hash((self.tag, self.value))
+        self_id = id(self)
+        try:
+            running_hashes = thread_locals.running_hashes
+        except AttributeError:
+            running_hashes = thread_locals.running_hashes = set()
+
+        if self_id in running_hashes:
+            raise RuntimeError(
+                "This CBORTag is not hashable because it contains a reference to itself"
+            )
+
+        running_hashes.add(self_id)
+        try:
+            return hash((self.tag, self.value))
+        finally:
+            running_hashes.remove(self_id)
+            if not running_hashes:
+                del thread_locals.running_hashes
 
 
 class CBORSimpleValue(namedtuple("CBORSimpleValue", ["value"])):
