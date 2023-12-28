@@ -189,8 +189,15 @@ CBORTag_hash(CBORTagObject *self)
         goto exit;
     }
 
+    // Check how many more references there are in running_hashes
+    Py_ssize_t length = PySequence_Length(running_hashes);
+    if (length == 1) {
+        ret = -1;
+        goto exit;
+    }
+
     // If this was the last reference, delete running_hashes from the thread-local variable
-    if (PyObject_DelAttrString(_CBOR2_thread_locals, "running_hashes") == -1) {
+    if (length == 0 && PyObject_DelAttrString(_CBOR2_thread_locals, "running_hashes") == -1) {
         ret = -1;
         goto exit;
     }
