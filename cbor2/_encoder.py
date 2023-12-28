@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     if sys.version_info >= (3, 12):
-        from typing import Buffer
+        from collections.abc import Buffer
     else:
         from typing_extensions import Buffer
 
