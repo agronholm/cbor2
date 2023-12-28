@@ -147,8 +147,8 @@ CBORTag_hash(CBORTagObject *self)
         return -1;
 
     Py_hash_t ret = -1;
-    PyObject *running_hashes;
-    PyObject *tmp;
+    PyObject *running_hashes = NULL;
+    PyObject *tmp = NULL;
     PyObject *self_id = PyLong_FromVoidPtr(self);
     if (!self_id)
         goto exit;
