@@ -77,14 +77,17 @@ Usage
 Command-line Usage
 ==================
 
-``python -m cbor2.tool`` converts CBOR data in raw binary or base64 encoding into
-a representation that allows printing as JSON. This is a lossy transformation as
-each datatype is converted into something that can be represented as a JSON value.
+The provided command line tool (``cbor2``) converts CBOR data in raw binary or base64
+encoding into a representation that allows printing as JSON. This is a lossy
+transformation as each datatype is converted into something that can be represented as a
+JSON value.
+
+The tool can alternatively be invoked with ``python -m cbor2.tool``.
 
 Usage::
 
     # Pass hexadecimal through xxd.
-    $ echo a16568656c6c6f65776f726c64 | xxd -r -ps | python -m cbor2.tool --pretty
+    $ echo a16568656c6c6f65776f726c64 | xxd -r -ps | cbor2 --pretty
     {
         "hello": "world"
     }
@@ -100,14 +103,14 @@ coloring, field extraction and more.
 
 CBOR data items concatenated into a sequence can be decoded also::
 
-    $ echo ggECggMEggUG | python -m cbor2.tool -d --sequence
+    $ echo ggECggMEggUG | cbor2 -d --sequence
     [1, 2]
     [3, 4]
     [5, 6]
 
 Multiple files can also be sent to a single output file::
 
-    $ python -m cbor2.tool -o all_files.json file1.cbor file2.cbor ... fileN.cbor
+    $ cbor2 -o all_files.json file1.cbor file2.cbor ... fileN.cbor
 
 .. _jq: https://stedolan.github.io/jq/
 

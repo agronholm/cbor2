@@ -7,6 +7,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Added the ``cbor2`` command line tool (for ``pipx run cbor2``)
 - Fixed ``SystemError`` in the C extension when decoding a ``Fractional`` with a bad
   number of arguments
 - Fixed ``SystemError`` in the C extension when the decoder object hook raises an

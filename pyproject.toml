@@ -52,6 +52,9 @@ benchmarks = [
     "pytest-benchmark==4.0.0",
 ]
 
+[project.scripts]
+cbor2 = "cbor2.tool:main"
+
 [tool.setuptools.packages.find]
 include = ["cbor2"]
 
