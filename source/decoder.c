@@ -346,31 +346,44 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
 
 // Utility functions /////////////////////////////////////////////////////////
 
-static int
-fp_read(CBORDecoderObject *self, char *buf, const Py_ssize_t size)
+static PyObject *
+fp_read_object(CBORDecoderObject *self, const Py_ssize_t size)
 {
+    PyObject *ret = NULL;
     PyObject *obj, *size_obj;
-    char *data;
-    int ret = -1;
-
     size_obj = PyLong_FromSsize_t(size);
     if (size_obj) {
         obj = PyObject_CallFunctionObjArgs(self->read, size_obj, NULL);
+        Py_DECREF(size_obj);
         if (obj) {
             assert(PyBytes_CheckExact(obj));
             if (PyBytes_GET_SIZE(obj) == (Py_ssize_t) size) {
-                data = PyBytes_AS_STRING(obj);
-                memcpy(buf, data, size);
-                ret = 0;
+                ret = obj;
             } else {
+                Py_DECREF(obj);
                 PyErr_Format(
                     _CBOR2_CBORDecodeEOF,
                     "premature end of stream (expected to read %zd bytes, "
                     "got %zd instead)", size, PyBytes_GET_SIZE(obj));
             }
-            Py_DECREF(obj);
         }
-        Py_DECREF(size_obj);
+    }
+    return ret;
+}
+
+
+static int
+fp_read(CBORDecoderObject *self, char *buf, const Py_ssize_t size)
+{
+    int ret = -1;
+    PyObject *obj = fp_read_object(self, size);
+    if (obj) {
+        char *data = PyBytes_AS_STRING(obj);
+        if (data) {
+            memcpy(buf, data, size);
+            ret = 0;
+        }
+        Py_DECREF(obj);
     }
     return ret;
 }
@@ -538,15 +551,10 @@ decode_negint(CBORDecoderObject *self, uint8_t subtype)
 static PyObject *
 decode_definite_bytestring(CBORDecoderObject *self, Py_ssize_t length)
 {
-    PyObject *ret = NULL;
-
-    ret = PyBytes_FromStringAndSize(NULL, length);
+    PyObject *ret = fp_read_object(self, length);
     if (!ret)
         return NULL;
-    if (fp_read(self, PyBytes_AS_STRING(ret), length) == -1) {
-        Py_DECREF(ret);
-        return NULL;
-    }
+
     if (string_namespace_add(self, ret, length) == -1) {
         Py_DECREF(ret);
         return NULL;
@@ -637,22 +645,14 @@ decode_bytestring(CBORDecoderObject *self, uint8_t subtype)
 static PyObject *
 decode_definite_string(CBORDecoderObject *self, Py_ssize_t length)
 {
-    PyObject *ret = NULL;
-    char *buf;
-
-    buf = PyMem_Malloc(length);
-    if (!buf)
-        return PyErr_NoMemory();
-
-    if (fp_read(self, buf, length) == 0)
-        ret = PyUnicode_DecodeUTF8(
-                buf, length, PyBytes_AS_STRING(self->str_errors));
-    PyMem_Free(buf);
-
-    if (!ret)
+    PyObject *bytes_obj = fp_read_object(self, length);
+    if (!bytes_obj)
         return NULL;
 
-    if (string_namespace_add(self, ret, length) == -1) {
+    const char *bytes = PyBytes_AS_STRING(bytes_obj);
+    PyObject *ret = PyUnicode_FromStringAndSize(bytes, length);
+    Py_DECREF(bytes_obj);
+    if (ret && string_namespace_add(self, ret, length) == -1) {
         Py_DECREF(ret);
         return NULL;
     }

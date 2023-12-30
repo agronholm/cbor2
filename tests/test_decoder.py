@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 import re
 import struct
@@ -824,20 +826,36 @@ def test_decimal_payload_unpacking(impl, data, expected):
     "payload, exception, pattern",
     [
         pytest.param(
-            b"\xd8\x1e\x84\xff\xff\xff\xff",
+            unhexlify("d81e84ffffffff"),
             TypeError,
             r"__new__\(\) takes from 1 to 3 positional arguments but 5 were given",
             id="fractional",
         ),
         pytest.param(
-            b"\xae\xae\xae\xae\xae\xae\xae\xae\xae\x01\x08\xc2\x98C\xd9\x01\x00\xd8$"
-            b"\x9f\x00\x00\xae\xae\xff\xc2l\xa7\x99",
-            Exception,
+            unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799"),
+            "CBORDecodeEOF",
             "premature end of stream",
             id="unicode",
         ),
+        pytest.param(
+            unhexlify("5b7fffffffffffff00"),
+            "CBORDecodeEOF",
+            "premature end of stream",
+            id="oversized_bytestring",
+        ),
+        pytest.param(
+            unhexlify("7b7fffffffffffff00"),
+            "CBORDecodeEOF",
+            "premature end of stream",
+            id="oversized_string",
+        ),
     ],
 )
-def test_invalid_data(impl, payload, exception, pattern) -> None:
+def test_invalid_data(
+    impl, payload: bytes, exception: type[Exception] | str, pattern: str
+) -> None:
+    if isinstance(exception, str):
+        exception = getattr(impl, exception)
+
     with pytest.raises(exception, match=pattern):
         impl.loads(payload)

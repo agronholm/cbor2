@@ -15,6 +15,8 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 - Fixed a segmentation fault when decoding invalid unicode data
 - Fixed infinite recursion when trying to hash a CBOR tag whose value points to the tag
   itself
+- Fixed ``MemoryError`` when maliciously constructed bytestrings or string (declared to be absurdly
+  large) are being decoded
 
 **5.5.1** (2023-11-02)
 
