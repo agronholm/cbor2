@@ -50,6 +50,8 @@ static PyObject * decode_bytestring(CBORDecoderObject *, uint8_t);
 static PyObject * decode_string(CBORDecoderObject *, uint8_t);
 static PyObject * CBORDecoder_decode_datetime_string(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_epoch_datetime(CBORDecoderObject *);
+static PyObject * CBORDecoder_decode_epoch_date(CBORDecoderObject *);
+static PyObject * CBORDecoder_decode_date_string(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_fraction(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_bigfloat(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_rational(CBORDecoderObject *);
@@ -974,10 +976,12 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
             case 35:    ret = CBORDecoder_decode_regexp(self);          break;
             case 36:    ret = CBORDecoder_decode_mime(self);            break;
             case 37:    ret = CBORDecoder_decode_uuid(self);            break;
+            case 100:   ret = CBORDecoder_decode_epoch_date(self);      break;
             case 256:   ret = CBORDecoder_decode_stringref_ns(self);    break;
             case 258:   ret = CBORDecoder_decode_set(self);             break;
             case 260:   ret = CBORDecoder_decode_ipaddress(self);       break;
             case 261:   ret = CBORDecoder_decode_ipnetwork(self);       break;
+            case 1004:  ret = CBORDecoder_decode_date_string(self);     break;
             case 55799: ret = CBORDecoder_decode_self_describe_cbor(self);
                 break;
 
@@ -1009,7 +1013,7 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
 
 
 static PyObject *
-parse_datestr(CBORDecoderObject *self, PyObject *str)
+parse_datetimestr(CBORDecoderObject *self, PyObject *str)
 {
     const char* buf;
     char *p;
@@ -1082,10 +1086,92 @@ parse_datestr(CBORDecoderObject *self, PyObject *str)
     return ret;
 }
 
+static PyObject *
+parse_datestr(CBORDecoderObject *self, PyObject *str)
+{
+    const char* buf;
+    Py_ssize_t size;
+    PyObject *ret = NULL;
+    unsigned long int Y, m, d;
+
+    buf = PyUnicode_AsUTF8AndSize(str, &size);
+    if (
+            size < 10 || buf[4] != '-' || buf[7] != '-')
+    {
+        PyErr_Format(
+            _CBOR2_CBORDecodeValueError, "invalid date string %R", str);
+        return NULL;
+    }
+    if (buf) {
+        Y = strtoul(buf, NULL, 10);
+        m = strtoul(buf + 5, NULL, 10);
+        d = strtoul(buf + 8, NULL, 10);
+        ret = PyDate_FromDate(Y, m, d);
+    }
+    return ret;
+}
+
 
 // CBORDecoder.decode_datetime_string(self)
 static PyObject *
 CBORDecoder_decode_datetime_string(CBORDecoderObject *self)
+{
+    // semantic type 0
+    PyObject *match, *str, *ret = NULL;
+
+    if (!_CBOR2_datetimestr_re && _CBOR2_init_re_compile() == -1)
+        return NULL;
+    str = decode(self, DECODE_NORMAL);
+    if (str) {
+        if (PyUnicode_Check(str)) {
+            match = PyObject_CallMethodObjArgs(
+                    _CBOR2_datetimestr_re, _CBOR2_str_match, str, NULL);
+            if (match) {
+                if (match != Py_None)
+                    ret = parse_datetimestr(self, str);
+                else
+                    PyErr_Format(
+                        _CBOR2_CBORDecodeValueError,
+                        "invalid datetime string: %R", str);
+                Py_DECREF(match);
+            }
+        } else
+            PyErr_Format(
+                _CBOR2_CBORDecodeValueError, "invalid datetime value: %R", str);
+        Py_DECREF(str);
+    }
+    set_shareable(self, ret);
+    return ret;
+}
+
+// CBORDecoder.decode_epoch_date(self)
+static PyObject *
+CBORDecoder_decode_epoch_date(CBORDecoderObject *self)
+{
+    // semantic type 100
+    PyObject *num, *tuple, *ret = NULL;
+
+    num = decode(self, DECODE_NORMAL);
+    if (num) {
+        if (PyNumber_Check(num)) {
+            tuple = PyTuple_Pack(1, PyNumber_Multiply(num, PyLong_FromLong(24 * 60 * 60)));
+            if (tuple) {
+                ret = PyDate_FromTimestamp(tuple);
+                Py_DECREF(tuple);
+            }
+        } else {
+            PyErr_Format(
+                _CBOR2_CBORDecodeValueError, "invalid timestamp value %R", num);
+        }
+        Py_DECREF(num);
+    }
+    set_shareable(self, ret);
+    return ret;
+}
+
+// CBORDecoder.decode_date_string(self)
+static PyObject *
+CBORDecoder_decode_date_string(CBORDecoderObject *self)
 {
     // semantic type 0
     PyObject *match, *str, *ret = NULL;
@@ -1103,12 +1189,12 @@ CBORDecoder_decode_datetime_string(CBORDecoderObject *self)
                 else
                     PyErr_Format(
                         _CBOR2_CBORDecodeValueError,
-                        "invalid datetime string: %R", str);
+                        "invalid date string: %R", str);
                 Py_DECREF(match);
             }
         } else
             PyErr_Format(
-                _CBOR2_CBORDecodeValueError, "invalid datetime value: %R", str);
+                _CBOR2_CBORDecodeValueError, "invalid date value: %R", str);
         Py_DECREF(str);
     }
     set_shareable(self, ret);
