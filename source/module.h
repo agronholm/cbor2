@@ -69,6 +69,7 @@ extern PyObject *_CBOR2_str_prefixlen;
 extern PyObject *_CBOR2_str_read;
 extern PyObject *_CBOR2_str_s;
 extern PyObject *_CBOR2_str_timestamp;
+extern PyObject *_CBOR2_str_toordinal;
 extern PyObject *_CBOR2_str_timezone;
 extern PyObject *_CBOR2_str_update;
 extern PyObject *_CBOR2_str_utc;

@@ -642,6 +642,7 @@ PyObject *_CBOR2_str_prefixlen = NULL;
 PyObject *_CBOR2_str_read = NULL;
 PyObject *_CBOR2_str_s = NULL;
 PyObject *_CBOR2_str_timestamp = NULL;
+PyObject *_CBOR2_str_toordinal = NULL;
 PyObject *_CBOR2_str_timezone = NULL;
 PyObject *_CBOR2_str_update = NULL;
 PyObject *_CBOR2_str_utc = NULL;
@@ -973,6 +974,7 @@ PyInit__cbor2(void)
     INTERN_STRING(read);
     INTERN_STRING(s);
     INTERN_STRING(timestamp);
+    INTERN_STRING(toordinal);
     INTERN_STRING(timezone);
     INTERN_STRING(update);
     INTERN_STRING(utc);
