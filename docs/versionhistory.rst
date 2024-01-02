@@ -15,6 +15,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 - Fixed a segmentation fault when decoding invalid unicode data
 - Fixed infinite recursion when trying to hash a CBOR tag whose value points to the tag
   itself
+- Added support for native date encoding (bschoenmaeckers)
 
 **5.5.1** (2023-11-02)
 
