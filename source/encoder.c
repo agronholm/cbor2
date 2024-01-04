@@ -141,7 +141,7 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
     if (timestamp_format == 1)
 	self->timestamp_format = true;
     if (date_as_datetime == 1)
-    self->date_as_datetime = true;
+        self->date_as_datetime = true;
     if (value_sharing == 1)
 	self->value_sharing = true;
     if (enc_style == 1)
