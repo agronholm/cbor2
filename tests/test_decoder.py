@@ -5,7 +5,7 @@ import re
 import struct
 import sys
 from binascii import unhexlify
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from email.message import Message
 from fractions import Fraction
@@ -341,6 +341,28 @@ def test_simple_val_as_key(impl):
 #
 # Tests for extension tags
 #
+
+
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        (
+            "d903ec6a323031332d30332d3231",
+            date(2013, 3, 21),
+        ),
+        (
+            "d8641945e8",
+            date(2018, 12, 31),
+        ),
+    ],
+    ids=[
+        "date/string",
+        "date/timestamp",
+    ],
+)
+def test_date(impl, payload, expected):
+    decoded = impl.loads(unhexlify(payload))
+    assert decoded == expected
 
 
 @pytest.mark.parametrize(

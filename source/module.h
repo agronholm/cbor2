@@ -40,6 +40,7 @@ extern PyObject *_CBOR2_str_BytesIO;
 extern PyObject *_CBOR2_str_canonical_encoders;
 extern PyObject *_CBOR2_str_compile;
 extern PyObject *_CBOR2_str_copy;
+extern PyObject *_CBOR2_str_datetimestr_re;
 extern PyObject *_CBOR2_str_datestr_re;
 extern PyObject *_CBOR2_str_Decimal;
 extern PyObject *_CBOR2_str_default_encoders;
@@ -68,6 +69,7 @@ extern PyObject *_CBOR2_str_prefixlen;
 extern PyObject *_CBOR2_str_read;
 extern PyObject *_CBOR2_str_s;
 extern PyObject *_CBOR2_str_timestamp;
+extern PyObject *_CBOR2_str_toordinal;
 extern PyObject *_CBOR2_str_timezone;
 extern PyObject *_CBOR2_str_update;
 extern PyObject *_CBOR2_str_utc;
@@ -94,6 +96,7 @@ extern PyObject *_CBOR2_FrozenDict;
 extern PyObject *_CBOR2_UUID;
 extern PyObject *_CBOR2_Parser;
 extern PyObject *_CBOR2_re_compile;
+extern PyObject *_CBOR2_datetimestr_re;
 extern PyObject *_CBOR2_datestr_re;
 extern PyObject *_CBOR2_ip_address;
 extern PyObject *_CBOR2_ip_network;
@@ -107,7 +110,7 @@ int _CBOR2_init_Fraction(void);
 int _CBOR2_init_FrozenDict(void);
 int _CBOR2_init_UUID(void);
 int _CBOR2_init_Parser(void);
-int _CBOR2_init_re_compile(void); // also handles datestr_re
+int _CBOR2_init_re_compile(void); // also handles datetimestr_re & datestr_re
 int _CBOR2_init_ip_address(void);
 int _CBOR2_init_thread_locals(void);
 

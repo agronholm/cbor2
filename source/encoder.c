@@ -108,6 +108,7 @@ CBOREncoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         self->string_references = Py_None;
         self->enc_style = 0;
         self->timestamp_format = false;
+        self->date_as_datetime = false;
         self->value_sharing = false;
         self->shared_handler = NULL;
         self->string_referencing = false;
@@ -139,6 +140,8 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
     // Predicate values are returned as ints, but need to be stored as bool or ubyte
     if (timestamp_format == 1)
 	self->timestamp_format = true;
+    if (date_as_datetime == 1)
+        self->date_as_datetime = true;
     if (value_sharing == 1)
 	self->value_sharing = true;
     if (enc_style == 1)
@@ -179,15 +182,6 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
         if (!PyObject_CallMethodObjArgs(self->encoders,
                     _CBOR2_str_update, _CBOR2_canonical_encoders, NULL))
             return -1;
-    }
-    if (date_as_datetime == 1) {
-        PyObject *encode_date = PyObject_GetAttr((PyObject *) &CBOREncoderType, _CBOR2_str_encode_date);
-        if (!encode_date)
-            return -1;
-        PyObject *datetime_class = (PyObject*)PyDateTimeAPI->DateType;
-        if (PyObject_SetItem(self->encoders, datetime_class, encode_date) == -1)
-            return -1;
-        Py_DECREF(encode_date);
     }
 
     return 0;
@@ -1043,22 +1037,36 @@ CBOREncoder_encode_datetime(CBOREncoderObject *self, PyObject *value)
 static PyObject *
 CBOREncoder_encode_date(CBOREncoderObject *self, PyObject *value)
 {
-    PyObject *datetime, *ret = NULL;
+    // semantic type 100 or 1004
 
-    if (PyDate_Check(value)) {
-        datetime = PyDateTimeAPI->DateTime_FromDateAndTime(
+    PyObject *tmp, *ret = NULL;
+    const char *buf;
+    Py_ssize_t length;
+    if (self->date_as_datetime) {
+        tmp = PyDateTimeAPI->DateTime_FromDateAndTime(
                 PyDateTime_GET_YEAR(value),
                 PyDateTime_GET_MONTH(value),
                 PyDateTime_GET_DAY(value),
                 0, 0, 0, 0, self->tz,
                 PyDateTimeAPI->DateTimeType);
-        if (datetime) {
-            ret = CBOREncoder_encode_datetime(self, datetime);
-            Py_DECREF(datetime);
-            return ret;
+        if (tmp)
+            ret = CBOREncoder_encode_datetime(self, tmp);
+    }
+    else if (self->timestamp_format) {
+        tmp = PyObject_CallMethodObjArgs(
+                value, _CBOR2_str_toordinal, NULL);
+        if (tmp && fp_write(self, "\xD8\x64", 2) == 0) {
+            ret = CBOREncoder_encode_int(self, PyNumber_Subtract(tmp, PyLong_FromLong(719163)));
+        }
+    } else {
+        tmp = PyObject_CallMethodObjArgs(
+                value, _CBOR2_str_isoformat, NULL);
+        if (tmp && fp_write(self, "\xD9\x03\xEC", 3) == 0) {
+            ret = CBOREncoder_encode_string(self, tmp);
         }
     }
-    return NULL;
+    Py_XDECREF(tmp);
+    return ret;
 }
 
 
@@ -1995,6 +2003,8 @@ encode(CBOREncoderObject *self, PyObject *value)
                 return CBOREncoder_encode_map(self, value);
             else if (PyDateTime_CheckExact(value))
                 return CBOREncoder_encode_datetime(self, value);
+            else if (PyDate_CheckExact(value))
+                return CBOREncoder_encode_date(self, value);
             else if (PyAnySet_CheckExact(value))
                 return CBOREncoder_encode_set(self, value);
             // fall-thru

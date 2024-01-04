@@ -4,7 +4,7 @@ import re
 import struct
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
@@ -448,6 +448,15 @@ class CBORDecoder:
     #
     # Semantic decoders (major tag 6)
     #
+    def decode_epoch_date(self) -> date:
+        # Semantic tag 100
+        value = self._decode()
+        return self.set_shareable(date.fromordinal(value + 719163))
+
+    def decode_date_string(self) -> date:
+        # Semantic tag 1004
+        value = self._decode()
+        return self.set_shareable(date.fromisoformat(value))
 
     def decode_datetime_string(self) -> datetime:
         # Semantic tag 0
@@ -699,10 +708,12 @@ semantic_decoders: dict[int, Callable[[CBORDecoder], Any]] = {
     35: CBORDecoder.decode_regexp,
     36: CBORDecoder.decode_mime,
     37: CBORDecoder.decode_uuid,
+    100: CBORDecoder.decode_epoch_date,
     256: CBORDecoder.decode_stringref_namespace,
     258: CBORDecoder.decode_set,
     260: CBORDecoder.decode_ipaddress,
     261: CBORDecoder.decode_ipnetwork,
+    1004: CBORDecoder.decode_date_string,
     55799: CBORDecoder.decode_self_describe_cbor,
 }
 

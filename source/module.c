@@ -491,6 +491,10 @@ _CBOR2_init_re_compile(void)
     Py_DECREF(re);
     if (!_CBOR2_re_compile)
         goto error;
+    _CBOR2_datetimestr_re = PyObject_CallFunctionObjArgs(
+            _CBOR2_re_compile, _CBOR2_str_datetimestr_re, NULL);
+    if (!_CBOR2_datetimestr_re)
+        goto error;
     _CBOR2_datestr_re = PyObject_CallFunctionObjArgs(
             _CBOR2_re_compile, _CBOR2_str_datestr_re, NULL);
     if (!_CBOR2_datestr_re)
@@ -609,6 +613,7 @@ PyObject *_CBOR2_str_BytesIO = NULL;
 PyObject *_CBOR2_str_canonical_encoders = NULL;
 PyObject *_CBOR2_str_compile = NULL;
 PyObject *_CBOR2_str_copy = NULL;
+PyObject *_CBOR2_str_datetimestr_re = NULL;
 PyObject *_CBOR2_str_datestr_re = NULL;
 PyObject *_CBOR2_str_Decimal = NULL;
 PyObject *_CBOR2_str_default_encoders = NULL;
@@ -637,6 +642,7 @@ PyObject *_CBOR2_str_prefixlen = NULL;
 PyObject *_CBOR2_str_read = NULL;
 PyObject *_CBOR2_str_s = NULL;
 PyObject *_CBOR2_str_timestamp = NULL;
+PyObject *_CBOR2_str_toordinal = NULL;
 PyObject *_CBOR2_str_timezone = NULL;
 PyObject *_CBOR2_str_update = NULL;
 PyObject *_CBOR2_str_utc = NULL;
@@ -661,6 +667,7 @@ PyObject *_CBOR2_FrozenDict = NULL;
 PyObject *_CBOR2_UUID = NULL;
 PyObject *_CBOR2_Parser = NULL;
 PyObject *_CBOR2_re_compile = NULL;
+PyObject *_CBOR2_datetimestr_re = NULL;
 PyObject *_CBOR2_datestr_re = NULL;
 PyObject *_CBOR2_ip_address = NULL;
 PyObject *_CBOR2_ip_network = NULL;
@@ -680,6 +687,7 @@ cbor2_free(PyObject *m)
     Py_CLEAR(_CBOR2_UUID);
     Py_CLEAR(_CBOR2_Parser);
     Py_CLEAR(_CBOR2_re_compile);
+    Py_CLEAR(_CBOR2_datetimestr_re);
     Py_CLEAR(_CBOR2_datestr_re);
     Py_CLEAR(_CBOR2_ip_address);
     Py_CLEAR(_CBOR2_ip_network);
@@ -966,6 +974,7 @@ PyInit__cbor2(void)
     INTERN_STRING(read);
     INTERN_STRING(s);
     INTERN_STRING(timestamp);
+    INTERN_STRING(toordinal);
     INTERN_STRING(timezone);
     INTERN_STRING(update);
     INTERN_STRING(utc);
@@ -977,12 +986,15 @@ PyInit__cbor2(void)
     if (!_CBOR2_str_utc_suffix &&
             !(_CBOR2_str_utc_suffix = PyUnicode_InternFromString("+00:00")))
         goto error;
-    if (!_CBOR2_str_datestr_re &&
-            !(_CBOR2_str_datestr_re = PyUnicode_InternFromString(
+    if (!_CBOR2_str_datetimestr_re &&
+        !(_CBOR2_str_datetimestr_re = PyUnicode_InternFromString(
                     "^(\\d{4})-(\\d\\d)-(\\d\\d)T"     // Y-m-d
                     "(\\d\\d):(\\d\\d):(\\d\\d)"       // H:M:S
                     "(?:\\.(\\d{1,6})\\d*)?"           // .uS
                     "(?:Z|([+-]\\d\\d):(\\d\\d))$")))  // +-TZ
+        goto error;
+    if (!_CBOR2_str_datestr_re &&
+        !(_CBOR2_str_datestr_re = PyUnicode_InternFromString("^(\\d{4})-(\\d\\d)-(\\d\\d)")))  // Y-m-d
         goto error;
     if (!_CBOR2_empty_bytes &&
             !(_CBOR2_empty_bytes = PyBytes_FromStringAndSize(NULL, 0)))
