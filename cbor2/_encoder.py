@@ -111,6 +111,7 @@ class CBOREncoder:
 
     __slots__ = (
         "datetime_as_timestamp",
+        "date_as_datetime",
         "_timezone",
         "_default",
         "value_sharing",
@@ -171,6 +172,7 @@ class CBOREncoder:
         """
         self.fp = fp
         self.datetime_as_timestamp = datetime_as_timestamp
+        self.date_as_datetime = date_as_datetime
         self.timezone = timezone
         self.value_sharing = value_sharing
         self.string_referencing = string_referencing
@@ -184,8 +186,6 @@ class CBOREncoder:
         self._encoders = default_encoders.copy()
         if canonical:
             self._encoders.update(canonical_encoders)
-        if date_as_datetime:
-            self._encoders[date] = CBOREncoder.encode_date
 
     def _find_encoder(self, obj_type: type) -> Callable[[CBOREncoder, Any], None] | None:
         for type_or_tuple, enc in list(self._encoders.items()):
@@ -524,8 +524,16 @@ class CBOREncoder:
             self.encode_semantic(CBORTag(0, datestring))
 
     def encode_date(self, value: date) -> None:
-        value = datetime.combine(value, time()).replace(tzinfo=self._timezone)
-        self.encode_datetime(value)
+        # Semantic tag 100
+        if self.date_as_datetime:
+            value = datetime.combine(value, time()).replace(tzinfo=self._timezone)
+            self.encode_datetime(value)
+        elif self.datetime_as_timestamp:
+            days_since_epoch = value.toordinal() - 719163
+            self.encode_semantic(CBORTag(100, days_since_epoch))
+        else:
+            datestring = value.isoformat()
+            self.encode_semantic(CBORTag(1004, datestring))
 
     def encode_decimal(self, value: Decimal) -> None:
         # Semantic tag 4
@@ -655,6 +663,7 @@ default_encoders: dict[type | tuple[str, str], Callable[[CBOREncoder, Any], None
     FrozenDict: CBOREncoder.encode_map,
     type(undefined): CBOREncoder.encode_undefined,
     datetime: CBOREncoder.encode_datetime,
+    date: CBOREncoder.encode_date,
     re.Pattern: CBOREncoder.encode_regexp,
     ("fractions", "Fraction"): CBOREncoder.encode_rational,
     ("email.message", "Message"): CBOREncoder.encode_mime,
