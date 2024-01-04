@@ -1042,32 +1042,30 @@ CBOREncoder_encode_date(CBOREncoderObject *self, PyObject *value)
     PyObject *tmp, *ret = NULL;
     const char *buf;
     Py_ssize_t length;
-    if (value) {
-        if (self->date_as_datetime) {
-            tmp = PyDateTimeAPI->DateTime_FromDateAndTime(
-                    PyDateTime_GET_YEAR(value),
-                    PyDateTime_GET_MONTH(value),
-                    PyDateTime_GET_DAY(value),
-                    0, 0, 0, 0, self->tz,
-                    PyDateTimeAPI->DateTimeType);
-            if (tmp)
-                ret = CBOREncoder_encode_datetime(self, tmp);
-        }
-        else if (self->timestamp_format) {
-            tmp = PyObject_CallMethodObjArgs(
-                    value, _CBOR2_str_toordinal, NULL);
-            if (tmp && fp_write(self, "\xD8\x64", 2) == 0) {
-                ret = CBOREncoder_encode_int(self, PyNumber_Subtract(tmp, PyLong_FromLong(719163)));
-            }
-        } else {
-            tmp = PyObject_CallMethodObjArgs(
-                    value, _CBOR2_str_isoformat, NULL);
-            if (tmp && fp_write(self, "\xD9\x03\xEC", 3) == 0) {
-                ret = CBOREncoder_encode_string(self, tmp);
-            }
-        }
-        Py_XDECREF(tmp);
+    if (self->date_as_datetime) {
+        tmp = PyDateTimeAPI->DateTime_FromDateAndTime(
+                PyDateTime_GET_YEAR(value),
+                PyDateTime_GET_MONTH(value),
+                PyDateTime_GET_DAY(value),
+                0, 0, 0, 0, self->tz,
+                PyDateTimeAPI->DateTimeType);
+        if (tmp)
+            ret = CBOREncoder_encode_datetime(self, tmp);
     }
+    else if (self->timestamp_format) {
+        tmp = PyObject_CallMethodObjArgs(
+                value, _CBOR2_str_toordinal, NULL);
+        if (tmp && fp_write(self, "\xD8\x64", 2) == 0) {
+            ret = CBOREncoder_encode_int(self, PyNumber_Subtract(tmp, PyLong_FromLong(719163)));
+        }
+    } else {
+        tmp = PyObject_CallMethodObjArgs(
+                value, _CBOR2_str_isoformat, NULL);
+        if (tmp && fp_write(self, "\xD9\x03\xEC", 3) == 0) {
+            ret = CBOREncoder_encode_string(self, tmp);
+        }
+    }
+    Py_XDECREF(tmp);
     return ret;
 }
 
