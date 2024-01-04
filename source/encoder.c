@@ -1042,7 +1042,6 @@ CBOREncoder_encode_date(CBOREncoderObject *self, PyObject *value)
     PyObject *tmp, *ret = NULL;
     const char *buf;
     Py_ssize_t length;
-    Py_INCREF(value);
     if (value) {
         if (self->date_as_datetime) {
             tmp = PyDateTimeAPI->DateTime_FromDateAndTime(
@@ -1068,7 +1067,6 @@ CBOREncoder_encode_date(CBOREncoderObject *self, PyObject *value)
             }
         }
         Py_XDECREF(tmp);
-        Py_DECREF(value);
     }
     return ret;
 }
