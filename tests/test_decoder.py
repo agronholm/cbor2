@@ -230,7 +230,7 @@ def test_binary(impl, payload, expected):
         ("62225c", '"\\'),
         ("62c3bc", "\u00fc"),
         ("63e6b0b4", "\u6c34"),
-        ("7a00010001" + "61" * 65535 + "c3b6", "a" * 65535 + "ö"),
+        pytest.param("7a00010001" + "61" * 65535 + "c3b6", "a" * 65535 + "ö", id="split_unicode"),
     ],
 )
 def test_string(impl, payload, expected):
