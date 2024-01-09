@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import struct
 import sys
+from codecs import getincrementaldecoder
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
@@ -31,6 +32,7 @@ T = TypeVar("T")
 timestamp_re = re.compile(
     r"^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)" r"(?:\.(\d{1,6})\d*)?(?:Z|([+-])(\d\d):(\d\d))$"
 )
+incremental_utf8_decoder = getincrementaldecoder("utf-8")
 
 
 class CBORDecoder:
@@ -305,8 +307,19 @@ class CBORDecoder:
         else:
             if length > sys.maxsize:
                 raise CBORDecodeValueError("invalid length for bytestring 0x%x" % length)
+            elif length <= 65536:
+                result = self.read(length)
+            else:
+                # Read large bytestrings 65536 (2 ** 16) bytes at a time
+                left = length
+                buffer = bytearray()
+                while left:
+                    chunk_size = min(left, 65536)
+                    buffer.extend(self.read(chunk_size))
+                    left -= chunk_size
 
-            result = self.read(length)
+                result = bytes(buffer)
+
             self._stringref_namespace_add(result, length)
 
         return self.set_shareable(result)
@@ -350,7 +363,19 @@ class CBORDecoder:
             if length > sys.maxsize:
                 raise CBORDecodeValueError("invalid length for string 0x%x" % length)
 
-            result = self.read(length).decode("utf-8", self._str_errors)
+            if length <= 65536:
+                result = self.read(length).decode("utf-8", self._str_errors)
+            else:
+                # Read and decode large text strings 65536 (2 ** 16) bytes at a time
+                codec = incremental_utf8_decoder(self._str_errors)
+                left = length
+                result = ""
+                while left:
+                    chunk_size = min(left, 65536)
+                    final = left <= chunk_size
+                    result += codec.decode(self.read(chunk_size), final)
+                    left -= chunk_size
+
             self._stringref_namespace_add(result, length)
 
         return self.set_shareable(result)

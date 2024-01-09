@@ -11,6 +11,8 @@ from email.message import Message
 from fractions import Fraction
 from io import BytesIO
 from ipaddress import ip_address, ip_network
+from pathlib import Path
+from typing import Type, cast
 from uuid import UUID
 
 import pytest
@@ -228,6 +230,7 @@ def test_binary(impl, payload, expected):
         ("62225c", '"\\'),
         ("62c3bc", "\u00fc"),
         ("63e6b0b4", "\u6c34"),
+        ("7a00010001" + "61" * 65535 + "c3b6", "a" * 65535 + "ö"),
     ],
 )
 def test_string(impl, payload, expected):
@@ -859,18 +862,6 @@ def test_decimal_payload_unpacking(impl, data, expected):
             "premature end of stream",
             id="unicode",
         ),
-        pytest.param(
-            unhexlify("5b7fffffffffffff00"),
-            "CBORDecodeEOF",
-            "premature end of stream",
-            id="oversized_bytestring",
-        ),
-        pytest.param(
-            unhexlify("7b7fffffffffffff00"),
-            "CBORDecodeEOF",
-            "premature end of stream",
-            id="oversized_string",
-        ),
     ],
 )
 def test_invalid_data(
@@ -881,3 +872,25 @@ def test_invalid_data(
 
     with pytest.raises(exception, match=pattern):
         impl.loads(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(
+            unhexlify("5b7fffffffffffff00"),
+            id="bytestring",
+        ),
+        pytest.param(
+            unhexlify("7b7fffffffffffff00"),
+            id="unicode",
+        ),
+    ],
+)
+def test_oversized_read(impl, payload: bytes, tmp_path: Path) -> None:
+    CBORDecodeEOF = cast(Type[Exception], getattr(impl, "CBORDecodeEOF"))
+    with pytest.raises(CBORDecodeEOF, match="premature end of stream"):
+        dummy_path = tmp_path / "testdata"
+        dummy_path.write_bytes(payload)
+        with dummy_path.open("rb") as f:
+            impl.load(f)
