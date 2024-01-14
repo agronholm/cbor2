@@ -191,7 +191,7 @@ CBORTag_hash(CBORTagObject *self)
 
     // Check how many more references there are in running_hashes
     Py_ssize_t length = PySequence_Length(running_hashes);
-    if (length == 1) {
+    if (length == -1) {
         ret = -1;
         goto exit;
     }
