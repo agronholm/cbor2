@@ -625,8 +625,8 @@ class CBORDecoder:
 
         try:
             value = Fraction(*self._decode())
-        except TypeError as exc:
-            raise CBORDecodeValueError("error decoding fractional value") from exc
+        except (TypeError, ZeroDivisionError) as exc:
+            raise CBORDecodeValueError("error decoding rational value") from exc
 
         return self.set_shareable(value)
 

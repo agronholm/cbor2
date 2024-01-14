@@ -20,8 +20,8 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   large) are being decoded
 - Fixed ``UnicodeDecodeError`` from failed parsing of a UTF-8 text string not being wrapped as
   ``CBORDecodeValueError``
-- Fixed ``TypeError`` from a failed decoding of ``Fraction`` not being wrapped as
-  ``CBORDecodeValueError``
+- Fixed ``TypeError`` or ``ZeroDivisionError`` from a failed decoding of ``Fraction`` not being
+  wrapped as ``CBORDecodeValueError``
 
 **5.5.1** (2023-11-02)
 

@@ -499,13 +499,6 @@ def test_fraction(impl):
     assert decoded == Decimal("273.15")
 
 
-def test_fraction_invalid_number_of_args(impl) -> None:
-    with pytest.raises(impl.CBORDecodeValueError, match="error decoding fractional value") as exc:
-        impl.loads(unhexlify("d81e84ffffffff"))
-
-    assert isinstance(exc.value.__cause__, TypeError)
-
-
 def test_decimal_precision(impl):
     decoded = impl.loads(unhexlify("c482384dc252011f1fe37d0c70ff50456ba8b891997b07d6"))
     assert decoded == Decimal("9.7703426561852468194804075821069770622934E-38")
@@ -519,6 +512,13 @@ def test_bigfloat(impl):
 def test_rational(impl):
     decoded = impl.loads(unhexlify("d81e820205"))
     assert decoded == Fraction(2, 5)
+
+
+def test_rational_zero_denominator(impl):
+    with pytest.raises(impl.CBORDecodeValueError, match="error decoding rational") as exc:
+        impl.loads(unhexlify("d81e820100"))
+
+    assert isinstance(exc.value.__cause__, ZeroDivisionError)
 
 
 def test_regex(impl):

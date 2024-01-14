@@ -1645,8 +1645,11 @@ CBORDecoder_decode_rational(CBORDecoderObject *self)
         if (PyTuple_CheckExact(tuple)) {
             ret = PyObject_Call(_CBOR2_Fraction, tuple, NULL);
             set_shareable(self, ret);
-            if (!ret && PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_TypeError))
-                raise_from(_CBOR2_CBORDecodeValueError, "error decoding fractional value");
+            if (!ret && (
+                PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_TypeError)
+                || PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_ZeroDivisionError)
+            ))
+                raise_from(_CBOR2_CBORDecodeValueError, "error decoding rational value");
         }
         Py_DECREF(tuple);
     }
