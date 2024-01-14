@@ -348,6 +348,32 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
 
 // Utility functions /////////////////////////////////////////////////////////
 
+static int
+raise_from(const PyObject *new_exc_type, const char *message) {
+    // This requires the error indicator to be set
+    PyObject *cause;
+#if PY_VERSION_HEX >= 0x030c0000
+    cause = PyErr_GetRaisedException();
+#else
+    PyObject *exc_type, *exc_traceback;
+    PyErr_Fetch(&exc_type, &cause, &exc_traceback);
+    PyErr_NormalizeException(&exc_type, &cause, &exc_traceback);
+    Py_XDECREF(exc_type);
+    Py_XDECREF(exc_traceback);
+#endif
+
+    PyObject *msg_obj = PyUnicode_FromString(message);
+    if (message) {
+        PyObject *new_exception = PyObject_CallFunctionObjArgs(
+            new_exc_type, msg_obj, NULL);
+        if (new_exception) {
+            PyException_SetCause(new_exception, cause);
+            PyErr_SetObject(new_exc_type, new_exception);
+        }
+        Py_DECREF(msg_obj);
+    }
+}
+
 static PyObject *
 fp_read_object(CBORDecoderObject *self, const Py_ssize_t size)
 {
@@ -877,9 +903,10 @@ decode_string(CBORDecoderObject *self, uint8_t subtype)
     else
         ret = decode_definite_long_string(self, (Py_ssize_t)length);
 
-    if (ret)
-        set_shareable(self, ret);
+    if (!ret && PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_UnicodeDecodeError))
+        raise_from(_CBOR2_CBORDecodeValueError, "error decoding unicode string");
 
+    set_shareable(self, ret);
     return ret;
 }
 
@@ -1617,9 +1644,9 @@ CBORDecoder_decode_rational(CBORDecoderObject *self)
     if (tuple) {
         if (PyTuple_CheckExact(tuple)) {
             ret = PyObject_Call(_CBOR2_Fraction, tuple, NULL);
-            if (ret) {
-                set_shareable(self, ret);
-            }
+            set_shareable(self, ret);
+            if (!ret && PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_TypeError))
+                raise_from(_CBOR2_CBORDecodeValueError, "error decoding fractional value");
         }
         Py_DECREF(tuple);
     }

@@ -355,7 +355,11 @@ class CBORDecoder:
                             "invalid length for indefinite string chunk 0x%x" % length
                         )
 
-                    value = self.read(length).decode("utf-8", self._str_errors)
+                    try:
+                        value = self.read(length).decode("utf-8", self._str_errors)
+                    except UnicodeDecodeError as exc:
+                        raise CBORDecodeValueError("error decoding unicode string") from exc
+
                     buf.append(value)
                 else:
                     raise CBORDecodeValueError("non-string found in indefinite length string")
@@ -364,7 +368,10 @@ class CBORDecoder:
                 raise CBORDecodeValueError("invalid length for string 0x%x" % length)
 
             if length <= 65536:
-                result = self.read(length).decode("utf-8", self._str_errors)
+                try:
+                    result = self.read(length).decode("utf-8", self._str_errors)
+                except UnicodeDecodeError as exc:
+                    raise CBORDecodeValueError("error decoding unicode string") from exc
             else:
                 # Read and decode large text strings 65536 (2 ** 16) bytes at a time
                 codec = incremental_utf8_decoder(self._str_errors)
@@ -373,7 +380,11 @@ class CBORDecoder:
                 while left:
                     chunk_size = min(left, 65536)
                     final = left <= chunk_size
-                    result += codec.decode(self.read(chunk_size), final)
+                    try:
+                        result += codec.decode(self.read(chunk_size), final)
+                    except UnicodeDecodeError as exc:
+                        raise CBORDecodeValueError("error decoding unicode string") from exc
+
                     left -= chunk_size
 
             self._stringref_namespace_add(result, length)
@@ -612,7 +623,12 @@ class CBORDecoder:
         # Semantic tag 30
         from fractions import Fraction
 
-        return self.set_shareable(Fraction(*self._decode()))
+        try:
+            value = Fraction(*self._decode())
+        except TypeError as exc:
+            raise CBORDecodeValueError("error decoding fractional value") from exc
+
+        return self.set_shareable(value)
 
     def decode_regexp(self) -> re.Pattern[str]:
         # Semantic tag 35

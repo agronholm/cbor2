@@ -239,6 +239,26 @@ def test_string(impl, payload, expected):
 
 
 @pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param("6198", id="short"),
+        pytest.param("7a00010000" + "61" * 65535 + "c3", id="long"),
+        pytest.param("7f6198ff", id="indefinite"),
+    ],
+)
+def test_string_invalid_utf8(impl, payload: str) -> None:
+    with pytest.raises(impl.CBORDecodeValueError, match="error decoding unicode string") as exc:
+        impl.loads(unhexlify(payload))
+
+    assert isinstance(exc.value.__cause__, UnicodeDecodeError)
+
+
+def test_string_oversized(impl) -> None:
+    with pytest.raises(impl.CBORDecodeEOF, match="premature end of stream"):
+        (impl.loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799")),)
+
+
+@pytest.mark.parametrize(
     "payload, expected",
     [
         ("80", []),
@@ -477,6 +497,13 @@ def test_negative_bignum(impl):
 def test_fraction(impl):
     decoded = impl.loads(unhexlify("c48221196ab3"))
     assert decoded == Decimal("273.15")
+
+
+def test_fraction_invalid_number_of_args(impl) -> None:
+    with pytest.raises(impl.CBORDecodeValueError, match="error decoding fractional value") as exc:
+        impl.loads(unhexlify("d81e84ffffffff"))
+
+    assert isinstance(exc.value.__cause__, TypeError)
 
 
 def test_decimal_precision(impl):
@@ -845,33 +872,6 @@ def test_decimal_payload_unpacking(impl, data, expected):
     with pytest.raises(impl.CBORDecodeValueError) as exc_info:
         impl.loads(unhexlify(data))
     assert exc_info.value.args[0] == f"Incorrect tag {expected} payload"
-
-
-@pytest.mark.parametrize(
-    "payload, exception, pattern",
-    [
-        pytest.param(
-            unhexlify("d81e84ffffffff"),
-            TypeError,
-            r"__new__\(\) takes from 1 to 3 positional arguments but 5 were given",
-            id="fractional",
-        ),
-        pytest.param(
-            unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799"),
-            "CBORDecodeEOF",
-            "premature end of stream",
-            id="unicode",
-        ),
-    ],
-)
-def test_invalid_data(
-    impl, payload: bytes, exception: type[Exception] | str, pattern: str
-) -> None:
-    if isinstance(exception, str):
-        exception = getattr(impl, exception)
-
-    with pytest.raises(exception, match=pattern):
-        impl.loads(payload)
 
 
 @pytest.mark.parametrize(

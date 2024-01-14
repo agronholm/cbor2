@@ -18,6 +18,10 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   itself
 - Fixed ``MemoryError`` when maliciously constructed bytestrings or string (declared to be absurdly
   large) are being decoded
+- Fixed ``UnicodeDecodeError`` from failed parsing of a UTF-8 text string not being wrapped as
+  ``CBORDecodeValueError``
+- Fixed ``TypeError`` from a failed decoding of ``Fraction`` not being wrapped as
+  ``CBORDecodeValueError``
 
 **5.5.1** (2023-11-02)
 
