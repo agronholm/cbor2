@@ -9,6 +9,8 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
 - Added the ``cbor2`` command line tool (for ``pipx run cbor2``)
 - Added support for native date encoding (bschoenmaeckers)
+- Made the C extension mandatory when the environment variable ``CBOR2_BUILD_C_EXTENSION`` is set
+  to ``1``.
 - Fixed ``SystemError`` in the C extension when decoding a ``Fractional`` with a bad
   number of arguments
 - Fixed ``SystemError`` in the C extension when the decoder object hook raises an
@@ -22,6 +24,10 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   ``CBORDecodeValueError``
 - Fixed ``TypeError`` or ``ZeroDivisionError`` from a failed decoding of ``Fraction`` not being
   wrapped as ``CBORDecodeValueError``
+- Fixed ``TypeError`` or ``ValueError`` from a failed decoding of ``UUID`` not being wrapped as
+  ``CBORDecodeValueError``
+- Fixed ``TypeError`` from a failed decoding of ``MIMEMessage`` not being wrapped as
+  ``CBORDecodeValueError``
 
 **5.5.1** (2023-11-02)
 

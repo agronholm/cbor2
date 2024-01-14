@@ -30,8 +30,10 @@ def check_libc():
 cpython = platform.python_implementation() == "CPython"
 windows = sys.platform.startswith("win")
 use_c_ext = os.environ.get("CBOR2_BUILD_C_EXTENSION", None)
+optional = True
 if use_c_ext == "1":
     build_c_ext = True
+    optional = False
 elif use_c_ext == "0":
     build_c_ext = False
 else:
@@ -57,7 +59,7 @@ if build_c_ext:
             "source/tags.c",
             "source/halffloat.c",
         ],
-        # optional=True,
+        optional=optional,
     )
     kwargs = {"ext_modules": [_cbor2]}
 else:
