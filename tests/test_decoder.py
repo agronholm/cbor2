@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 import re
 import struct
@@ -9,6 +11,8 @@ from email.message import Message
 from fractions import Fraction
 from io import BytesIO
 from ipaddress import ip_address, ip_network
+from pathlib import Path
+from typing import Type, cast
 from uuid import UUID
 
 import pytest
@@ -226,6 +230,7 @@ def test_binary(impl, payload, expected):
         ("62225c", '"\\'),
         ("62c3bc", "\u00fc"),
         ("63e6b0b4", "\u6c34"),
+        pytest.param("7a00010001" + "61" * 65535 + "c3b6", "a" * 65535 + "ö", id="split_unicode"),
     ],
 )
 def test_string(impl, payload, expected):
@@ -846,20 +851,46 @@ def test_decimal_payload_unpacking(impl, data, expected):
     "payload, exception, pattern",
     [
         pytest.param(
-            b"\xd8\x1e\x84\xff\xff\xff\xff",
+            unhexlify("d81e84ffffffff"),
             TypeError,
             r"__new__\(\) takes from 1 to 3 positional arguments but 5 were given",
             id="fractional",
         ),
         pytest.param(
-            b"\xae\xae\xae\xae\xae\xae\xae\xae\xae\x01\x08\xc2\x98C\xd9\x01\x00\xd8$"
-            b"\x9f\x00\x00\xae\xae\xff\xc2l\xa7\x99",
-            Exception,
+            unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799"),
+            "CBORDecodeEOF",
             "premature end of stream",
             id="unicode",
         ),
     ],
 )
-def test_invalid_data(impl, payload, exception, pattern) -> None:
+def test_invalid_data(
+    impl, payload: bytes, exception: type[Exception] | str, pattern: str
+) -> None:
+    if isinstance(exception, str):
+        exception = getattr(impl, exception)
+
     with pytest.raises(exception, match=pattern):
         impl.loads(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(
+            unhexlify("5b7fffffffffffff00"),
+            id="bytestring",
+        ),
+        pytest.param(
+            unhexlify("7b7fffffffffffff00"),
+            id="unicode",
+        ),
+    ],
+)
+def test_oversized_read(impl, payload: bytes, tmp_path: Path) -> None:
+    CBORDecodeEOF = cast(Type[Exception], getattr(impl, "CBORDecodeEOF"))
+    with pytest.raises(CBORDecodeEOF, match="premature end of stream"):
+        dummy_path = tmp_path / "testdata"
+        dummy_path.write_bytes(payload)
+        with dummy_path.open("rb") as f:
+            impl.load(f)

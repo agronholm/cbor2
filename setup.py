@@ -57,7 +57,7 @@ if build_c_ext:
             "source/tags.c",
             "source/halffloat.c",
         ],
-        optional=True,
+        # optional=True,
     )
     kwargs = {"ext_modules": [_cbor2]}
 else:

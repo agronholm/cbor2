@@ -348,31 +348,44 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
 
 // Utility functions /////////////////////////////////////////////////////////
 
-static int
-fp_read(CBORDecoderObject *self, char *buf, const Py_ssize_t size)
+static PyObject *
+fp_read_object(CBORDecoderObject *self, const Py_ssize_t size)
 {
+    PyObject *ret = NULL;
     PyObject *obj, *size_obj;
-    char *data;
-    int ret = -1;
-
     size_obj = PyLong_FromSsize_t(size);
     if (size_obj) {
         obj = PyObject_CallFunctionObjArgs(self->read, size_obj, NULL);
+        Py_DECREF(size_obj);
         if (obj) {
             assert(PyBytes_CheckExact(obj));
             if (PyBytes_GET_SIZE(obj) == (Py_ssize_t) size) {
-                data = PyBytes_AS_STRING(obj);
-                memcpy(buf, data, size);
-                ret = 0;
+                ret = obj;
             } else {
+                Py_DECREF(obj);
                 PyErr_Format(
                     _CBOR2_CBORDecodeEOF,
                     "premature end of stream (expected to read %zd bytes, "
                     "got %zd instead)", size, PyBytes_GET_SIZE(obj));
             }
-            Py_DECREF(obj);
         }
-        Py_DECREF(size_obj);
+    }
+    return ret;
+}
+
+
+static int
+fp_read(CBORDecoderObject *self, char *buf, const Py_ssize_t size)
+{
+    int ret = -1;
+    PyObject *obj = fp_read_object(self, size);
+    if (obj) {
+        char *data = PyBytes_AS_STRING(obj);
+        if (data) {
+            memcpy(buf, data, size);
+            ret = 0;
+        }
+        Py_DECREF(obj);
     }
     return ret;
 }
@@ -538,20 +551,65 @@ decode_negint(CBORDecoderObject *self, uint8_t subtype)
 
 
 static PyObject *
-decode_definite_bytestring(CBORDecoderObject *self, Py_ssize_t length)
+decode_definite_short_bytestring(CBORDecoderObject *self, Py_ssize_t length)
 {
-    PyObject *ret = NULL;
-
-    ret = PyBytes_FromStringAndSize(NULL, length);
+    PyObject *ret = fp_read_object(self, length);
     if (!ret)
         return NULL;
-    if (fp_read(self, PyBytes_AS_STRING(ret), length) == -1) {
-        Py_DECREF(ret);
-        return NULL;
-    }
+
     if (string_namespace_add(self, ret, length) == -1) {
         Py_DECREF(ret);
         return NULL;
+    }
+    return ret;
+}
+
+
+static PyObject *
+decode_definite_long_bytestring(CBORDecoderObject *self, Py_ssize_t length)
+{
+    PyObject *buffer = NULL;
+    Py_ssize_t left = length;
+    while (left) {
+        Py_ssize_t chunk_length = length <= 65536 ? length : 65536;
+        PyObject *chunk = fp_read_object(self, chunk_length);
+        if (!chunk) {
+            break;
+        }
+
+        if (!PyBytes_CheckExact(chunk)) {
+            Py_DECREF(chunk);
+            break;
+        }
+
+        if (buffer) {
+            PyObject *new_buffer = PyByteArray_Concat(buffer, chunk);
+            Py_DECREF(chunk);
+            if (!new_buffer)
+                break;
+
+            if (new_buffer != buffer) {
+                Py_DECREF(buffer);
+                buffer = new_buffer;
+            }
+        } else {
+            buffer = PyByteArray_FromObject(chunk);
+            Py_DECREF(chunk);
+            if (!buffer)
+                break;
+        }
+        left -= chunk_length;
+    }
+
+    PyObject *ret = NULL;
+    if (buffer) {
+        ret = PyBytes_FromObject(buffer);
+        Py_DECREF(buffer);
+
+        if (ret && string_namespace_add(self, ret, length) == -1) {
+            Py_DECREF(ret);
+            ret = NULL;
+        }
     }
     return ret;
 }
@@ -615,9 +673,14 @@ decode_bytestring(CBORDecoderObject *self, uint8_t subtype)
     }
     if (indefinite)
         ret = decode_indefinite_bytestrings(self);
+    else if (length <= 65536)
+        ret = decode_definite_short_bytestring(self, (Py_ssize_t)length);
     else
-        ret = decode_definite_bytestring(self, (Py_ssize_t)length);
-    set_shareable(self, ret);
+        ret = decode_definite_long_bytestring(self, (Py_ssize_t)length);
+
+    if (ret)
+        set_shareable(self, ret);
+
     return ret;
 }
 
@@ -637,28 +700,118 @@ decode_bytestring(CBORDecoderObject *self, uint8_t subtype)
 
 
 static PyObject *
-decode_definite_string(CBORDecoderObject *self, Py_ssize_t length)
+decode_definite_short_string(CBORDecoderObject *self, Py_ssize_t length)
 {
-    PyObject *ret = NULL;
-    char *buf;
-
-    buf = PyMem_Malloc(length);
-    if (!buf)
-        return PyErr_NoMemory();
-
-    if (fp_read(self, buf, length) == 0)
-        ret = PyUnicode_DecodeUTF8(
-                buf, length, PyBytes_AS_STRING(self->str_errors));
-    PyMem_Free(buf);
-
-    if (!ret)
+    PyObject *bytes_obj = fp_read_object(self, length);
+    if (!bytes_obj)
         return NULL;
 
-    if (string_namespace_add(self, ret, length) == -1) {
+    const char *bytes = PyBytes_AS_STRING(bytes_obj);
+    PyObject *ret = PyUnicode_FromStringAndSize(bytes, length);
+    Py_DECREF(bytes_obj);
+    if (ret && string_namespace_add(self, ret, length) == -1) {
         Py_DECREF(ret);
         return NULL;
     }
     return ret;
+}
+
+
+static PyObject *
+decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
+{
+    PyObject *ret = NULL, *chunk = NULL, *string = NULL;
+    Py_ssize_t left = length;
+    Py_ssize_t consumed;
+    Py_ssize_t buffer_size = 0;  // how many bytes are allocated for the buffer
+    Py_ssize_t buffer_length = 0;  // how many bytes are actually stored in the buffer
+    char *buffer = NULL;
+    while (left) {
+        // Read up to 65536 bytes of data from the stream
+        Py_ssize_t chunk_length = 65536 - buffer_size;
+        if (left < chunk_length)
+            chunk_length = left;
+
+        PyObject *chunk = fp_read_object(self, chunk_length);
+        left -= chunk_length;
+        if (!chunk)
+            goto error;
+
+        // Get the internal buffer of the bytes object
+        char *bytes_buffer = PyBytes_AsString(chunk);
+        if (!bytes_buffer)
+            goto error;
+
+        char *source_buffer;
+        if (buffer) {
+            // Grow the buffer to accommodate the previous data plus the new chunk
+            if (buffer_length + chunk_length > buffer_size) {
+                buffer_size = buffer_length + chunk_length;
+                char *new_buffer = PyMem_Realloc(buffer, buffer_size);
+                if (!new_buffer)
+                    goto error;
+
+                buffer = new_buffer;
+            }
+
+            // Concatenate the chunk into the buffer
+            memcpy(buffer + buffer_length, bytes_buffer, chunk_length);
+            buffer_length += chunk_length;
+
+            source_buffer = buffer;
+            chunk_length = buffer_length;
+        } else {
+            // Use the chunk's internal buffer directly to decode as many characters as possible
+            source_buffer = bytes_buffer;
+        }
+
+        string = PyUnicode_DecodeUTF8Stateful(source_buffer, chunk_length, NULL, &consumed);
+        if (!string)
+            goto error;
+
+        if (ret) {
+            // Concatenate the result to the existing result
+            PyObject *joined = PyUnicode_Concat(ret, string);
+            if (!joined)
+                goto error;
+
+            Py_DECREF(string);
+            string = NULL;
+            ret = joined;
+        } else {
+            // Set the result to the decoded string
+            ret = string;
+        }
+
+        Py_ssize_t unconsumed = chunk_length - consumed;
+        if (consumed != chunk_length) {
+            if (buffer) {
+                // Move the unconsumed bytes to the start of the buffer
+                memmove(buffer, buffer + consumed, unconsumed);
+            } else {
+                // Create a new buffer
+                buffer = PyMem_Malloc(unconsumed);
+                if (!buffer)
+                    goto error;
+
+                memcpy(buffer, bytes_buffer + consumed, unconsumed);
+            }
+            buffer_length = unconsumed;
+        }
+    }
+
+    if (ret && string_namespace_add(self, ret, length) == -1)
+        goto error;
+
+    return ret;
+error:
+    Py_XDECREF(ret);
+    Py_XDECREF(chunk);
+    Py_XDECREF(string);
+    if (buffer)
+        PyMem_Free(buffer);
+
+    return NULL;
 }
 
 
@@ -719,9 +872,14 @@ decode_string(CBORDecoderObject *self, uint8_t subtype)
     }
     if (indefinite)
         ret = decode_indefinite_strings(self);
+    else if (length <= 65536)
+        ret = decode_definite_short_string(self, (Py_ssize_t)length);
     else
-        ret = decode_definite_string(self, (Py_ssize_t)length);
-    set_shareable(self, ret);
+        ret = decode_definite_long_string(self, (Py_ssize_t)length);
+
+    if (ret)
+        set_shareable(self, ret);
+
     return ret;
 }
 

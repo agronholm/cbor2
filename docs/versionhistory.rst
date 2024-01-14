@@ -8,6 +8,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 **UNRELEASED**
 
 - Added the ``cbor2`` command line tool (for ``pipx run cbor2``)
+- Added support for native date encoding (bschoenmaeckers)
 - Fixed ``SystemError`` in the C extension when decoding a ``Fractional`` with a bad
   number of arguments
 - Fixed ``SystemError`` in the C extension when the decoder object hook raises an
@@ -15,7 +16,8 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 - Fixed a segmentation fault when decoding invalid unicode data
 - Fixed infinite recursion when trying to hash a CBOR tag whose value points to the tag
   itself
-- Added support for native date encoding (bschoenmaeckers)
+- Fixed ``MemoryError`` when maliciously constructed bytestrings or string (declared to be absurdly
+  large) are being decoded
 
 **5.5.1** (2023-11-02)
 
