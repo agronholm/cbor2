@@ -42,7 +42,7 @@ else:
         import _cbor2
 
         from ._encoder import canonical_encoders, default_encoders
-        from ._types import CBORSimpleValue, CBORTag, undefined  # noqa: F811
+        from ._types import CBORSimpleValue, CBORTag, undefined
 
         _cbor2.default_encoders = OrderedDict(
             [
