@@ -480,27 +480,43 @@ error:
 int
 _CBOR2_init_re_compile(void)
 {
-    PyObject *re;
+    PyObject *re = NULL;
 
     // import re
     // datestr_re = re.compile("long-date-time-regex...")
     re = PyImport_ImportModule("re");
     if (!re)
         goto error;
+
     _CBOR2_re_compile = PyObject_GetAttr(re, _CBOR2_str_compile);
-    Py_DECREF(re);
     if (!_CBOR2_re_compile)
         goto error;
+
+    _CBOR2_re_error = PyObject_GetAttrString(re, "error");
+    if (!_CBOR2_re_error) {
+        Py_DECREF(_CBOR2_re_compile);
+        _CBOR2_re_compile = NULL;
+        goto error;
+    }
+
     _CBOR2_datetimestr_re = PyObject_CallFunctionObjArgs(
             _CBOR2_re_compile, _CBOR2_str_datetimestr_re, NULL);
     if (!_CBOR2_datetimestr_re)
         goto error;
+
     _CBOR2_datestr_re = PyObject_CallFunctionObjArgs(
             _CBOR2_re_compile, _CBOR2_str_datestr_re, NULL);
     if (!_CBOR2_datestr_re)
         goto error;
+
+    _CBOR2_datestr_re = PyObject_CallFunctionObjArgs(
+            _CBOR2_re_compile, _CBOR2_str_datestr_re, NULL);
+    if (!_CBOR2_datestr_re)
+        goto error;
+
     return 0;
 error:
+    Py_XDECREF(re);
     PyErr_SetString(PyExc_ImportError, "unable to import compile from re");
     return -1;
 }
@@ -667,6 +683,7 @@ PyObject *_CBOR2_FrozenDict = NULL;
 PyObject *_CBOR2_UUID = NULL;
 PyObject *_CBOR2_Parser = NULL;
 PyObject *_CBOR2_re_compile = NULL;
+PyObject *_CBOR2_re_error = NULL;
 PyObject *_CBOR2_datetimestr_re = NULL;
 PyObject *_CBOR2_datestr_re = NULL;
 PyObject *_CBOR2_ip_address = NULL;

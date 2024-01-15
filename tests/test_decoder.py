@@ -527,6 +527,15 @@ def test_regex(impl):
     assert decoded == expr
 
 
+def test_regex_unbalanced_parentheses(impl):
+    with pytest.raises(
+        impl.CBORDecodeValueError, match="error decoding regular expression"
+    ) as exc:
+        impl.loads(unhexlify("d8236c68656c6c6f2028776f726c64"))
+
+    assert isinstance(exc.value.__cause__, re.error)
+
+
 def test_mime(impl):
     decoded = impl.loads(
         unhexlify(
@@ -540,9 +549,30 @@ def test_mime(impl):
     assert decoded.get_payload() == "Hello =A4uro"
 
 
+def test_mime_invalid_type(impl):
+    with pytest.raises(impl.CBORDecodeValueError, match="error decoding MIME message") as exc:
+        impl.loads(unhexlify("d82401"))
+
+    assert isinstance(exc.value.__cause__, TypeError)
+
+
 def test_uuid(impl):
     decoded = impl.loads(unhexlify("d825505eaffac8b51e480581277fdcc7842faf"))
     assert decoded == UUID(hex="5eaffac8b51e480581277fdcc7842faf")
+
+
+def test_uuid_invalid_length(impl):
+    with pytest.raises(impl.CBORDecodeValueError, match="error decoding UUID value") as exc:
+        impl.loads(unhexlify("d8254f5eaffac8b51e480581277fdcc7842f"))
+
+    assert isinstance(exc.value.__cause__, ValueError)
+
+
+def test_uuid_invalid_type(impl):
+    with pytest.raises(impl.CBORDecodeValueError, match="error decoding UUID value") as exc:
+        impl.loads(unhexlify("d82501"))
+
+    assert isinstance(exc.value.__cause__, TypeError)
 
 
 @pytest.mark.parametrize(

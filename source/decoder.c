@@ -1670,6 +1670,8 @@ CBORDecoder_decode_regexp(CBORDecoderObject *self)
     if (pattern) {
         ret = PyObject_CallFunctionObjArgs(_CBOR2_re_compile, pattern, NULL);
         Py_DECREF(pattern);
+        if (!ret && PyErr_GivenExceptionMatches(PyErr_Occurred(), _CBOR2_re_error))
+            raise_from(_CBOR2_CBORDecodeValueError, "error decoding regular expression");
     }
     set_shareable(self, ret);
     return ret;
@@ -1692,6 +1694,8 @@ CBORDecoder_decode_mime(CBORDecoderObject *self)
             ret = PyObject_CallMethodObjArgs(parser,
                     _CBOR2_str_parsestr, value, NULL);
             Py_DECREF(parser);
+            if (!ret && PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_TypeError))
+                raise_from(_CBOR2_CBORDecodeValueError, "error decoding MIME message");
         }
         Py_DECREF(value);
     }
@@ -1713,6 +1717,11 @@ CBORDecoder_decode_uuid(CBORDecoderObject *self)
     if (bytes) {
         ret = PyObject_CallFunctionObjArgs(_CBOR2_UUID, Py_None, bytes, NULL);
         Py_DECREF(bytes);
+        if (!ret && (
+            PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_TypeError)
+            || PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_ValueError)
+        ))
+            raise_from(_CBOR2_CBORDecodeValueError, "error decoding UUID value");
     }
     set_shareable(self, ret);
     return ret;

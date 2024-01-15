@@ -632,19 +632,34 @@ class CBORDecoder:
 
     def decode_regexp(self) -> re.Pattern[str]:
         # Semantic tag 35
-        return self.set_shareable(re.compile(self._decode()))
+        try:
+            value = re.compile(self._decode())
+        except re.error as exc:
+            raise CBORDecodeValueError("error decoding regular expression") from exc
+
+        return self.set_shareable(value)
 
     def decode_mime(self) -> Message:
         # Semantic tag 36
         from email.parser import Parser
 
-        return self.set_shareable(Parser().parsestr(self._decode()))
+        try:
+            value = Parser().parsestr(self._decode())
+        except TypeError as exc:
+            raise CBORDecodeValueError("error decoding MIME message") from exc
+
+        return self.set_shareable(value)
 
     def decode_uuid(self) -> UUID:
         # Semantic tag 37
         from uuid import UUID
 
-        return self.set_shareable(UUID(bytes=self._decode()))
+        try:
+            value = UUID(bytes=self._decode())
+        except (TypeError, ValueError) as exc:
+            raise CBORDecodeValueError("error decoding UUID value") from exc
+
+        return self.set_shareable(value)
 
     def decode_stringref_namespace(self) -> Any:
         # Semantic tag 256
