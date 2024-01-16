@@ -1406,6 +1406,7 @@ CBORDecoder_decode_epoch_datetime(CBORDecoderObject *self)
                 if (!ret && (
                     PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_OverflowError)
                     || PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_OSError)
+                    || PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_ValueError)
                 ))
                     raise_from(_CBOR2_CBORDecodeValueError, "error decoding datetime from epoch");
             }

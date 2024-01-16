@@ -28,8 +28,8 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   ``CBORDecodeValueError``
 - Fixed ``TypeError`` from a failed decoding of ``MIMEMessage`` not being wrapped as
   ``CBORDecodeValueError``
-- Fixed ``OverflowError`` or ``OSError`` from a failed decoding of epoch-based ``datetime`` not
-  being wrapped as ``CBORDecodeValueError``
+- Fixed ``OverflowError``, ``OSError`` or ``ValueError`` from a failed decoding of epoch-based
+  ``datetime`` not being wrapped as ``CBORDecodeValueError``
 
 **5.5.1** (2023-11-02)
 

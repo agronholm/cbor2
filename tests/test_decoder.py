@@ -486,6 +486,13 @@ def test_datetime_value_too_large(impl):
     assert isinstance(excinfo.value.__cause__, OSError)
 
 
+def test_datetime_date_out_of_range(impl):
+    with pytest.raises(impl.CBORDecodeError) as excinfo:
+        impl.loads(unhexlify("a6c11b00002401001b000000000000ff00"))
+
+    assert isinstance(excinfo.value.__cause__, ValueError)
+
+
 def test_datetime_timezone(impl):
     decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59+00:30")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=30)))

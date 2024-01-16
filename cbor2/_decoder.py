@@ -548,7 +548,7 @@ class CBORDecoder:
 
         try:
             tmp = datetime.fromtimestamp(value, timezone.utc)
-        except (OverflowError, OSError) as exc:
+        except (OverflowError, OSError, ValueError) as exc:
             raise CBORDecodeValueError("error decoding datetime from epoch") from exc
 
         return self.set_shareable(tmp)
