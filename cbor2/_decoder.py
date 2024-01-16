@@ -545,7 +545,13 @@ class CBORDecoder:
     def decode_epoch_datetime(self) -> datetime:
         # Semantic tag 1
         value = self._decode()
-        return self.set_shareable(datetime.fromtimestamp(value, timezone.utc))
+
+        try:
+            tmp = datetime.fromtimestamp(value, timezone.utc)
+        except (OverflowError, OSError) as exc:
+            raise CBORDecodeValueError("error decoding datetime from epoch") from exc
+
+        return self.set_shareable(tmp)
 
     def decode_positive_bignum(self) -> int:
         # Semantic tag 2

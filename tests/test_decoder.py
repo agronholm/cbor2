@@ -472,6 +472,20 @@ def test_bad_datetime(impl):
     assert str(excinfo.value) == "invalid datetime string: '0000-123-01'"
 
 
+def test_datetime_overflow(impl):
+    with pytest.raises(impl.CBORDecodeError) as excinfo:
+        impl.loads(unhexlify("c11b9b9b9b0000000000"))
+
+    assert isinstance(excinfo.value.__cause__, OverflowError)
+
+
+def test_datetime_value_too_large(impl):
+    with pytest.raises(impl.CBORDecodeError) as excinfo:
+        impl.loads(unhexlify("c11b1616161616161616161616161616"))
+
+    assert isinstance(excinfo.value.__cause__, OSError)
+
+
 def test_datetime_timezone(impl):
     decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59+00:30")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=30)))
