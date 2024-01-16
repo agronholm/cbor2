@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import platform
 import re
 import struct
 import sys
@@ -490,7 +491,8 @@ def test_datetime_date_out_of_range(impl):
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(unhexlify("a6c11b00002401001b000000000000ff00"))
 
-    assert isinstance(excinfo.value.__cause__, ValueError)
+    cause_exc_class = OSError if platform.system() == "Windows" else ValueError
+    assert isinstance(excinfo.value.__cause__, cause_exc_class)
 
 
 def test_datetime_timezone(impl):
