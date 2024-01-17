@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.6.0** (2024-01-17)
 
 - Added the ``cbor2`` command line tool (for ``pipx run cbor2``)
 - Added support for native date encoding (bschoenmaeckers)
