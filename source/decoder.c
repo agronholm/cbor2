@@ -1655,7 +1655,12 @@ CBORDecoder_decode_rational(CBORDecoderObject *self)
                 PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_TypeError)
                 || PyErr_GivenExceptionMatches(PyErr_Occurred(), PyExc_ZeroDivisionError)
             ))
-                raise_from(_CBOR2_CBORDecodeValueError, "error decoding rational value");
+                raise_from(_CBOR2_CBORDecodeValueError, "error decoding rational");
+        } else {
+            PyErr_SetString(
+                _CBOR2_CBORDecodeValueError,
+                "error decoding rational: input value was not a tuple"
+            );
         }
         Py_DECREF(tuple);
     }

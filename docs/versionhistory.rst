@@ -12,7 +12,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 - Made the C extension mandatory when the environment variable ``CBOR2_BUILD_C_EXTENSION`` is set
   to ``1``.
 - Fixed ``SystemError`` in the C extension when decoding a ``Fractional`` with a bad
-  number of arguments
+  number of arguments or a non-tuple value
 - Fixed ``SystemError`` in the C extension when the decoder object hook raises an
   exception
 - Fixed a segmentation fault when decoding invalid unicode data

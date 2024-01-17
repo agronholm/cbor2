@@ -629,10 +629,16 @@ class CBORDecoder:
         # Semantic tag 30
         from fractions import Fraction
 
+        inputval = self._decode(immutable=True, unshared=True)
         try:
-            value = Fraction(*self._decode())
+            value = Fraction(*inputval)
         except (TypeError, ZeroDivisionError) as exc:
-            raise CBORDecodeValueError("error decoding rational value") from exc
+            if not isinstance(inputval, tuple):
+                raise CBORDecodeValueError(
+                    "error decoding rational: input value was not a tuple"
+                ) from None
+
+            raise CBORDecodeValueError("error decoding rational") from exc
 
         return self.set_shareable(value)
 

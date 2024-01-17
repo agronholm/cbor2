@@ -537,6 +537,13 @@ def test_rational(impl):
     assert decoded == Fraction(2, 5)
 
 
+def test_rational_invalid_iterable(impl):
+    with pytest.raises(
+        impl.CBORDecodeValueError, match="error decoding rational: input value was not a tuple"
+    ):
+        impl.loads(unhexlify("d81e01"))
+
+
 def test_rational_zero_denominator(impl):
     with pytest.raises(impl.CBORDecodeValueError, match="error decoding rational") as exc:
         impl.loads(unhexlify("d81e820100"))
