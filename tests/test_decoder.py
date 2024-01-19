@@ -16,10 +16,9 @@ from pathlib import Path
 from typing import Type, cast
 from uuid import UUID
 
-from hypothesis import given, example
-from hypothesis.strategies import binary
-
 import pytest
+from hypothesis import example, given
+from hypothesis.strategies import binary
 
 from cbor2 import FrozenDict
 
