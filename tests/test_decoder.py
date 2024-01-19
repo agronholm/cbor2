@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Type, cast
 from uuid import UUID
 
+from hypothesis import given, example
+from hypothesis.strategies import binary
+
 import pytest
 
 from cbor2 import FrozenDict
@@ -220,6 +223,12 @@ def test_special(impl, special_values):
 def test_binary(impl, payload, expected):
     decoded = impl.loads(unhexlify(payload))
     assert decoded == expected
+
+
+@given(binary(min_size=2**6, max_size=2**20))
+@example(b"\x12" * 65537)  # anything over 2**16 fails in C
+def test_binary_roundtrip(impl, expected):
+    assert expected == impl.loads(impl.dumps(expected)), "Binary string fails to round-trip"
 
 
 @pytest.mark.parametrize(
