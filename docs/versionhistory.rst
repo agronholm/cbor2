@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed use-after-free in the decoder's C version when prematurely encountering the end of stream
+
 **5.6.0** (2024-01-17)
 
 - Added the ``cbor2`` command line tool (for ``pipx run cbor2``)

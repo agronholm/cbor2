@@ -388,11 +388,11 @@ fp_read_object(CBORDecoderObject *self, const Py_ssize_t size)
             if (PyBytes_GET_SIZE(obj) == (Py_ssize_t) size) {
                 ret = obj;
             } else {
-                Py_DECREF(obj);
                 PyErr_Format(
                     _CBOR2_CBORDecodeEOF,
                     "premature end of stream (expected to read %zd bytes, "
                     "got %zd instead)", size, PyBytes_GET_SIZE(obj));
+                Py_DECREF(obj);
             }
         }
     }
