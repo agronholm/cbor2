@@ -6,11 +6,6 @@
 #include "encoder.h"
 #include "decoder.h"
 
-/*
- * TODO: remove me before merging PR https://github.com/agronholm/cbor2/pull/212.
- * This comment exists to force a change to a .c file, which the Action requires to run.
- */
-
 
 // Some notes on conventions in this code. All methods conform to a couple of
 // return styles:

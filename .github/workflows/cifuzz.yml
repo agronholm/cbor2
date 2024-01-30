@@ -2,7 +2,7 @@ name: CIFuzz
 
 on:
   pull_request:
-    # Fuzzing is currently only targetting the C extension
+    # Fuzzing is currently only targeting the C extension
     paths:
       - "**.c"
       - "**.cc"
@@ -41,7 +41,7 @@ jobs:
           path: ./out/artifacts
       - name: Upload Sarif
         if: always() && steps.build.outcome == 'success'
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           # Path to SARIF file relative to the root of the repository
           sarif_file: cifuzz-sarif/results.sarif
