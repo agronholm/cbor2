@@ -597,22 +597,22 @@ decode_definite_long_bytestring(CBORDecoderObject *self, Py_ssize_t length)
     PyObject *buffer = NULL;
     Py_ssize_t left = length;
     while (left) {
-        Py_ssize_t chunk_length = length <= 65536 ? length : 65536;
+        Py_ssize_t chunk_length = left <= 65536 ? left : 65536;
         PyObject *chunk = fp_read_object(self, chunk_length);
         if (!chunk) {
-            break;
+            goto error;
         }
 
         if (!PyBytes_CheckExact(chunk)) {
             Py_DECREF(chunk);
-            break;
+            goto error;
         }
 
         if (buffer) {
             PyObject *new_buffer = PyByteArray_Concat(buffer, chunk);
             Py_DECREF(chunk);
             if (!new_buffer)
-                break;
+                goto error;
 
             if (new_buffer != buffer) {
                 Py_DECREF(buffer);
@@ -622,7 +622,7 @@ decode_definite_long_bytestring(CBORDecoderObject *self, Py_ssize_t length)
             buffer = PyByteArray_FromObject(chunk);
             Py_DECREF(chunk);
             if (!buffer)
-                break;
+                goto error;
         }
         left -= chunk_length;
     }
@@ -638,6 +638,9 @@ decode_definite_long_bytestring(CBORDecoderObject *self, Py_ssize_t length)
         }
     }
     return ret;
+error:
+    Py_XDECREF(buffer);
+    return NULL;
 }
 
 

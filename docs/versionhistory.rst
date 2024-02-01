@@ -8,6 +8,8 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 **UNRELEASED**
 
 - Fixed use-after-free in the decoder's C version when prematurely encountering the end of stream
+- Fixed the C version of the decoder improperly raising ``CBORDecodeEOF`` when decoding a text
+  string longer than 65536 bytes
 
 **5.6.0** (2024-01-17)
 
