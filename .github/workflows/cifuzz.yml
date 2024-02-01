@@ -1,0 +1,49 @@
+name: CIFuzz
+
+on:
+  workflow_dispatch:
+  pull_request:
+    # Fuzzing is currently only targeting the C extension
+    paths:
+      - "**.c"
+      - "**.cc"
+      - "**.cpp"
+      - "**.cxx"
+      - "**.h"
+
+permissions: {}
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Build Fuzzers
+        id: build
+        uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+        with:
+          oss-fuzz-project-name: "cbor2"
+          language: python
+          dry-run: true
+      - name: Run Fuzzers
+        uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+        with:
+          oss-fuzz-project-name: "cbor2"
+          language: python
+          fuzz-seconds: 600
+          output-sarif: true
+          dry-run: true
+      - name: Upload Crash
+        uses: actions/upload-artifact@v3
+        if: failure() && steps.build.outcome == 'success'
+        with:
+          name: artifacts
+          path: ./out/artifacts
+      - name: Upload Sarif
+        if: always() && steps.build.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          # Path to SARIF file relative to the root of the repository
+          sarif_file: cifuzz-sarif/results.sarif
+          checkout_path: cifuzz-sarif
