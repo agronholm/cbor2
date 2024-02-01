@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.6.1** (2024-02-01)
 
 - Fixed use-after-free in the decoder's C version when prematurely encountering the end of stream
 - Fixed the C version of the decoder improperly raising ``CBORDecodeEOF`` when decoding a text
