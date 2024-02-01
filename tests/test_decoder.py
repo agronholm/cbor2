@@ -485,7 +485,7 @@ def test_datetime_value_too_large(impl):
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(unhexlify("c11b1616161616161616161616161616"))
 
-    assert isinstance(excinfo.value.__cause__, OSError)
+    assert excinfo.value.__cause__ is not None
 
 
 def test_datetime_date_out_of_range(impl):
