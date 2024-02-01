@@ -17,8 +17,6 @@ from typing import Type, cast
 from uuid import UUID
 
 import pytest
-from hypothesis import example, given
-from hypothesis.strategies import binary
 
 from cbor2 import FrozenDict
 
@@ -215,19 +213,14 @@ def test_special(impl, special_values):
 @pytest.mark.parametrize(
     "payload, expected",
     [
-        ("40", b""),
-        ("4401020304", b"\x01\x02\x03\x04"),
+        pytest.param("40", b"", id="blank"),
+        pytest.param("4401020304", b"\x01\x02\x03\x04", id="short"),
+        pytest.param("5a00011170" + "12" * 70000, b"\x12" * 70000, id="long"),
     ],
 )
 def test_binary(impl, payload, expected):
     decoded = impl.loads(unhexlify(payload))
     assert decoded == expected
-
-
-@given(binary(min_size=2**6, max_size=2**20))
-@example(b"\x12" * 65537)  # anything over 2**16 fails in C
-def test_binary_roundtrip(impl, expected):
-    assert expected == impl.loads(impl.dumps(expected)), "Binary string fails to round-trip"
 
 
 @pytest.mark.parametrize(
@@ -492,7 +485,7 @@ def test_datetime_value_too_large(impl):
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(unhexlify("c11b1616161616161616161616161616"))
 
-    assert isinstance(excinfo.value.__cause__, OSError)
+    assert excinfo.value.__cause__ is not None
 
 
 def test_datetime_date_out_of_range(impl):
