@@ -182,6 +182,8 @@ CBORTag_hash(CBORTagObject *self)
         goto exit;
 
     ret = PyObject_Hash(tmp);
+    if (ret == -1)
+        goto exit;
 
     // Remove id(self) from thread_locals.running_hashes
     if (PySet_Discard(running_hashes, self_id) == -1) {
