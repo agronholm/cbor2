@@ -939,11 +939,11 @@ def test_decimal_payload_unpacking(impl, data, expected):
     "payload",
     [
         pytest.param(
-            unhexlify("5b7fffffffffffff00"),
+            unhexlify("41"),
             id="bytestring",
         ),
         pytest.param(
-            unhexlify("7b7fffffffffffff00"),
+            unhexlify("61"),
             id="unicode",
         ),
     ],
