@@ -492,7 +492,13 @@ def test_datetime_date_out_of_range(impl):
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(unhexlify("a6c11b00002401001b000000000000ff00"))
 
-    cause_exc_class = OSError if platform.system() == "Windows" else ValueError
+    if sys.maxsize == 2147483647:
+        cause_exc_class = OverflowError
+    elif platform.system() == "Windows":
+        cause_exc_class = OSError
+    else:
+        cause_exc_class = ValueError
+
     assert isinstance(excinfo.value.__cause__, cause_exc_class)
 
 
