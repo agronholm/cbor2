@@ -9,6 +9,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
 - Fixed ``__hash__()`` of the C version of the ``CBORTag`` type crashing when there's a recursive
   reference cycle
+- Fixed decoding of epoch-based dates being affected by the local time zone in the C extension
 
 **5.6.1** (2024-02-01)
 

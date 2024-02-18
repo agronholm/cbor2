@@ -621,6 +621,7 @@ _CBOR2_init_thread_locals(void)
 
 PyObject *_CBOR2_empty_bytes = NULL;
 PyObject *_CBOR2_empty_str = NULL;
+PyObject *_CBOR2_date_ordinal_offset = NULL;
 PyObject *_CBOR2_str_as_string = NULL;
 PyObject *_CBOR2_str_as_tuple = NULL;
 PyObject *_CBOR2_str_bit_length = NULL;
@@ -638,6 +639,7 @@ PyObject *_CBOR2_str_encode_date = NULL;
 PyObject *_CBOR2_str_Fraction = NULL;
 PyObject *_CBOR2_str_fromtimestamp = NULL;
 PyObject *_CBOR2_str_FrozenDict = NULL;
+PyObject *_CBOR2_str_fromordinal = NULL;
 PyObject *_CBOR2_str_getvalue = NULL;
 PyObject *_CBOR2_str_groups = NULL;
 PyObject *_CBOR2_str_ip_address = NULL;
@@ -971,6 +973,7 @@ PyInit__cbor2(void)
     INTERN_STRING(Fraction);
     INTERN_STRING(fromtimestamp);
     INTERN_STRING(FrozenDict);
+    INTERN_STRING(fromordinal);
     INTERN_STRING(getvalue);
     INTERN_STRING(groups);
     INTERN_STRING(ip_address);
@@ -1000,6 +1003,9 @@ PyInit__cbor2(void)
 
 #undef INTERN_STRING
 
+    if (!_CBOR2_date_ordinal_offset &&
+            !(_CBOR2_date_ordinal_offset = PyLong_FromLong(719163)))
+        goto error;
     if (!_CBOR2_str_utc_suffix &&
             !(_CBOR2_str_utc_suffix = PyUnicode_InternFromString("+00:00")))
         goto error;
