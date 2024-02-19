@@ -11,7 +11,7 @@ from datetime import date, datetime, time, tzinfo
 from functools import wraps
 from io import BytesIO
 from sys import modules
-from typing import TYPE_CHECKING, Any, cast
+from typing import IO, TYPE_CHECKING, Any, cast
 
 from ._types import (
     CBOREncodeTypeError,
@@ -125,12 +125,12 @@ class CBOREncoder:
         "_string_references",
     )
 
-    _fp: BytesIO
+    _fp: IO[bytes]
     _fp_write: Callable[[Buffer], int]
 
     def __init__(
         self,
-        fp: BytesIO,
+        fp: IO[bytes],
         datetime_as_timestamp: bool = False,
         timezone: tzinfo | None = None,
         value_sharing: bool = False,
@@ -216,11 +216,11 @@ class CBOREncoder:
         return None
 
     @property
-    def fp(self) -> BytesIO:
+    def fp(self) -> IO[bytes]:
         return self._fp
 
     @fp.setter
-    def fp(self, value: BytesIO) -> None:
+    def fp(self, value: IO[bytes]) -> None:
         try:
             if not callable(value.write):
                 raise ValueError("fp.write is not callable")
@@ -749,7 +749,7 @@ def dumps(
 
 def dump(
     obj: object,
-    fp: BytesIO,
+    fp: IO[bytes],
     datetime_as_timestamp: bool = False,
     timezone: tzinfo | None = None,
     value_sharing: bool = False,

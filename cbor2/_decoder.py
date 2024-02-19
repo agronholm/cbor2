@@ -7,7 +7,7 @@ from codecs import getincrementaldecoder
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
+from typing import IO, TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ._types import (
     CBORDecodeEOF,
@@ -61,12 +61,12 @@ class CBORDecoder:
         "_stringref_namespace",
     )
 
-    _fp: BytesIO
+    _fp: IO[bytes]
     _fp_read: Callable[[int], bytes]
 
     def __init__(
         self,
-        fp: BytesIO,
+        fp: IO[bytes],
         tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
         object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
         str_errors: Literal["strict", "error", "replace"] = "strict",
@@ -111,11 +111,11 @@ class CBORDecoder:
         return self._immutable
 
     @property
-    def fp(self) -> BytesIO:
+    def fp(self) -> IO[bytes]:
         return self._fp
 
     @fp.setter
-    def fp(self, value: BytesIO) -> None:
+    def fp(self, value: IO[bytes]) -> None:
         try:
             if not callable(value.read):
                 raise ValueError("fp.read is not callable")
@@ -791,7 +791,7 @@ def loads(
     tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
     object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
-) -> object:
+) -> Any:
     """
     Deserialize an object from a bytestring.
 
@@ -822,11 +822,11 @@ def loads(
 
 
 def load(
-    fp: BytesIO,
+    fp: IO[bytes],
     tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
     object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
-) -> object:
+) -> Any:
     """
     Deserialize an object from an open file.
 
