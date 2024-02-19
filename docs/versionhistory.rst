@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.6.2** (2024-02-19)
 
 - Fixed ``__hash__()`` of the C version of the ``CBORTag`` type crashing when there's a recursive
   reference cycle
