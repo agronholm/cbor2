@@ -11,6 +11,9 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   reference cycle
 - Fixed type annotation for the file object in ``cbor2.dump()``, ``cbor2.load()``, ``CBOREncoder``
   and ``CBORDecoder`` to be ``IO[bytes]`` instead of ``BytesIO``
+- Worked around a `CPython bug <https://github.com/python/cpython/issues/99612>`_ that caused
+  a ``SystemError`` to be raised, or even a buffer overflow to occur when decoding a long text
+  string that contained only ASCII characters
 - Changed the return type annotations of ``cbor2.load()`` and ``cbor2.load()`` to return ``Any``
   instead of ``object`` so as not to force users to make type casts
 
