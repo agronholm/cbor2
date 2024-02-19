@@ -794,6 +794,7 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
             source_buffer = bytes_buffer;
         }
 
+        consumed = chunk_length;  // workaround for https://github.com/python/cpython/issues/99612
         string = PyUnicode_DecodeUTF8Stateful(source_buffer, chunk_length, NULL, &consumed);
         if (!string)
             goto error;
