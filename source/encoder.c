@@ -1056,7 +1056,7 @@ CBOREncoder_encode_date(CBOREncoderObject *self, PyObject *value)
         tmp = PyObject_CallMethodObjArgs(
                 value, _CBOR2_str_toordinal, NULL);
         if (tmp && fp_write(self, "\xD8\x64", 2) == 0) {
-            ret = CBOREncoder_encode_int(self, PyNumber_Subtract(tmp, PyLong_FromLong(719163)));
+            ret = CBOREncoder_encode_int(self, PyNumber_Subtract(tmp, _CBOR2_date_ordinal_offset));
         }
     } else {
         tmp = PyObject_CallMethodObjArgs(

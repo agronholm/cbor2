@@ -49,6 +49,7 @@ extern PyObject *_CBOR2_str_encode_date;
 extern PyObject *_CBOR2_str_Fraction;
 extern PyObject *_CBOR2_str_fromtimestamp;
 extern PyObject *_CBOR2_str_FrozenDict;
+extern PyObject *_CBOR2_str_fromordinal;
 extern PyObject *_CBOR2_str_getvalue;
 extern PyObject *_CBOR2_str_groups;
 extern PyObject *_CBOR2_str_ip_address;

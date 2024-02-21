@@ -37,6 +37,8 @@ jobs:
         CFLAGS: "-UNDEBUG"
     - name: Test with pytest
       run: coverage run -m pytest -v
+      env:
+        TZ: America/New_York
     - name: Generate coverage report
       run: coverage xml
     - name: Upload Coverage

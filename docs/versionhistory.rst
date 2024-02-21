@@ -16,6 +16,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
   string that contained only ASCII characters
 - Changed the return type annotations of ``cbor2.load()`` and ``cbor2.load()`` to return ``Any``
   instead of ``object`` so as not to force users to make type casts
+- Fixed decoding of epoch-based dates being affected by the local time zone in the C extension
 
 **5.6.1** (2024-02-01)
 

@@ -97,6 +97,8 @@ minversion = 4.0.0
 commands = python -m pytest {posargs}
 package = editable
 extras = test
+setenv =
+  TZ=America/New_York
 
 [testenv:docs]
 extras = doc

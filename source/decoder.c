@@ -1338,15 +1338,15 @@ static PyObject *
 CBORDecoder_decode_epoch_date(CBORDecoderObject *self)
 {
     // semantic type 100
-    PyObject *num, *tuple, *ret = NULL;
+    PyObject *num, *ordinal, *ret = NULL;
 
     num = decode(self, DECODE_NORMAL);
     if (num) {
         if (PyNumber_Check(num)) {
-            tuple = PyTuple_Pack(1, PyNumber_Multiply(num, PyLong_FromLong(24 * 60 * 60)));
-            if (tuple) {
-                ret = PyDate_FromTimestamp(tuple);
-                Py_DECREF(tuple);
+            ordinal = PyNumber_Add(num, _CBOR2_date_ordinal_offset);
+            if (ordinal) {
+                ret = PyObject_CallMethodObjArgs(PyDateTime_Date, _CBOR2_str_fromordinal, ordinal, NULL);
+                Py_DECREF(ordinal);
             }
         } else {
             PyErr_Format(
