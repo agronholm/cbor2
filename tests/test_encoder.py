@@ -89,9 +89,9 @@ def test_canonical_attr(impl):
     # Another test purely for coverage in the C variant
     with BytesIO() as stream:
         enc = impl.CBOREncoder(stream)
-        assert not enc.canonical
-        enc = impl.CBOREncoder(stream, canonical=True)
-        assert enc.canonical
+        assert enc._encoders == impl.default_encoders
+        enc = impl.CBOREncoder(stream, encoders=impl.canonical_encoders)
+        assert enc._encoders == impl.canonical_encoders
 
 
 def test_dump(impl):
@@ -513,7 +513,7 @@ def test_dump_to_file(impl, tmpdir):
 )
 def test_ordered_map(impl, value, expected):
     expected = unhexlify(expected)
-    assert impl.dumps(value, canonical=True) == expected
+    assert impl.dumps(value, encoders=impl.canonical_encoders) == expected
 
 
 @pytest.mark.parametrize(
@@ -545,7 +545,7 @@ def test_ordered_map(impl, value, expected):
 )
 def test_minimal_floats(impl, value, expected):
     expected = unhexlify(expected)
-    assert impl.dumps(value, canonical=True) == expected
+    assert impl.dumps(value, encoders=impl.canonical_encoders) == expected
 
 
 def test_tuple_key(impl):
@@ -573,7 +573,7 @@ def test_canonical_set(impl, frozen):
     if frozen:
         value = frozenset(value)
 
-    serialized = impl.dumps(value, canonical=True)
+    serialized = impl.dumps(value, encoders=impl.canonical_encoders)
     assert serialized == unhexlify("d9010284616161786179626161")
 
 
@@ -633,7 +633,7 @@ def test_encode_stringrefs_dict(impl):
         "d81901"
         "d81900"
     )
-    assert impl.dumps(value, string_referencing=True, canonical=True) == expected
+    assert impl.dumps(value, string_referencing=True, encoders=impl.canonical_encoders) == expected
 
 
 @pytest.mark.parametrize("tag", [-1, 2**64, "f"], ids=["too small", "too large", "wrong type"])

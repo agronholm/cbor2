@@ -4,6 +4,8 @@ from ._decoder import CBORDecoder as CBORDecoder
 from ._decoder import load as load
 from ._decoder import loads as loads
 from ._encoder import CBOREncoder as CBOREncoder
+from ._encoder import canonical_encoders as canonical_encoders
+from ._encoder import default_encoders as default_encoders
 from ._encoder import dump as dump
 from ._encoder import dumps as dumps
 from ._encoder import shareable_encoder as shareable_encoder
@@ -41,7 +43,6 @@ else:
 
         import _cbor2
 
-        from ._encoder import canonical_encoders, default_encoders
         from ._types import CBORSimpleValue, CBORTag, undefined
 
         _cbor2.default_encoders = OrderedDict(
