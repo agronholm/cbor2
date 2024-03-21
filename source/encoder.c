@@ -119,22 +119,23 @@ CBOREncoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 
 
 // CBOREncoder.__init__(self, fp=None, datetime_as_timestamp=0, timezone=None,
-//                      value_sharing=False, default=None, canonical=False,
+//                      value_sharing=False, encoders=None, default=None,
 //                      date_as_datetime=False)
 int
 CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {
-        "fp", "datetime_as_timestamp", "timezone", "value_sharing", "default",
-        "canonical", "date_as_datetime", "string_referencing", NULL
+        "fp", "datetime_as_timestamp", "timezone", "value_sharing",
+        "encoders", "default",
+        "date_as_datetime", "string_referencing", NULL
     };
-    PyObject *tmp, *fp = NULL, *default_handler = NULL, *tz = NULL;
-    int value_sharing = 0, timestamp_format = 0, enc_style = 0,
+    PyObject *tmp, *fp = NULL, *encoders = NULL, *default_handler = NULL, *tz = NULL;
+    int value_sharing = 0, timestamp_format = 0,
 	date_as_datetime = 0, string_referencing = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOppp", keywords,
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|pOpOOpp", keywords,
                 &fp, &timestamp_format, &tz, &value_sharing,
-                &default_handler, &enc_style, &date_as_datetime,
+                &encoders, &default_handler, &date_as_datetime,
                 &string_referencing))
         return -1;
     // Predicate values are returned as ints, but need to be stored as bool or ubyte
@@ -144,8 +145,6 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
         self->date_as_datetime = true;
     if (value_sharing == 1)
 	self->value_sharing = true;
-    if (enc_style == 1)
-	self->enc_style = 1;
     if (string_referencing == 1) {
         self->string_referencing = true;
         self->string_namespacing = true;
@@ -154,6 +153,28 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
 
     if (_CBOREncoder_set_fp(self, fp, NULL) == -1)
         return -1;
+
+    if (!_CBOR2_default_encoders && init_default_encoders() == -1)
+        return -1;
+    if (!_CBOR2_canonical_encoders && init_canonical_encoders() == -1)
+        return -1;
+
+    tmp = self->encoders;
+    if (!encoders) {
+        self->enc_style = 0;
+        encoders = _CBOR2_default_encoders;
+    } else if (encoders == _CBOR2_default_encoders)
+        self->enc_style = 0;
+    else if (encoders == _CBOR2_canonical_encoders)
+        self->enc_style = 1;
+    else
+        self->enc_style = 2;
+    self->encoders = PyObject_CallMethodObjArgs(encoders, _CBOR2_str_copy, NULL);
+    Py_DECREF(tmp);
+
+    if (!self->encoders)
+        return -1;
+
     if (default_handler && _CBOREncoder_set_default(self, default_handler, NULL) == -1)
         return -1;
     if (tz && _CBOREncoder_set_timezone(self, tz, NULL) == -1)
@@ -166,23 +187,6 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
     self->string_references = PyDict_New();
     if (!self->string_references)
         return -1;
-
-    if (!_CBOR2_default_encoders && init_default_encoders() == -1)
-        return -1;
-
-    tmp = self->encoders;
-    self->encoders = PyObject_CallMethodObjArgs(
-        _CBOR2_default_encoders, _CBOR2_str_copy, NULL);
-    Py_DECREF(tmp);
-    if (!self->encoders)
-        return -1;
-    if (self->enc_style) {
-        if (!_CBOR2_canonical_encoders && init_canonical_encoders() == -1)
-            return -1;
-        if (!PyObject_CallMethodObjArgs(self->encoders,
-                    _CBOR2_str_update, _CBOR2_canonical_encoders, NULL))
-            return -1;
-    }
 
     return 0;
 }
@@ -301,17 +305,6 @@ _CBOREncoder_set_timezone(CBOREncoderObject *self, PyObject *value,
     self->tz = value;
     Py_DECREF(tmp);
     return 0;
-}
-
-
-// CBOREncoder._get_canonical(self)
-static PyObject *
-_CBOREncoder_get_canonical(CBOREncoderObject *self, void *closure)
-{
-    if (self->enc_style)
-        Py_RETURN_TRUE;
-    else
-        Py_RETURN_FALSE;
 }
 
 
@@ -2097,9 +2090,6 @@ static PyGetSetDef CBOREncoder_getsetters[] = {
     {"timezone",
         (getter) _CBOREncoder_get_timezone, (setter) _CBOREncoder_set_timezone,
         "the timezone to use when encoding naive datetime objects", NULL},
-    {"canonical",
-        (getter) _CBOREncoder_get_canonical, NULL,
-        "if True, then CBOR canonical encoding will be generated", NULL},
     {NULL}
 };
 
@@ -2201,15 +2191,13 @@ PyDoc_STRVAR(CBOREncoder__doc__,
 "    set to ``True`` to allow more efficient serializing of repeated\n"
 "    values and, more importantly, cyclic data structures, at the cost\n"
 "    of extra line overhead\n"
+":param encoders:\n"
+"    a dict from types (or type names) to their encoders, the latter of which are\n"
+"    callables of two arguments (the encoder instance and the value being encoded)\n"
 ":param default:\n"
-"    a callable that is called by the encoder with two arguments (the\n"
-"    encoder instance and the value being encoded) when no suitable\n"
-"    encoder has been found, and should use the methods on the encoder\n"
-"    to encode any objects it wants to add to the data stream\n"
-":param int canonical:\n"
-"    when True, use \"canonical\" CBOR representation; this typically\n"
-"    involves sorting maps, sets, etc. into a pre-determined order ensuring\n"
-"    that serializations are comparable without decoding\n"
+"    an encoder callable that is called when no suitable encoder in has been found\n"
+"    in ``encoders``, the callable should use the methods on the encoder to encode\n"
+"    any objects it wants to add to the data stream\n"
 "\n"
 ".. _CBOR: https://cbor.io/\n"
 );
