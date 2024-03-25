@@ -1,4 +1,5 @@
 """Command-line tool for CBOR diagnostics and testing"""
+
 from __future__ import annotations
 
 import argparse
