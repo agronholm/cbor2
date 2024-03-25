@@ -250,12 +250,10 @@ class CBORDecoder:
             return retval
 
     @overload
-    def _decode_length(self, subtype: int) -> int:
-        ...
+    def _decode_length(self, subtype: int) -> int: ...
 
     @overload
-    def _decode_length(self, subtype: int, allow_indefinite: Literal[True]) -> int | None:
-        ...
+    def _decode_length(self, subtype: int, allow_indefinite: Literal[True]) -> int | None: ...
 
     def _decode_length(self, subtype: int, allow_indefinite: bool = False) -> int | None:
         if subtype < 24:
