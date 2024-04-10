@@ -32,6 +32,7 @@ extern PyTypeObject CBORSimpleValueType;
 // Various interned strings
 extern PyObject *_CBOR2_empty_bytes;
 extern PyObject *_CBOR2_empty_str;
+extern PyObject *_CBOR2_date_ordinal_offset;
 extern PyObject *_CBOR2_str_as_string;
 extern PyObject *_CBOR2_str_as_tuple;
 extern PyObject *_CBOR2_str_bit_length;

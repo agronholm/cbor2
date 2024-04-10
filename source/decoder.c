@@ -1,5 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <datetime.h>
 #include <string.h>
 #include <stdbool.h>
 #include <limits.h>
@@ -13,7 +14,6 @@
 #include <stdint.h>
 #include <math.h>
 #include <structmember.h>
-#include <datetime.h>
 #include "module.h"
 #include "halffloat.h"
 #include "tags.h"
@@ -349,7 +349,7 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
 // Utility functions /////////////////////////////////////////////////////////
 
 static int
-raise_from(const PyObject *new_exc_type, const char *message) {
+raise_from(PyObject *new_exc_type, const char *message) {
     // This requires the error indicator to be set
     PyObject *cause;
 #if PY_VERSION_HEX >= 0x030c0000
@@ -1345,7 +1345,8 @@ CBORDecoder_decode_epoch_date(CBORDecoderObject *self)
         if (PyNumber_Check(num)) {
             ordinal = PyNumber_Add(num, _CBOR2_date_ordinal_offset);
             if (ordinal) {
-                ret = PyObject_CallMethodObjArgs(PyDateTime_Date, _CBOR2_str_fromordinal, ordinal, NULL);
+                ret = PyObject_CallMethodObjArgs(
+                    (PyObject*) PyDateTimeAPI->DateType, _CBOR2_str_fromordinal, ordinal, NULL);
                 Py_DECREF(ordinal);
             }
         } else {
