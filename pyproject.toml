@@ -99,6 +99,11 @@ package = editable
 extras = test
 setenv =
   TZ=America/New_York
+  CBOR2_BUILD_C_EXTENSION=1
+
+[testenv:pypy3]
+setenv =
+  TZ=America/New_York
 
 [testenv:docs]
 extras = doc
