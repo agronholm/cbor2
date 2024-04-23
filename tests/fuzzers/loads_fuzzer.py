@@ -1,4 +1,5 @@
 import sys
+
 import atheris
 
 # _cbor2 ensures the C library is imported
