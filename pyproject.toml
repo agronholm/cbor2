@@ -51,6 +51,9 @@ doc = [
 benchmarks = [
     "pytest-benchmark==4.0.0",
 ]
+fuzz = [
+    "atheris",
+]
 
 [project.scripts]
 cbor2 = "cbor2.tool:main"
