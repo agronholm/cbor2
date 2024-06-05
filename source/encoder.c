@@ -1040,8 +1040,6 @@ CBOREncoder_encode_date(CBOREncoderObject *self, PyObject *value)
     // semantic type 100 or 1004
 
     PyObject *tmp, *ret = NULL;
-    const char *buf;
-    Py_ssize_t length;
     if (self->date_as_datetime) {
         tmp = PyDateTimeAPI->DateTime_FromDateAndTime(
                 PyDateTime_GET_YEAR(value),
