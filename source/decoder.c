@@ -348,7 +348,7 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
 
 // Utility functions /////////////////////////////////////////////////////////
 
-static int
+static void
 raise_from(PyObject *new_exc_type, const char *message) {
     // This requires the error indicator to be set
     PyObject *cause;
