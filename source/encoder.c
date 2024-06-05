@@ -1120,7 +1120,7 @@ decimal_negative(PyObject *value)
 static PyObject *
 encode_decimal_digits(CBOREncoderObject *self, PyObject *value)
 {
-    PyObject *tuple, *digits, *exp, *sig, *ten, *tmp, *ret = NULL;
+    PyObject *tuple, *digits, *exp, *sig, *ten, *tmp = NULL, *ret = NULL;
     int sign = 0;
     bool sharing;
 
