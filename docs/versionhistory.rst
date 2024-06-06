@@ -8,6 +8,7 @@ This library adheres to `Semantic Versioning <http://semver.org/>`_.
 **UNRELEASED**
 
 - Fixed compilation of C extension failing on GCC 14
+- Fixed compiler warnings when building C extension
 
 **5.6.3** (2024-04-11)
 
