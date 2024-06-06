@@ -62,13 +62,13 @@ include = ["cbor2"]
 line-length = 99
 
 [tool.ruff.lint]
-select = [
-    "E", "F", "W",  # default flake-8
+extend-select = [
     "I",            # isort
     "ISC",          # flake8-implicit-str-concat
     "PGH",          # pygrep-hooks
     "RUF100",       # unused noqa (yesqa)
     "UP",           # pyupgrade
+    "W",            # pycodestyle warnings
 ]
 ignore = ["ISC001"]
 
@@ -89,7 +89,7 @@ show_missing = true
 [tool.tox]
 legacy_tox_ini = """
 [tox]
-envlist = py38, py39, py310, py311, py312, pypy3
+envlist = py38, py39, py310, py311, py312, py313, pypy3
 skip_missing_interpreters = true
 minversion = 4.0.0
 
