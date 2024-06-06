@@ -308,7 +308,7 @@ class CBOREncoder:
         obj_type = obj.__class__
         encoder = self._encoders.get(obj_type) or self._find_encoder(obj_type) or self._default
         if not encoder:
-            raise CBOREncodeTypeError("cannot serialize type %s" % obj_type.__name__)
+            raise CBOREncodeTypeError(f"cannot serialize type {obj_type.__name__}")
 
         encoder(self, obj)
 
