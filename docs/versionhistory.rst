@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed compilation of C extension failing on GCC 14
+
 **5.6.3** (2024-04-11)
 
 - Fixed decoding of epoch-based dates being affected by the local time zone in the C extension
