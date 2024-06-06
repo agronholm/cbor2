@@ -1040,8 +1040,6 @@ CBOREncoder_encode_date(CBOREncoderObject *self, PyObject *value)
     // semantic type 100 or 1004
 
     PyObject *tmp, *ret = NULL;
-    const char *buf;
-    Py_ssize_t length;
     if (self->date_as_datetime) {
         tmp = PyDateTimeAPI->DateTime_FromDateAndTime(
                 PyDateTime_GET_YEAR(value),
@@ -1120,7 +1118,7 @@ decimal_negative(PyObject *value)
 static PyObject *
 encode_decimal_digits(CBOREncoderObject *self, PyObject *value)
 {
-    PyObject *tuple, *digits, *exp, *sig, *ten, *tmp, *ret = NULL;
+    PyObject *tuple, *digits, *exp, *sig, *ten, *tmp = NULL, *ret = NULL;
     int sign = 0;
     bool sharing;
 

@@ -1,6 +1,7 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <datetime.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdbool.h>
 #include <limits.h>
@@ -694,7 +695,7 @@ decode_bytestring(CBORDecoderObject *self, uint8_t subtype)
         return NULL;
 
     if (length > (uint64_t)PY_SSIZE_T_MAX - (uint64_t)PyBytesObject_SIZE) {
-        sprintf(length_hex, "%llX", length);
+        sprintf(length_hex, "%" PRIX64, length);
         PyErr_Format(
                 _CBOR2_CBORDecodeValueError,
                 "excessive bytestring size 0x%s", length_hex);
@@ -894,7 +895,7 @@ decode_string(CBORDecoderObject *self, uint8_t subtype)
     if (decode_length(self, subtype, &length, &indefinite) == -1)
         return NULL;
     if (length > (uint64_t)PY_SSIZE_T_MAX - (uint64_t)PyBytesObject_SIZE) {
-        sprintf(length_hex, "%llX", length);
+        sprintf(length_hex, "%" PRIX64, length);
         PyErr_Format(
                 _CBOR2_CBORDecodeValueError,
                 "excessive string size 0x%s", length_hex);
@@ -1057,7 +1058,7 @@ decode_array(CBORDecoderObject *self, uint8_t subtype)
     if (indefinite)
         return decode_indefinite_array(self);
     if (length > (uint64_t)PY_SSIZE_T_MAX) {
-        sprintf(length_hex, "%llX", length);
+        sprintf(length_hex, "%" PRIX64, length);
         PyErr_Format(
                 _CBOR2_CBORDecodeValueError,
                 "excessive array size 0x%s", length_hex);
