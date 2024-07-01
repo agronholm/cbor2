@@ -831,14 +831,14 @@ def test_load_from_file(impl, tmpdir):
 
 def test_nested_dict(impl):
     value = impl.loads(unhexlify("A1D9177082010201"))
-    assert type(value) is dict  # noqa: E721
+    assert type(value) is dict
     assert value == {impl.CBORTag(6000, (1, 2)): 1}
 
 
 def test_set(impl):
     payload = unhexlify("d9010283616361626161")
     value = impl.loads(payload)
-    assert type(value) is set  # noqa: E721
+    assert type(value) is set
     assert value == {"a", "b", "c"}
 
 
