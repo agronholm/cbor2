@@ -95,6 +95,10 @@ def container_encoder(
     return wrapper
 
 
+# type CBOREncoderDict = dict[type | tuple[str, str], Callable[[CBOREncoder, Any], None]]
+CBOREncoderDict = dict[type | tuple[str, str], Callable[[Any, Any], None]]
+
+
 class CBOREncoder:
     """
     The CBOREncoder class implements a fully featured `CBOR`_ encoder with
@@ -119,7 +123,6 @@ class CBOREncoder:
         "_fp_write",
         "_shared_containers",
         "_encoders",
-        "_canonical",
         "string_referencing",
         "string_namespacing",
         "_string_references",
@@ -134,8 +137,8 @@ class CBOREncoder:
         datetime_as_timestamp: bool = False,
         timezone: tzinfo | None = None,
         value_sharing: bool = False,
+        encoders: CBOREncoderDict | None = None,
         default: Callable[[CBOREncoder, Any], Any] | None = None,
-        canonical: bool = False,
         date_as_datetime: bool = False,
         string_referencing: bool = False,
     ):
@@ -153,15 +156,13 @@ class CBOREncoder:
         :param value_sharing:
             set to ``True`` to allow more efficient serializing of repeated values and,
             more importantly, cyclic data structures, at the cost of extra line overhead
+        :param encoders:
+            a dict from types (or type names) to their encoders, the latter of which are
+            callables of two arguments (the encoder instance and the value being encoded)
         :param default:
-            a callable that is called by the encoder with two arguments (the encoder
-            instance and the value being encoded) when no suitable encoder has been
-            found, and should use the methods on the encoder to encode any objects it
-            wants to add to the data stream
-        :param canonical:
-            when ``True``, use "canonical" CBOR representation; this typically involves
-            sorting maps, sets, etc. into a pre-determined order ensuring that
-            serializations are comparable without decoding
+            an encoder callable that is called when no suitable encoder in has been found
+            in ``encoders``, the callable should use the methods on the encoder to encode
+            any objects it wants to add to the data stream
         :param date_as_datetime:
             set to ``True`` to serialize date objects as datetimes (CBOR tag 0), which
             was the default behavior in previous releases (cbor2 <= 4.1.2).
@@ -177,15 +178,15 @@ class CBOREncoder:
         self.value_sharing = value_sharing
         self.string_referencing = string_referencing
         self.string_namespacing = string_referencing
+        if encoders:
+            self._encoders = encoders.copy()
+        else:
+            self._encoders = default_encoders.copy()
         self.default = default
-        self._canonical = canonical
         self._shared_containers: dict[
             int, tuple[object, int | None]
         ] = {}  # indexes used for value sharing
         self._string_references: dict[str | bytes, int] = {}  # indexes used for string references
-        self._encoders = default_encoders.copy()
-        if canonical:
-            self._encoders.update(canonical_encoders)
 
     def _find_encoder(self, obj_type: type) -> Callable[[CBOREncoder, Any], None] | None:
         for type_or_tuple, enc in list(self._encoders.items()):
@@ -251,10 +252,6 @@ class CBOREncoder:
             self._default = value
         else:
             raise ValueError("default must be None or a callable")
-
-    @property
-    def canonical(self) -> bool:
-        return self._canonical
 
     @contextmanager
     def disable_value_sharing(self) -> Generator[None, None, None]:
@@ -646,7 +643,7 @@ class CBOREncoder:
         self._fp_write(b"\xf7")
 
 
-default_encoders: dict[type | tuple[str, str], Callable[[CBOREncoder, Any], None]] = {
+default_encoders: CBOREncoderDict = {
     bytes: CBOREncoder.encode_bytestring,
     bytearray: CBOREncoder.encode_bytearray,
     str: CBOREncoder.encode_string,
@@ -679,7 +676,7 @@ default_encoders: dict[type | tuple[str, str], Callable[[CBOREncoder, Any], None
 }
 
 
-canonical_encoders: dict[type | tuple[str, str], Callable[[CBOREncoder, Any], None]] = {
+canonical_encoders_: CBOREncoderDict = {
     float: CBOREncoder.encode_minimal_float,
     dict: CBOREncoder.encode_canonical_map,
     defaultdict: CBOREncoder.encode_canonical_map,
@@ -689,14 +686,18 @@ canonical_encoders: dict[type | tuple[str, str], Callable[[CBOREncoder, Any], No
     frozenset: CBOREncoder.encode_canonical_set,
 }
 
+canonical_encoders: CBOREncoderDict = default_encoders.copy()
+canonical_encoders.update(canonical_encoders_)
+del canonical_encoders_
+
 
 def dumps(
     obj: object,
     datetime_as_timestamp: bool = False,
     timezone: tzinfo | None = None,
     value_sharing: bool = False,
+    encoders: CBOREncoderDict | None = None,
     default: Callable[[CBOREncoder, Any], None] | None = None,
-    canonical: bool = False,
     date_as_datetime: bool = False,
     string_referencing: bool = False,
 ) -> bytes:
@@ -716,15 +717,13 @@ def dumps(
         set to ``True`` to allow more efficient serializing of repeated values
         and, more importantly, cyclic data structures, at the cost of extra
         line overhead
+    :param encoders:
+        a dict from types (or type names) to their encoders, the latter of which are
+        callables of two arguments (the encoder instance and the value being encoded)
     :param default:
-        a callable that is called by the encoder with two arguments (the encoder
-        instance and the value being encoded) when no suitable encoder has been found,
-        and should use the methods on the encoder to encode any objects it wants to add
-        to the data stream
-    :param canonical:
-        when ``True``, use "canonical" CBOR representation; this typically involves
-        sorting maps, sets, etc. into a pre-determined order ensuring that
-        serializations are comparable without decoding
+        an encoder callable that is called when no suitable encoder in has been found
+        in ``encoders``, the callable should use the methods on the encoder to encode
+        any objects it wants to add to the data stream
     :param date_as_datetime:
         set to ``True`` to serialize date objects as datetimes (CBOR tag 0), which was
         the default behavior in previous releases (cbor2 <= 4.1.2).
@@ -739,8 +738,8 @@ def dumps(
             datetime_as_timestamp=datetime_as_timestamp,
             timezone=timezone,
             value_sharing=value_sharing,
+            encoders=encoders,
             default=default,
-            canonical=canonical,
             date_as_datetime=date_as_datetime,
             string_referencing=string_referencing,
         ).encode(obj)
@@ -753,8 +752,8 @@ def dump(
     datetime_as_timestamp: bool = False,
     timezone: tzinfo | None = None,
     value_sharing: bool = False,
+    encoders: CBOREncoderDict | None = None,
     default: Callable[[CBOREncoder, Any], None] | None = None,
-    canonical: bool = False,
     date_as_datetime: bool = False,
     string_referencing: bool = False,
 ) -> None:
@@ -776,15 +775,13 @@ def dump(
         set to ``True`` to allow more efficient serializing of repeated values
         and, more importantly, cyclic data structures, at the cost of extra
         line overhead
+    :param encoders:
+        a dict from types (or type names) to their encoders, the latter of which are
+        callables of two arguments (the encoder instance and the value being encoded)
     :param default:
-        a callable that is called by the encoder with two arguments (the encoder
-        instance and the value being encoded) when no suitable encoder has been found,
-        and should use the methods on the encoder to encode any objects it wants to add
-        to the data stream
-    :param canonical:
-        when ``True``, use "canonical" CBOR representation; this typically involves
-        sorting maps, sets, etc. into a pre-determined order ensuring that
-        serializations are comparable without decoding
+        an encoder callable that is called when no suitable encoder in has been found
+        in ``encoders``, the callable should use the methods on the encoder to encode
+        any objects it wants to add to the data stream
     :param date_as_datetime:
         set to ``True`` to serialize date objects as datetimes (CBOR tag 0), which was
         the default behavior in previous releases (cbor2 <= 4.1.2).
@@ -797,8 +794,8 @@ def dump(
         datetime_as_timestamp=datetime_as_timestamp,
         timezone=timezone,
         value_sharing=value_sharing,
+        encoders=encoders,
         default=default,
-        canonical=canonical,
         date_as_datetime=date_as_datetime,
         string_referencing=string_referencing,
     ).encode(obj)
