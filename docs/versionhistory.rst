@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Added support for Python 3.13
+
 **5.6.4** (2024-06-06)
 
 - Fixed compilation of C extension failing on GCC 14
