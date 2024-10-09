@@ -26,7 +26,7 @@ jobs:
       uses: pypa/cibuildwheel@v2.21.3
       env:
         CBOR2_BUILD_C_EXTENSION: "1"
-        CIBW_SKIP: pp* cp36* cp37*
+        CIBW_SKIP: pp*
         CIBW_ARCHS: auto64
         CIBW_ARCHS_MACOS: x86_64 arm64
         CIBW_ARCHS_LINUX: x86_64 aarch64
