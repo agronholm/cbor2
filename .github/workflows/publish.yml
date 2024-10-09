@@ -23,7 +23,7 @@ jobs:
       with:
         platforms: arm64
     - name: Build wheels
-      uses: pypa/cibuildwheel@v2.20.0
+      uses: pypa/cibuildwheel@v2.21.3
       env:
         CBOR2_BUILD_C_EXTENSION: "1"
         CIBW_SKIP: pp* cp36* cp37*

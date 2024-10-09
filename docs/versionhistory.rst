@@ -5,9 +5,9 @@ Version history
 
 This library adheres to `Semantic Versioning <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.6.5** (2024-10-09)
 
-- Added support for Python 3.13
+- Published binary wheels for Python 3.13
 
 **5.6.4** (2024-06-06)
 
