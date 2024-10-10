@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import threading
 from collections import namedtuple
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from functools import total_ordering
 from reprlib import recursive_repr
-from typing import Any, Mapping, TypeVar
+from typing import Any, TypeVar
 
 KT = TypeVar("KT")
 VT_co = TypeVar("VT_co", covariant=True)
