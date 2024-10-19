@@ -5,10 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
-**UNRELEASED** (yyyy-mm-dd)
+**UNRELEASED**
 
-- Dropped support for Python 3.8 (#247
-  <https://github.com/agronholm/cbor2/pull/247>_; PR by @hugovk)
+- Dropped support for Python 3.8
+  (#247 <https://github.com/agronholm/cbor2/pull/247>_; PR by @hugovk)
 
 **5.6.5** (2024-10-09)
 
