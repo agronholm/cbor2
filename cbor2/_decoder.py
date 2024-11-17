@@ -623,6 +623,21 @@ class CBORDecoder:
         else:
             return shared
 
+    def decode_complex(self) -> complex:
+        # Semantic tag 43000
+        inputval = self._decode(immutable=True, unshared=True)
+        try:
+            value = complex(*inputval)
+        except TypeError as exc:
+            if not isinstance(inputval, tuple):
+                raise CBORDecodeValueError(
+                    "error decoding complex: input value was not a tuple"
+                ) from None
+
+            raise CBORDecodeValueError("error decoding complex") from exc
+
+        return self.set_shareable(value)
+
     def decode_rational(self) -> Fraction:
         # Semantic tag 30
         from fractions import Fraction
@@ -780,6 +795,7 @@ semantic_decoders: dict[int, Callable[[CBORDecoder], Any]] = {
     260: CBORDecoder.decode_ipaddress,
     261: CBORDecoder.decode_ipnetwork,
     1004: CBORDecoder.decode_date_string,
+    43000: CBORDecoder.decode_complex,
     55799: CBORDecoder.decode_self_describe_cbor,
 }
 
