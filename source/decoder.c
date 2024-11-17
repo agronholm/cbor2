@@ -55,6 +55,7 @@ static PyObject * CBORDecoder_decode_epoch_date(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_date_string(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_fraction(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_bigfloat(CBORDecoderObject *);
+static PyObject * CBORDecoder_decode_complex(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_rational(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_regexp(CBORDecoderObject *);
 static PyObject * CBORDecoder_decode_uuid(CBORDecoderObject *);
@@ -1172,6 +1173,7 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
             case 260:   ret = CBORDecoder_decode_ipaddress(self);       break;
             case 261:   ret = CBORDecoder_decode_ipnetwork(self);       break;
             case 1004:  ret = CBORDecoder_decode_date_string(self);     break;
+            case 43000: ret = CBORDecoder_decode_complex(self);         break;
             case 55799: ret = CBORDecoder_decode_self_describe_cbor(self);
                 break;
 
@@ -1636,6 +1638,34 @@ CBORDecoder_decode_sharedref(CBORDecoderObject *self)
     return ret;
 }
 
+// CBORDecoder.decode_complex(self)
+static PyObject *
+CBORDecoder_decode_complex(CBORDecoderObject *self)
+{
+    // semantic type 43000
+    PyObject *payload_t, *real, *imag, *ret = NULL;
+    payload_t = decode(self, DECODE_IMMUTABLE | DECODE_UNSHARED);
+    if (payload_t) {
+        if (PyTuple_CheckExact(payload_t) && PyTuple_GET_SIZE(payload_t) == 2) {
+            real = PyTuple_GET_ITEM(payload_t, 0);
+            imag = PyTuple_GET_ITEM(payload_t, 1);
+            if(PyFloat_CheckExact(real) && PyFloat_CheckExact(imag)) {
+                ret = PyComplex_FromDoubles(PyFloat_AS_DOUBLE(real), PyFloat_AS_DOUBLE(imag));
+            } else {
+                PyErr_Format(
+                    _CBOR2_CBORDecodeValueError,
+                                "Incorrect tag 43000 payload: does not contain two floats");
+            }
+        } else {
+            PyErr_Format(
+                _CBOR2_CBORDecodeValueError,
+                            "Incorrect tag 43000 payload: not an array of length 2");
+            }
+        Py_DECREF(payload_t);
+    }
+    set_shareable(self, ret);
+    return ret;
+}
 
 // CBORDecoder.decode_rational(self)
 static PyObject *
@@ -2159,6 +2189,8 @@ static PyMethodDef CBORDecoder_methods[] = {
         "decode a fractional number from the input"},
     {"decode_rational", (PyCFunction) CBORDecoder_decode_rational, METH_NOARGS,
         "decode a rational value from the input"},
+    {"decode_complex", (PyCFunction) CBORDecoder_decode_complex, METH_NOARGS,
+        "decode a complex value from the input"},
     {"decode_bigfloat", (PyCFunction) CBORDecoder_decode_bigfloat, METH_NOARGS,
         "decode a large floating-point value from the input"},
     {"decode_regexp", (PyCFunction) CBORDecoder_decode_regexp, METH_NOARGS,
