@@ -217,7 +217,7 @@ class CBORDecoder:
             initial_byte = self.read(1)[0]
             major_type = initial_byte >> 5
             subtype = initial_byte & 31
-            decoder = major_decoders[major_type]
+            decoder = self.major_decoders[major_type]
             return decoder(self, subtype)
         finally:
             if immutable:
@@ -454,7 +454,7 @@ class CBORDecoder:
     def decode_semantic(self, subtype: int) -> Any:
         # Major tag 6
         tagnum = self._decode_length(subtype)
-        if semantic_decoder := semantic_decoders.get(tagnum):
+        if semantic_decoder := self.semantic_decoders.get(tagnum):
             return semantic_decoder(self)
 
         tag = CBORTag(tagnum, None)
@@ -473,7 +473,7 @@ class CBORDecoder:
 
         # Major tag 7
         try:
-            return special_decoders[subtype](self)
+            return self.special_decoders[subtype](self)
         except KeyError as e:
             raise CBORDecodeValueError(
                 f"Undefined Reserved major type 7 subtype 0x{subtype:x}"
@@ -736,52 +736,51 @@ class CBORDecoder:
     def decode_float64(self) -> float:
         return self.set_shareable(cast(float, struct.unpack(">d", self.read(8))[0]))
 
+    major_decoders: dict[int, Callable[[CBORDecoder, int], Any]] = {
+        0: decode_uint,
+        1: decode_negint,
+        2: decode_bytestring,
+        3: decode_string,
+        4: decode_array,
+        5: decode_map,
+        6: decode_semantic,
+        7: decode_special,
+    }
 
-major_decoders: dict[int, Callable[[CBORDecoder, int], Any]] = {
-    0: CBORDecoder.decode_uint,
-    1: CBORDecoder.decode_negint,
-    2: CBORDecoder.decode_bytestring,
-    3: CBORDecoder.decode_string,
-    4: CBORDecoder.decode_array,
-    5: CBORDecoder.decode_map,
-    6: CBORDecoder.decode_semantic,
-    7: CBORDecoder.decode_special,
-}
+    special_decoders: dict[int, Callable[[CBORDecoder], Any]] = {
+        20: lambda self: False,
+        21: lambda self: True,
+        22: lambda self: None,
+        23: lambda self: undefined,
+        24: decode_simple_value,
+        25: decode_float16,
+        26: decode_float32,
+        27: decode_float64,
+        31: lambda self: break_marker,
+    }
 
-special_decoders: dict[int, Callable[[CBORDecoder], Any]] = {
-    20: lambda self: False,
-    21: lambda self: True,
-    22: lambda self: None,
-    23: lambda self: undefined,
-    24: CBORDecoder.decode_simple_value,
-    25: CBORDecoder.decode_float16,
-    26: CBORDecoder.decode_float32,
-    27: CBORDecoder.decode_float64,
-    31: lambda self: break_marker,
-}
-
-semantic_decoders: dict[int, Callable[[CBORDecoder], Any]] = {
-    0: CBORDecoder.decode_datetime_string,
-    1: CBORDecoder.decode_epoch_datetime,
-    2: CBORDecoder.decode_positive_bignum,
-    3: CBORDecoder.decode_negative_bignum,
-    4: CBORDecoder.decode_fraction,
-    5: CBORDecoder.decode_bigfloat,
-    25: CBORDecoder.decode_stringref,
-    28: CBORDecoder.decode_shareable,
-    29: CBORDecoder.decode_sharedref,
-    30: CBORDecoder.decode_rational,
-    35: CBORDecoder.decode_regexp,
-    36: CBORDecoder.decode_mime,
-    37: CBORDecoder.decode_uuid,
-    100: CBORDecoder.decode_epoch_date,
-    256: CBORDecoder.decode_stringref_namespace,
-    258: CBORDecoder.decode_set,
-    260: CBORDecoder.decode_ipaddress,
-    261: CBORDecoder.decode_ipnetwork,
-    1004: CBORDecoder.decode_date_string,
-    55799: CBORDecoder.decode_self_describe_cbor,
-}
+    semantic_decoders: dict[int, Callable[[CBORDecoder], Any]] = {
+        0: decode_datetime_string,
+        1: decode_epoch_datetime,
+        2: decode_positive_bignum,
+        3: decode_negative_bignum,
+        4: decode_fraction,
+        5: decode_bigfloat,
+        25: decode_stringref,
+        28: decode_shareable,
+        29: decode_sharedref,
+        30: decode_rational,
+        35: decode_regexp,
+        36: decode_mime,
+        37: decode_uuid,
+        100: decode_epoch_date,
+        256: decode_stringref_namespace,
+        258: decode_set,
+        260: decode_ipaddress,
+        261: decode_ipnetwork,
+        1004: decode_date_string,
+        55799: decode_self_describe_cbor,
+    }
 
 
 def loads(
