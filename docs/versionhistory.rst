@@ -3,9 +3,23 @@ Version history
 
 .. currentmodule:: cbor2
 
-This library adheres to `Semantic Versioning <http://semver.org/>`_.
+This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
-**5.6.3** (2024-02-22)
+**UNRELEASED**
+
+- Dropped support for Python 3.8
+  (#247 <https://github.com/agronholm/cbor2/pull/247>_; PR by @hugovk)
+
+**5.6.5** (2024-10-09)
+
+- Published binary wheels for Python 3.13
+
+**5.6.4** (2024-06-06)
+
+- Fixed compilation of C extension failing on GCC 14
+- Fixed compiler warnings when building C extension
+
+**5.6.3** (2024-04-11)
 
 - Fixed decoding of epoch-based dates being affected by the local time zone in the C extension
 

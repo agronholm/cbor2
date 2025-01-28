@@ -269,7 +269,7 @@ class CBORDecoder:
         elif subtype == 31 and allow_indefinite:
             return None
         else:
-            raise CBORDecodeValueError("unknown unsigned integer subtype 0x%x" % subtype)
+            raise CBORDecodeValueError(f"unknown unsigned integer subtype 0x{subtype:x}")
 
     def decode_uint(self, subtype: int) -> int:
         # Major tag 0
@@ -294,7 +294,7 @@ class CBORDecoder:
                     length = self._decode_length(initial_byte & 0x1F)
                     if length is None or length > sys.maxsize:
                         raise CBORDecodeValueError(
-                            "invalid length for indefinite bytestring chunk 0x%x" % length
+                            f"invalid length for indefinite bytestring chunk 0x{length:x}"
                         )
                     value = self.read(length)
                     buf.append(value)
@@ -304,7 +304,7 @@ class CBORDecoder:
                     )
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError("invalid length for bytestring 0x%x" % length)
+                raise CBORDecodeValueError(f"invalid length for bytestring 0x{length:x}")
             elif length <= 65536:
                 result = self.read(length)
             else:
@@ -350,7 +350,7 @@ class CBORDecoder:
                     length = self._decode_length(initial_byte & 0x1F)
                     if length is None or length > sys.maxsize:
                         raise CBORDecodeValueError(
-                            "invalid length for indefinite string chunk 0x%x" % length
+                            f"invalid length for indefinite string chunk 0x{length:x}"
                         )
 
                     try:
@@ -363,7 +363,7 @@ class CBORDecoder:
                     raise CBORDecodeValueError("non-string found in indefinite length string")
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError("invalid length for string 0x%x" % length)
+                raise CBORDecodeValueError(f"invalid length for string 0x{length:x}")
 
             if length <= 65536:
                 try:
@@ -405,7 +405,7 @@ class CBORDecoder:
                     items.append(value)
         else:
             if length > sys.maxsize:
-                raise CBORDecodeValueError("invalid length for array 0x%x" % length)
+                raise CBORDecodeValueError(f"invalid length for array 0x{length:x}")
 
             items = []
             if not self._immutable:
@@ -476,7 +476,7 @@ class CBORDecoder:
             return self.special_decoders[subtype](self)
         except KeyError as e:
             raise CBORDecodeValueError(
-                "Undefined Reserved major type 7 subtype 0x%x" % subtype
+                f"Undefined Reserved major type 7 subtype 0x{subtype:x}"
             ) from e
 
     #

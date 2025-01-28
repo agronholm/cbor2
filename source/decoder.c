@@ -1,6 +1,7 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <datetime.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdbool.h>
 #include <limits.h>
@@ -348,7 +349,7 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
 
 // Utility functions /////////////////////////////////////////////////////////
 
-static int
+static void
 raise_from(PyObject *new_exc_type, const char *message) {
     // This requires the error indicator to be set
     PyObject *cause;
@@ -694,7 +695,7 @@ decode_bytestring(CBORDecoderObject *self, uint8_t subtype)
         return NULL;
 
     if (length > (uint64_t)PY_SSIZE_T_MAX - (uint64_t)PyBytesObject_SIZE) {
-        sprintf(length_hex, "%llX", length);
+        sprintf(length_hex, "%" PRIX64, length);
         PyErr_Format(
                 _CBOR2_CBORDecodeValueError,
                 "excessive bytestring size 0x%s", length_hex);
@@ -894,7 +895,7 @@ decode_string(CBORDecoderObject *self, uint8_t subtype)
     if (decode_length(self, subtype, &length, &indefinite) == -1)
         return NULL;
     if (length > (uint64_t)PY_SSIZE_T_MAX - (uint64_t)PyBytesObject_SIZE) {
-        sprintf(length_hex, "%llX", length);
+        sprintf(length_hex, "%" PRIX64, length);
         PyErr_Format(
                 _CBOR2_CBORDecodeValueError,
                 "excessive string size 0x%s", length_hex);
@@ -1057,7 +1058,7 @@ decode_array(CBORDecoderObject *self, uint8_t subtype)
     if (indefinite)
         return decode_indefinite_array(self);
     if (length > (uint64_t)PY_SSIZE_T_MAX) {
-        sprintf(length_hex, "%llX", length);
+        sprintf(length_hex, "%" PRIX64, length);
         PyErr_Format(
                 _CBOR2_CBORDecodeValueError,
                 "excessive array size 0x%s", length_hex);
@@ -1253,12 +1254,7 @@ parse_datetimestr(CBORDecoderObject *self, PyObject *str)
                     (offset_sign ? -1 : 1) *
                     (offset_H * 3600 + offset_M * 60), 0);
                 if (delta) {
-#if PY_VERSION_HEX >= 0x03070000
                     tz = PyTimeZone_FromOffset(delta);
-#else
-                    tz = PyObject_CallFunctionObjArgs(
-                        _CBOR2_timezone, delta, NULL);
-#endif
                     Py_DECREF(delta);
                 }
             } else

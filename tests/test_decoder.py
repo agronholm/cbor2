@@ -13,7 +13,7 @@ from fractions import Fraction
 from io import BytesIO
 from ipaddress import ip_address, ip_network
 from pathlib import Path
-from typing import Type, cast
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -831,14 +831,14 @@ def test_load_from_file(impl, tmpdir):
 
 def test_nested_dict(impl):
     value = impl.loads(unhexlify("A1D9177082010201"))
-    assert type(value) is dict  # noqa: E721
+    assert type(value) is dict
     assert value == {impl.CBORTag(6000, (1, 2)): 1}
 
 
 def test_set(impl):
     payload = unhexlify("d9010283616361626161")
     value = impl.loads(payload)
-    assert type(value) is set  # noqa: E721
+    assert type(value) is set
     assert value == {"a", "b", "c"}
 
 
@@ -955,7 +955,7 @@ def test_decimal_payload_unpacking(impl, data, expected):
     ],
 )
 def test_oversized_read(impl, payload: bytes, tmp_path: Path) -> None:
-    CBORDecodeEOF = cast(Type[Exception], getattr(impl, "CBORDecodeEOF"))
+    CBORDecodeEOF = cast(type[Exception], getattr(impl, "CBORDecodeEOF"))
     with pytest.raises(CBORDecodeEOF, match="premature end of stream"):
         dummy_path = tmp_path / "testdata"
         dummy_path.write_bytes(payload)

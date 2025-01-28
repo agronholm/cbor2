@@ -257,7 +257,7 @@ class CBOREncoder:
         return self._canonical
 
     @contextmanager
-    def disable_value_sharing(self) -> Generator[None, None, None]:
+    def disable_value_sharing(self) -> Generator[None]:
         """
         Disable value sharing in the encoder for the duration of the context
         block.
@@ -268,7 +268,7 @@ class CBOREncoder:
         self.value_sharing = old_value_sharing
 
     @contextmanager
-    def disable_string_referencing(self) -> Generator[None, None, None]:
+    def disable_string_referencing(self) -> Generator[None]:
         """
         Disable tracking of string references for the duration of the
         context block.
@@ -279,7 +279,7 @@ class CBOREncoder:
         self.string_referencing = old_string_referencing
 
     @contextmanager
-    def disable_string_namespacing(self) -> Generator[None, None, None]:
+    def disable_string_namespacing(self) -> Generator[None]:
         """
         Disable generation of new string namespaces for the duration of the
         context block.
@@ -308,7 +308,7 @@ class CBOREncoder:
         obj_type = obj.__class__
         encoder = self._encoders.get(obj_type) or self._find_encoder(obj_type) or self._default
         if not encoder:
-            raise CBOREncodeTypeError("cannot serialize type %s" % obj_type.__name__)
+            raise CBOREncodeTypeError(f"cannot serialize type {obj_type.__name__}")
 
         encoder(self, obj)
 
