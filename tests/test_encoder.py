@@ -78,11 +78,42 @@ def test_encoders_load_type(impl):
 
 
 def test_encode_length(impl):
-    # This test is purely for coverage in the C variant
-    with BytesIO() as stream:
-        encoder = impl.CBOREncoder(stream)
-        encoder.encode_length(0, 1)
-        assert stream.getvalue() == b"\x01"
+    fp = None
+    encoder = None
+
+    def reset_encoder():
+        nonlocal fp, encoder
+        fp = BytesIO()
+        encoder = impl.CBOREncoder(fp)
+
+    reset_encoder()
+    encoder.encode_length(0, 1)
+    assert fp.getvalue() == b"\x01"
+
+    # Array of size 2
+    reset_encoder()
+    encoder.encode_length(4, 2)
+    assert fp.getvalue() == b"\x82"
+
+    # Array of indefinite size
+    reset_encoder()
+    encoder.encode_length(4, None)
+    assert fp.getvalue() == b"\x9f"
+
+    # Map of size 0
+    reset_encoder()
+    encoder.encode_length(5, 0)
+    assert fp.getvalue() == b"\xa0"
+
+    # Map of indefinite size
+    reset_encoder()
+    encoder.encode_length(5, None)
+    assert fp.getvalue() == b"\xbf"
+
+    # Indefinite container break
+    reset_encoder()
+    encoder.encode_break()
+    assert fp.getvalue() == b"\xff"
 
 
 def test_canonical_attr(impl):
@@ -654,3 +685,19 @@ def test_invariant_encode_decode(impl, val):
     undergoing an encode and decode)
     """
     assert impl.loads(impl.dumps(val)) == val
+
+
+def test_indefinite_containers(impl):
+    expected = b"\x82\x00\x01"
+    assert impl.dumps([0, 1]) == expected
+
+    expected = b"\x9f\x00\x01\xff"
+    assert impl.dumps([0, 1], indefinite_containers=True) == expected
+    assert impl.dumps([0, 1], indefinite_containers=True, canonical=True) == expected
+
+    expected = b"\xa0"
+    assert impl.dumps({}) == expected
+
+    expected = b"\xbf\xff"
+    assert impl.dumps({}, indefinite_containers=True) == expected
+    assert impl.dumps({}, indefinite_containers=True, canonical=True) == expected

@@ -123,6 +123,7 @@ class CBOREncoder:
         "string_referencing",
         "string_namespacing",
         "_string_references",
+        "indefinite_containers",
     )
 
     _fp: IO[bytes]
@@ -138,6 +139,7 @@ class CBOREncoder:
         canonical: bool = False,
         date_as_datetime: bool = False,
         string_referencing: bool = False,
+        indefinite_containers: bool = False,
     ):
         """
         :param fp:
@@ -168,6 +170,8 @@ class CBOREncoder:
         :param string_referencing:
             set to ``True`` to allow more efficient serializing of repeated string
             values
+        :param indefinite_containers:
+            encode containers as indefinite (use stop code instead of specifying length)
 
         """
         self.fp = fp
@@ -177,6 +181,7 @@ class CBOREncoder:
         self.value_sharing = value_sharing
         self.string_referencing = string_referencing
         self.string_namespacing = string_referencing
+        self.indefinite_containers = indefinite_containers
         self.default = default
         self._canonical = canonical
         self._shared_containers: dict[
@@ -395,9 +400,11 @@ class CBOREncoder:
 
             return False
 
-    def encode_length(self, major_tag: int, length: int) -> None:
+    def encode_length(self, major_tag: int, length: int | None) -> None:
         major_tag <<= 5
-        if length < 24:
+        if length is None:  # Indefinite
+            self._fp_write(struct.pack(">B", major_tag | 31))
+        elif length < 24:
             self._fp_write(struct.pack(">B", major_tag | length))
         elif length < 256:
             self._fp_write(struct.pack(">BB", major_tag | 24, length))
@@ -407,6 +414,10 @@ class CBOREncoder:
             self._fp_write(struct.pack(">BL", major_tag | 26, length))
         else:
             self._fp_write(struct.pack(">BQ", major_tag | 27, length))
+
+    def encode_break(self) -> None:
+        # Break stop code for indefinite containers
+        self._fp_write(struct.pack(">B", (7 << 5) | 31))
 
     def encode_int(self, value: int) -> None:
         # Big integers (2 ** 64 and over)
@@ -446,16 +457,22 @@ class CBOREncoder:
 
     @container_encoder
     def encode_array(self, value: Sequence[Any]) -> None:
-        self.encode_length(4, len(value))
+        self.encode_length(4, len(value) if not self.indefinite_containers else None)
         for item in value:
             self.encode(item)
 
+        if self.indefinite_containers:
+            self.encode_break()
+
     @container_encoder
     def encode_map(self, value: Mapping[Any, Any]) -> None:
-        self.encode_length(5, len(value))
+        self.encode_length(5, len(value) if not self.indefinite_containers else None)
         for key, val in value.items():
             self.encode(key)
             self.encode(val)
+
+        if self.indefinite_containers:
+            self.encode_break()
 
     def encode_sortable_key(self, value: Any) -> tuple[int, bytes]:
         """
@@ -471,7 +488,7 @@ class CBOREncoder:
     def encode_canonical_map(self, value: Mapping[Any, Any]) -> None:
         """Reorder keys according to Canonical CBOR specification"""
         keyed_keys = ((self.encode_sortable_key(key), key, value) for key, value in value.items())
-        self.encode_length(5, len(value))
+        self.encode_length(5, len(value) if not self.indefinite_containers else None)
         for sortkey, realkey, value in sorted(keyed_keys):
             if self.string_referencing:
                 # String referencing requires that the order encoded is
@@ -481,6 +498,9 @@ class CBOREncoder:
             else:
                 self._fp_write(sortkey[1])
             self.encode(value)
+
+        if self.indefinite_containers:
+            self.encode_break()
 
     def encode_semantic(self, value: CBORTag) -> None:
         # Nested string reference domains are distinct
@@ -699,6 +719,7 @@ def dumps(
     canonical: bool = False,
     date_as_datetime: bool = False,
     string_referencing: bool = False,
+    indefinite_containers: bool = False,
 ) -> bytes:
     """
     Serialize an object to a bytestring.
@@ -730,6 +751,8 @@ def dumps(
         the default behavior in previous releases (cbor2 <= 4.1.2).
     :param string_referencing:
         set to ``True`` to allow more efficient serializing of repeated string values
+    :param indefinite_containers:
+        encode containers as indefinite (use stop code instead of specifying length)
     :return: the serialized output
 
     """
@@ -743,6 +766,7 @@ def dumps(
             canonical=canonical,
             date_as_datetime=date_as_datetime,
             string_referencing=string_referencing,
+            indefinite_containers=indefinite_containers,
         ).encode(obj)
         return fp.getvalue()
 
@@ -757,6 +781,7 @@ def dump(
     canonical: bool = False,
     date_as_datetime: bool = False,
     string_referencing: bool = False,
+    indefinite_containers: bool = False,
 ) -> None:
     """
     Serialize an object to a file.
@@ -788,6 +813,8 @@ def dump(
     :param date_as_datetime:
         set to ``True`` to serialize date objects as datetimes (CBOR tag 0), which was
         the default behavior in previous releases (cbor2 <= 4.1.2).
+    :param indefinite_containers:
+        encode containers as indefinite (use stop code instead of specifying length)
     :param string_referencing:
         set to ``True`` to allow more efficient serializing of repeated string values
 
@@ -801,4 +828,5 @@ def dump(
         canonical=canonical,
         date_as_datetime=date_as_datetime,
         string_referencing=string_referencing,
+        indefinite_containers=indefinite_containers,
     ).encode(obj)

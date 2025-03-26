@@ -24,6 +24,7 @@ typedef struct {
     bool value_sharing;
     bool string_referencing;
     bool string_namespacing;
+    bool indefinite_containers;
 } CBOREncoderObject;
 
 extern PyTypeObject CBOREncoderType;
