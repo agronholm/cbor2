@@ -152,7 +152,7 @@ CBOREncoder_init(CBOREncoderObject *self, PyObject *args, PyObject *kwargs)
         self->string_namespacing = true;
     }
     if (indefinite_containers == 1)
-	    self->indefinite_containers = true;
+        self->indefinite_containers = true;
 
 
     if (_CBOREncoder_set_fp(self, fp, NULL) == -1)
