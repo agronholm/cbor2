@@ -1,6 +1,6 @@
 [build-system]
 requires = [
-    "setuptools >= 61",
+    "setuptools >= 77",
     "setuptools_scm[toml] >= 6.4"
 ]
 build-backend = "setuptools.build_meta"
@@ -10,13 +10,11 @@ name = "cbor2"
 description = "CBOR (de)serializer with extensive tag support"
 readme = "README.rst"
 authors = [{name = "Alex Grönholm", email = "alex.gronholm@nextday.fi"}]
-maintainers = [{name = "Kio Smallwood (Sekenre)", email = "kio@mothers-arms.co.uk"}]
-license = {text = "MIT"}
+license = "MIT"
 keywords = ["serialization", "cbor"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Typing :: Typed",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
