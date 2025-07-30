@@ -56,6 +56,10 @@ cbor2 = "cbor2.tool:main"
 [tool.setuptools.packages.find]
 include = ["cbor2"]
 
+[tool.setuptools_scm]
+version_scheme = "post-release"
+local_scheme = "dirty-tag"
+
 [tool.ruff]
 line-length = 99
 
