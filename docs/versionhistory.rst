@@ -7,6 +7,7 @@ This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
 **UNRELEASED**
 
+- Added support for Python 3.14
 - Dropped support for Python 3.8
   (#247 <https://github.com/agronholm/cbor2/pull/247>_; PR by @hugovk)
 - Added support for encoding indefinite containers (PR by @CZDanol)
