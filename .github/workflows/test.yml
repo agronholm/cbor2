@@ -31,8 +31,8 @@ jobs:
         allow-prereleases: true
         cache: pip
         cache-dependency-path: pyproject.toml
-    - name: Install dependencies
-      run: pip install -e .[test]
+    - name: Install the project and its dependencies
+      run: pip install --group test -e .
       env:
         CFLAGS: "-UNDEBUG"
         CBOR2_BUILD_C_EXTENSION: "${{ matrix.python-version == 'pypy-3.10' && '0' || '1' }}"

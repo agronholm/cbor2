@@ -34,7 +34,10 @@ Documentation = "https://cbor2.readthedocs.org/en/latest/"
 "Source Code" = "https://github.com/agronholm/cbor2"
 "Issue Tracker" = "https://github.com/agronholm/cbor2/issues"
 
-[project.optional-dependencies]
+[project.scripts]
+cbor2 = "cbor2.tool:main"
+
+[dependency-groups]
 test = [
     "coverage >= 7",
     "pytest",
@@ -50,9 +53,6 @@ doc = [
 benchmarks = [
     "pytest-benchmark==4.0.0",
 ]
-
-[project.scripts]
-cbor2 = "cbor2.tool:main"
 
 [tool.setuptools.packages.find]
 include = ["cbor2"]
@@ -79,7 +79,7 @@ ignore = ["ISC001"]
 strict = true
 
 [tool.pytest.ini_options]
-addopts = "-rsx --tb=short"
+addopts = "-rsfE --tb=short"
 testpaths = ["tests"]
 
 [tool.coverage.run]
@@ -90,30 +90,20 @@ relative_files = true
 show_missing = true
 
 [tool.tox]
-legacy_tox_ini = """
-[tox]
-envlist = py39, py310, py311, py312, py313, py314, pypy3
+env_list = ["py39", "py310", "py311", "py312", "py313", "py314", "pypy3"]
 skip_missing_interpreters = true
-minversion = 4.0.0
+requires = ["tox >= 4.22"]
 
-[testenv]
-commands = python -m pytest {posargs}
-package = editable
-extras = test
-setenv =
-  TZ=America/New_York
-  CBOR2_BUILD_C_EXTENSION=1
+[tool.tox.env.run_base]
+commands = [["pytest", { replace = "posargs", extend = true }]]
+package = "wheel"
+dependency_groups = ["test"]
+set_env = { TZ = "America/New_York", CBOR2_BUILD_C_EXTENSION = "1" }
 
-[testenv:pypy3]
-setenv =
-  TZ=America/New_York
+[tool.tox.env.pypy3]
+set_env = { TZ = "America/New_York" }
 
-[testenv:docs]
-extras = doc
-commands = sphinx-build -W -n docs build/sphinx
-package = wheel
-
-[testenv:.pkg-docs]
-setenv =
-  CBOR2_BUILD_C_EXTENSION=0
-"""
+[tool.tox.env.docs]
+commands = [["sphinx-build", "-W", "-n", "docs", "build/sphinx"]]
+dependency_groups = ["doc"]
+set_env = { CBOR2_BUILD_C_EXTENSION = "0" }
