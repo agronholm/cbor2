@@ -27,7 +27,6 @@ jobs:
       uses: pypa/cibuildwheel@v3.1.2
       env:
         CBOR2_BUILD_C_EXTENSION: "1"
-        CIBW_SKIP: "*t-*"
         CIBW_ARCHS: "auto64"
         CIBW_TEST_GROUPS: "test"
         CIBW_TEST_COMMAND: "python -m pytest {project}/tests"

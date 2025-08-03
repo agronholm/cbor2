@@ -831,6 +831,10 @@ PyInit__cbor2(void)
     if (!module)
         return NULL;
 
+#ifdef Py_GIL_DISABLED
+    PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED);
+#endif
+
     _CBOR2_CBORError = PyErr_NewExceptionWithDoc(
             "_cbor2.CBORError", _cbor2_CBORError__doc__, NULL, NULL);
     if (!_CBOR2_CBORError)
