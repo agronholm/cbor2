@@ -562,7 +562,7 @@ def test_bigfloat(impl):
         ("d9a7f882f90000faff800000", complex(0.0, float("-inf"))),
         ("d9a7f882f97e00fb0000000000000000", complex(float("nan"), 0.0)),
         ("d9a7f882fb0000000000000000f97e00", complex(0.0, float("nan"))),
-        ("d9a7f882f97e00f97e00", complex(float("nan"), float("nan")))
+        ("d9a7f882f97e00f97e00", complex(float("nan"), float("nan"))),
     ],
 )
 def test_complex(impl, payload, expected):
