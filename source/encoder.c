@@ -1434,6 +1434,36 @@ CBOREncoder_encode_rational(CBOREncoderObject *self, PyObject *value)
     return ret;
 }
 
+// CBOREncoder.encode_complex(self, value)
+static PyObject *
+CBOREncoder_encode_complex(CBOREncoderObject *self, PyObject *value)
+{
+    // semantic type 43000
+    PyObject *tuple, *real, *imag, *ret = NULL;
+    bool sharing;
+
+    real = PyObject_GetAttr(value, _CBOR2_str_real);
+    if (real) {
+        imag = PyObject_GetAttr(value, _CBOR2_str_imag);
+        if (imag) {
+            tuple = PyTuple_Pack(2, real, imag);
+            if (tuple) {
+                sharing = self->value_sharing;
+                self->value_sharing = false;
+                if (encode_semantic(self, 43000, tuple) == 0) {
+                    Py_INCREF(Py_None);
+                    ret = Py_None;
+                }
+                self->value_sharing = sharing;
+                Py_DECREF(tuple);
+            }
+            Py_DECREF(imag);
+        }
+        Py_DECREF(real);
+    }
+    return ret;
+}
+
 
 // CBOREncoder.encode_regexp(self, value)
 static PyObject *
@@ -2195,6 +2225,8 @@ static PyMethodDef CBOREncoder_methods[] = {
         "encode the specified integer *value* to the output"},
     {"encode_float", (PyCFunction) CBOREncoder_encode_float, METH_O,
         "encode the specified floating-point *value* to the output"},
+    {"encode_complex", (PyCFunction) CBOREncoder_encode_complex, METH_O,
+        "encode the specified complex *value* to the output"},
     {"encode_boolean", (PyCFunction) CBOREncoder_encode_boolean, METH_O,
         "encode the specified boolean *value* to the output"},
     {"encode_none", (PyCFunction) CBOREncoder_encode_none, METH_O,

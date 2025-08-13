@@ -355,6 +355,22 @@ def test_decimal(impl, value, expected):
     assert impl.dumps(value) == expected
 
 
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (3.1 + 2.1j, "d9a7f882fb4008cccccccccccdfb4000cccccccccccd"),
+        (1.0e300j, "d9a7f882fb0000000000000000fb7e37e43c8800759c"),
+        (0.0j, "d9a7f882fb0000000000000000fb0000000000000000"),
+        (complex(float("inf"), float("inf")), "d9a7f882f97c00f97c00"),
+        (complex(float("inf"), 0.0), "d9a7f882f97c00fb0000000000000000"),
+        (complex(float("nan"), float("inf")), "d9a7f882f97e00f97c00"),
+    ],
+)
+def test_complex(impl, value, expected):
+    expected = unhexlify(expected)
+    assert impl.dumps(value) == expected
+
+
 def test_rational(impl):
     expected = unhexlify("d81e820205")
     assert impl.dumps(Fraction(2, 5)) == expected

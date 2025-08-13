@@ -634,6 +634,11 @@ class CBOREncoder:
         else:
             self._fp_write(struct.pack(">Bd", 0xFB, value))
 
+    def encode_complex(self, value: complex) -> None:
+        # Semantic tag 43000
+        with self.disable_value_sharing():
+            self.encode_semantic(CBORTag(43000, [value.real, value.imag]))
+
     def encode_minimal_float(self, value: float) -> None:
         # Handle special values efficiently
         if math.isnan(value):
@@ -672,6 +677,7 @@ default_encoders: dict[type | tuple[str, str], Callable[[CBOREncoder, Any], None
     str: CBOREncoder.encode_string,
     int: CBOREncoder.encode_int,
     float: CBOREncoder.encode_float,
+    complex: CBOREncoder.encode_complex,
     ("decimal", "Decimal"): CBOREncoder.encode_decimal,
     bool: CBOREncoder.encode_boolean,
     type(None): CBOREncoder.encode_none,

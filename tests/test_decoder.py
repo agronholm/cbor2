@@ -539,6 +539,45 @@ def test_bigfloat(impl):
     assert decoded == Decimal("1.5")
 
 
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        ("d9a7f882f90000f90000", 0.0j),
+        ("d9a7f882fb0000000000000000fb0000000000000000", 0.0j),
+        ("d9a7f882f98000f98000", -0.0j),
+        ("d9a7f882f90000f93c00", 1.0j),
+        ("d9a7f882fb0000000000000000fb3ff199999999999a", 1.1j),
+        ("d9a7f882f93e00f93e00", 1.5 + 1.5j),
+        ("d9a7f882f97bfff97bff", 65504.0 + 65504.0j),
+        ("d9a7f882fa47c35000fa47c35000", 100000.0 + 100000.0j),
+        ("d9a7f882f90000fb7e37e43c8800759c", 1.0e300j),
+        ("d9a7f882f90000f90001", 5.960464477539063e-8j),
+        ("d9a7f882f90000f90400", 0.00006103515625j),
+        ("d9a7f882f90000f9c400", -4.0j),
+        ("d9a7f882f90000fbc010666666666666", -4.1j),
+        ("d9a7f882f90000f97c00", complex(0.0, float("inf"))),
+        ("d9a7f882f97c00f90000", complex(float("inf"), 0.0)),
+        ("d9a7f882f90000f9fc00", complex(0.0, float("-inf"))),
+        ("d9a7f882f90000fa7f800000", complex(0.0, float("inf"))),
+        ("d9a7f882f90000faff800000", complex(0.0, float("-inf"))),
+        ("d9a7f882f97e00fb0000000000000000", complex(float("nan"), 0.0)),
+        ("d9a7f882fb0000000000000000f97e00", complex(0.0, float("nan"))),
+        ("d9a7f882f97e00f97e00", complex(float("nan"), float("nan"))),
+    ],
+)
+def test_complex(impl, payload, expected):
+    decoded = impl.loads(unhexlify(payload))
+    if math.isnan(expected.real):
+        assert math.isnan(decoded.real)
+    else:
+        assert expected.real == decoded.real
+
+    if math.isnan(expected.imag):
+        assert math.isnan(decoded.imag)
+    else:
+        assert expected.imag == decoded.imag
+
+
 def test_rational(impl):
     decoded = impl.loads(unhexlify("d81e820205"))
     assert decoded == Fraction(2, 5)

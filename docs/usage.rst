@@ -99,6 +99,7 @@ Tag   Semantics                                Python type(s)
 258   Set of unique items                      set
 260   Network address                          :class:`ipaddress.IPv4Address` (or IPv6)
 261   Network prefix                           :class:`ipaddress.IPv4Network` (or IPv6)
+43000 Single complex number                    complex
 55799 Self-Described CBOR                      object
 ===== ======================================== ====================================================
 
