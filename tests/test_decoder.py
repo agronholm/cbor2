@@ -571,6 +571,7 @@ def test_complex(impl, payload, expected):
         assert math.isnan(decoded.real)
     else:
         assert expected.real == decoded.real
+
     if math.isnan(expected.imag):
         assert math.isnan(decoded.imag)
     else:
