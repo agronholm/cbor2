@@ -7,10 +7,11 @@ This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
 **UNRELEASED**
 
-- Added support for Python 3.14
+- Added support for Python 3.14 (no free-threading support yet, sorry)
 - Dropped support for Python 3.8
   (#247 <https://github.com/agronholm/cbor2/pull/247>_; PR by @hugovk)
-- Added support for encoding indefinite containers (PR by @CZDanol)
+- Added support for encoding indefinite containers
+  (#256 <https://github.com/agronholm/cbor2/pull/256>_; PR by @CZDanol)
 - Added complex number support (tag 43000)
   (#249 <https://github.com/agronholm/cbor2/pull/249>_; PR by @chillenb)
 
