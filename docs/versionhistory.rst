@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
+**UNRELEASED**
+- Improved performance on decoding large definite bytestrings
+  (#XXX <https://github.com/agronholm/cbor2/pull/XXX>_; PR by @dwpaley)
+
 **5.7.0** (2025-08-14)
 
 - Added support for Python 3.14 (no free-threading support yet, sorry)
