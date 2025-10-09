@@ -610,22 +610,22 @@ decode_definite_long_bytestring(CBORDecoderObject *self, Py_ssize_t length)
             goto error;
         }
 
-	if (buffer) {
-	    Py_ssize_t current_size = PyByteArray_GET_SIZE(buffer);
-	    if (PyByteArray_Resize(buffer, current_size + chunk_length) < 0) {
-		Py_DECREF(chunk);
-		goto error;
-	    }
-	    memcpy(PyByteArray_AS_STRING(buffer) + current_size,
-		   PyBytes_AS_STRING(chunk),
-		   chunk_length);
-	    Py_DECREF(chunk);
-	} else {
-	    buffer = PyByteArray_FromObject(chunk);
-	    Py_DECREF(chunk);
-	    if (!buffer)
-		goto error;
-	}
+        if (buffer) {
+            Py_ssize_t current_size = PyByteArray_GET_SIZE(buffer);
+            if (PyByteArray_Resize(buffer, current_size + chunk_length) < 0) {
+                Py_DECREF(chunk);
+                goto error;
+            }
+            memcpy(PyByteArray_AS_STRING(buffer) + current_size,
+                   PyBytes_AS_STRING(chunk),
+                   chunk_length);
+            Py_DECREF(chunk);
+        } else {
+            buffer = PyByteArray_FromObject(chunk);
+            Py_DECREF(chunk);
+            if (!buffer)
+                goto error;
+        }
         left -= chunk_length;
     }
 
