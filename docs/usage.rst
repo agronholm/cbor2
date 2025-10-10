@@ -5,7 +5,7 @@ Basic usage
 
 Serializing and deserializing with cbor2 is pretty straightforward::
 
-    from cbor2 import dumps, loads, load
+    from cbor2 import dump, dumps, load, loads
 
     # Serialize an object as a bytestring
     data = dumps(['hello', 'world'])
