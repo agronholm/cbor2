@@ -9,6 +9,8 @@ This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
 - Improved performance on decoding large definite bytestrings
   (#240 <https://github.com/agronholm/cbor2/issues/240>_; PR by @dwpaley)
+- Fixed a read(-1) vulnerability caused by boundary handling error
+  (#264 <https://github.com/agronholm/cbor2/issues/264>_; PR by @tylzh97)
 
 **5.7.0** (2025-08-14)
 

@@ -759,7 +759,7 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
     char *buffer = NULL;
     while (left) {
         // Read up to 65536 bytes of data from the stream
-        Py_ssize_t chunk_length = 65536 - buffer_size;
+        Py_ssize_t chunk_length = 65536 - buffer_length;
         if (left < chunk_length)
             chunk_length = left;
 
@@ -829,7 +829,13 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
                 memcpy(buffer, bytes_buffer + consumed, unconsumed);
             }
             buffer_length = unconsumed;
+        } else {
+            // All bytes consumed, reset buffer_length
+            buffer_length = 0;
         }
+
+        Py_DECREF(chunk);
+        chunk = NULL;
     }
 
     if (ret && string_namespace_add(self, ret, length) == -1)
