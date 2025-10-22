@@ -268,14 +268,14 @@ def test_string_issue_264_multiple_chunks_utf8_boundary(impl) -> None:
     # Total: 131174 bytes, which spans 3 chunks (65536 + 65536 + 102)
     total_bytes = 65535 + 3 + 65533 + 3 + 100
 
-    payload = b'\x7a' + struct.pack('>I', total_bytes)  # major type 3, 4-byte length
-    payload += b'a' * 65535
-    payload += '€'.encode('utf-8')  # U+20AC: E2 82 AC
-    payload += b'b' * 65533
-    payload += '€'.encode('utf-8')
-    payload += b'd' * 100
+    payload = b"\x7a" + struct.pack(">I", total_bytes)  # major type 3, 4-byte length
+    payload += b"a" * 65535
+    payload += "€".encode()  # U+20AC: E2 82 AC
+    payload += b"b" * 65533
+    payload += "€".encode()
+    payload += b"d" * 100
 
-    expected = 'a' * 65535 + '€' + 'b' * 65533 + '€' + 'd' * 100
+    expected = "a" * 65535 + "€" + "b" * 65533 + "€" + "d" * 100
 
     result = impl.loads(payload)
     assert result == expected
