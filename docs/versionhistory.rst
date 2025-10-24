@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
-**UNRELEASED**
+**5.7.1** (2025-10-24)
 
 - Improved performance on decoding large definite bytestrings
   (#240 <https://github.com/agronholm/cbor2/issues/240>_; PR by @dwpaley)
