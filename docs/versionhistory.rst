@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed Python decoder not preserving share index when decoding array items containing
+  nested shareable tags, causing shared references to resolve to wrong objects
+
 **5.7.1** (2025-10-24)
 
 - Improved performance on decoding large definite bytestrings

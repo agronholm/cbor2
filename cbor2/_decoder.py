@@ -398,7 +398,7 @@ class CBORDecoder:
             if not self._immutable:
                 self.set_shareable(items)
             while True:
-                value = self._decode()
+                value = self._decode(unshared=True)
                 if value is break_marker:
                     break
                 else:
@@ -412,7 +412,7 @@ class CBORDecoder:
                 self.set_shareable(items)
 
             for index in range(length):
-                items.append(self._decode())
+                items.append(self._decode(unshared=True))
 
         if self._immutable:
             items_tuple = tuple(items)
