@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
+**UNRELEASED**
+
+- Reset shared reference state at the start of each top-level encode/decode operation
+  (#266 <https://github.com/agronholm/cbor2/pull/266>_; PR by @andreer)
+
 **5.7.1** (2025-10-24)
 
 - Improved performance on decoding large definite bytestrings

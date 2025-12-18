@@ -717,3 +717,73 @@ def test_indefinite_containers(impl):
     expected = b"\xbf\xff"
     assert impl.dumps({}, indefinite_containers=True) == expected
     assert impl.dumps({}, indefinite_containers=True, canonical=True) == expected
+
+
+class TestEncoderReuse:
+    """
+    Tests for correct behavior when reusing CBOREncoder instances.
+    """
+
+    def test_encoder_reuse_resets_shared_containers(self, impl):
+        """
+        Shared container tracking should be scoped to a single encode operation,
+        not persist across multiple encodes on the same encoder instance.
+        """
+        fp = BytesIO()
+        encoder = impl.CBOREncoder(fp, value_sharing=True)
+        shared_obj = ["hello"]
+
+        # First encode: object is tracked in shared containers
+        encoder.encode([shared_obj, shared_obj])
+
+        # Second encode on new fp: should produce valid standalone CBOR
+        # (not a sharedref pointing to stale first-encode data)
+        encoder.fp = BytesIO()
+        encoder.encode(shared_obj)
+        second_output = encoder.fp.getvalue()
+
+        # The second output must be decodable on its own
+        result = impl.loads(second_output)
+        assert result == ["hello"]
+
+    def test_encode_to_bytes_resets_shared_containers(self, impl):
+        """
+        encode_to_bytes should also reset shared container tracking between calls.
+        """
+        fp = BytesIO()
+        encoder = impl.CBOREncoder(fp, value_sharing=True)
+        shared_obj = ["hello"]
+
+        # First encode
+        encoder.encode_to_bytes([shared_obj, shared_obj])
+
+        # Second encode should produce valid standalone CBOR
+        result_bytes = encoder.encode_to_bytes(shared_obj)
+        result = impl.loads(result_bytes)
+        assert result == ["hello"]
+
+    def test_encoder_hook_does_not_reset_state(self, impl):
+        """
+        When a custom encoder hook calls encode(), the shared container
+        tracking should be preserved (not reset mid-operation).
+        """
+
+        class Custom:
+            def __init__(self, value):
+                self.value = value
+
+        def custom_encoder(encoder, obj):
+            # Hook encodes the wrapped value
+            encoder.encode(obj.value)
+
+        # Encode a Custom wrapping a list
+        data = impl.dumps(Custom(["a", "b"]), default=custom_encoder)
+
+        # Verify the output decodes correctly
+        result = impl.loads(data)
+        assert result == ["a", "b"]
+
+        # Test nested Custom objects - hook should work recursively
+        data2 = impl.dumps(Custom(Custom(["x"])), default=custom_encoder)
+        result2 = impl.loads(data2)
+        assert result2 == ["x"]

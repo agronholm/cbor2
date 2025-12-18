@@ -114,6 +114,7 @@ CBOREncoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         self->string_referencing = false;
         self->string_namespacing = false;
         self->indefinite_containers = false;
+        self->encode_depth = 0;
     }
     return (PyObject *) self;
 }
@@ -2132,17 +2133,35 @@ encode(CBOREncoderObject *self, PyObject *value)
 }
 
 
+// Reset shared state at the end of each top-level encode to prevent
+// shared references from leaking between independent encode operations.
+// Nested calls (from hooks or recursive encoding) must preserve the state.
+static inline void
+clear_shared_state(CBOREncoderObject *self)
+{
+    PyDict_Clear(self->shared);
+    PyDict_Clear(self->string_references);
+}
+
+
 // CBOREncoder.encode(self, value)
 PyObject *
 CBOREncoder_encode(CBOREncoderObject *self, PyObject *value)
 {
     PyObject *ret;
 
-    // TODO reset shared dict?
-    if (Py_EnterRecursiveCall(" in CBOREncoder.encode"))
+    self->encode_depth++;
+    if (Py_EnterRecursiveCall(" in CBOREncoder.encode")) {
+        self->encode_depth--;
         return NULL;
+    }
     ret = encode(self, value);
     Py_LeaveRecursiveCall();
+    self->encode_depth--;
+    assert(self->encode_depth >= 0);
+    if (self->encode_depth == 0) {
+        clear_shared_state(self);
+    }
     return ret;
 }
 

@@ -13,6 +13,7 @@ typedef struct {
     PyObject *str_errors;
     bool immutable;
     Py_ssize_t shared_index;
+    Py_ssize_t decode_depth;
 } CBORDecoderObject;
 
 extern PyTypeObject CBORDecoderType;

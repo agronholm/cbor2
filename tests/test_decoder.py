@@ -1022,3 +1022,65 @@ def test_oversized_read(impl, payload: bytes, tmp_path: Path) -> None:
         dummy_path.write_bytes(payload)
         with dummy_path.open("rb") as f:
             impl.load(f)
+
+
+class TestDecoderReuse:
+    """
+    Tests for correct behavior when reusing CBORDecoder instances.
+    """
+
+    def test_decoder_reuse_resets_shared_refs(self, impl):
+        """
+        Shared references should be scoped to a single decode operation,
+        not persist across multiple decodes on the same decoder instance.
+        """
+        # Message with shareable tag (28)
+        msg1 = impl.dumps(impl.CBORTag(28, "first_value"))
+
+        # Message with sharedref tag (29) referencing index 0
+        msg2 = impl.dumps(impl.CBORTag(29, 0))
+
+        # Reuse decoder across messages
+        decoder = impl.CBORDecoder(BytesIO(msg1))
+        result1 = decoder.decode()
+        assert result1 == "first_value"
+
+        # Second decode should fail - sharedref(0) doesn't exist in this context
+        decoder.fp = BytesIO(msg2)
+        with pytest.raises(impl.CBORDecodeValueError, match="shared reference"):
+            decoder.decode()
+
+    def test_decode_from_bytes_resets_shared_refs(self, impl):
+        """
+        decode_from_bytes should also reset shared references between calls.
+        """
+        msg1 = impl.dumps(impl.CBORTag(28, "value"))
+        msg2 = impl.dumps(impl.CBORTag(29, 0))
+
+        decoder = impl.CBORDecoder(BytesIO(b""))
+        decoder.decode_from_bytes(msg1)
+
+        with pytest.raises(impl.CBORDecodeValueError, match="shared reference"):
+            decoder.decode_from_bytes(msg2)
+
+    def test_shared_refs_within_single_decode(self, impl):
+        """
+        Shared references must work correctly within a single decode operation.
+
+        Note: This tests non-cyclic sibling references [shareable(x), sharedref(0)],
+        which is a different pattern from test_cyclic_array/test_cyclic_map that
+        test self-referencing structures like shareable([sharedref(0)]).
+        """
+        # [shareable("hello"), sharedref(0)] -> ["hello", "hello"]
+        data = unhexlify(
+            "82"  # array(2)
+            "d81c"  # tag(28) shareable
+            "65"  # text(5)
+            "68656c6c6f"  # "hello"
+            "d81d"  # tag(29) sharedref
+            "00"  # unsigned(0)
+        )
+
+        result = impl.loads(data)
+        assert result == ["hello", "hello"]
+        assert result[0] is result[1]  # Same object reference
