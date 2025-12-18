@@ -9,6 +9,7 @@ This library adheres to `Semantic Versioning <https://semver.org/>`_.
 
 - Fixed Python decoder not preserving share index when decoding array items containing
   nested shareable tags, causing shared references to resolve to wrong objects
+  (#267 <https://github.com/agronholm/cbor2/pull/267>_; PR by @andreer)
 - Reset shared reference state at the start of each top-level encode/decode operation
   (#266 <https://github.com/agronholm/cbor2/pull/266>_; PR by @andreer)
 
