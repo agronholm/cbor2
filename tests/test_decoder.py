@@ -780,6 +780,12 @@ def test_cyclic_map(impl):
     assert decoded == {0: decoded}
 
 
+def test_nested_shareable_in_array(impl):
+    decoded = impl.loads(unhexlify("82d81c82d81c61616162d81d00"))
+    assert decoded == [["a", "b"], ["a", "b"]]
+    assert decoded[0] is decoded[1]
+
+
 def test_string_ref(impl):
     decoded = impl.loads(unhexlify("d9010085656669727374d81900667365636f6e64d81900d81901"))
     assert isinstance(decoded, list)

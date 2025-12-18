@@ -4,7 +4,7 @@ import re
 import struct
 import sys
 from codecs import getincrementaldecoder
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
@@ -229,7 +229,7 @@ class CBORDecoder:
                 self._share_index = old_index
 
     @contextmanager
-    def _decoding_context(self):
+    def _decoding_context(self) -> Generator[None]:
         """
         Context manager for tracking decode depth and clearing shared state.
 
@@ -422,7 +422,7 @@ class CBORDecoder:
             if not self._immutable:
                 self.set_shareable(items)
             while True:
-                value = self._decode()
+                value = self._decode(unshared=True)
                 if value is break_marker:
                     break
                 else:
@@ -436,7 +436,7 @@ class CBORDecoder:
                 self.set_shareable(items)
 
             for index in range(length):
-                items.append(self._decode())
+                items.append(self._decode(unshared=True))
 
         if self._immutable:
             items_tuple = tuple(items)
