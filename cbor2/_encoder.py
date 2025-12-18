@@ -306,7 +306,7 @@ class CBOREncoder:
         self._fp_write(data)
 
     @contextmanager
-    def _encoding_context(self):
+    def _encoding_context(self) -> Generator[None]:
         """
         Context manager for tracking encode depth and clearing shared state.
 
