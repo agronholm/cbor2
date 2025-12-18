@@ -143,6 +143,7 @@ CBORDecoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         self->str_errors = PyBytes_FromString("strict");
         self->immutable = false;
         self->shared_index = -1;
+        self->decode_depth = 0;
     }
     return (PyObject *) self;
 error:
@@ -2083,11 +2084,30 @@ decode(CBORDecoderObject *self, DecodeOptions options)
 }
 
 
+// Reset shared state at the end of each top-level decode to prevent
+// shared references from leaking between independent decode operations.
+// Nested calls (from hooks) must preserve the state.
+static inline void
+clear_shareable_state(CBORDecoderObject *self)
+{
+    PyList_SetSlice(self->shareables, 0, PY_SSIZE_T_MAX, NULL);
+    self->shared_index = -1;
+}
+
+
 // CBORDecoder.decode(self) -> obj
 PyObject *
 CBORDecoder_decode(CBORDecoderObject *self)
 {
-    return decode(self, DECODE_NORMAL);
+    PyObject *ret;
+    self->decode_depth++;
+    ret = decode(self, DECODE_NORMAL);
+    self->decode_depth--;
+    assert(self->decode_depth >= 0);
+    if (self->decode_depth == 0) {
+        clear_shareable_state(self);
+    }
+    return ret;
 }
 
 
@@ -2100,6 +2120,7 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
     if (!_CBOR2_BytesIO && _CBOR2_init_BytesIO() == -1)
         return NULL;
 
+    self->decode_depth++;
     save_read = self->read;
     buf = PyObject_CallFunctionObjArgs(_CBOR2_BytesIO, data, NULL);
     if (buf) {
@@ -2111,6 +2132,11 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
         Py_DECREF(buf);
     }
     self->read = save_read;
+    self->decode_depth--;
+    assert(self->decode_depth >= 0);
+    if (self->decode_depth == 0) {
+        clear_shareable_state(self);
+    }
     return ret;
 }
 

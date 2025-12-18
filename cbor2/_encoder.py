@@ -124,6 +124,7 @@ class CBOREncoder:
         "string_namespacing",
         "_string_references",
         "indefinite_containers",
+        "_encode_depth",
     )
 
     _fp: IO[bytes]
@@ -188,6 +189,7 @@ class CBOREncoder:
             int, tuple[object, int | None]
         ] = {}  # indexes used for value sharing
         self._string_references: dict[str | bytes, int] = {}  # indexes used for string references
+        self._encode_depth = 0
         self._encoders = default_encoders.copy()
         if canonical:
             self._encoders.update(canonical_encoders)
@@ -303,12 +305,40 @@ class CBOREncoder:
         """
         self._fp_write(data)
 
+    @contextmanager
+    def _encoding_context(self):
+        """
+        Context manager for tracking encode depth and clearing shared state.
+
+        Shared state is cleared at the end of each top-level encode to prevent
+        shared references from leaking between independent encode operations.
+        Nested calls (from hooks) must preserve the state.
+        """
+        self._encode_depth += 1
+        try:
+            yield
+        finally:
+            self._encode_depth -= 1
+            if self._encode_depth == 0:
+                self._shared_containers.clear()
+                self._string_references.clear()
+
     def encode(self, obj: Any) -> None:
         """
         Encode the given object using CBOR.
 
         :param obj:
             the object to encode
+        """
+        with self._encoding_context():
+            self._encode_value(obj)
+
+    def _encode_value(self, obj: Any) -> None:
+        """
+        Internal fast path for encoding - used by built-in encoders.
+
+        External code should use encode() instead, which properly manages
+        shared state between independent encode operations.
         """
         obj_type = obj.__class__
         encoder = self._encoders.get(obj_type) or self._find_encoder(obj_type) or self._default
@@ -459,7 +489,7 @@ class CBOREncoder:
     def encode_array(self, value: Sequence[Any]) -> None:
         self.encode_length(4, len(value) if not self.indefinite_containers else None)
         for item in value:
-            self.encode(item)
+            self._encode_value(item)
 
         if self.indefinite_containers:
             self.encode_break()
@@ -468,8 +498,8 @@ class CBOREncoder:
     def encode_map(self, value: Mapping[Any, Any]) -> None:
         self.encode_length(5, len(value) if not self.indefinite_containers else None)
         for key, val in value.items():
-            self.encode(key)
-            self.encode(val)
+            self._encode_value(key)
+            self._encode_value(val)
 
         if self.indefinite_containers:
             self.encode_break()
@@ -494,10 +524,10 @@ class CBOREncoder:
                 # String referencing requires that the order encoded is
                 # the same as the order emitted so string references are
                 # generated after an order is determined
-                self.encode(realkey)
+                self._encode_value(realkey)
             else:
                 self._fp_write(sortkey[1])
-            self.encode(value)
+            self._encode_value(value)
 
         if self.indefinite_containers:
             self.encode_break()
@@ -511,7 +541,7 @@ class CBOREncoder:
             self._string_references = {}
 
         self.encode_length(6, value.tag)
-        self.encode(value.value)
+        self._encode_value(value.value)
 
         self.string_referencing = old_string_referencing
         self._string_references = old_string_references
@@ -574,7 +604,7 @@ class CBOREncoder:
     def encode_stringref(self, value: str | bytes) -> None:
         # Semantic tag 25
         if not self._stringref(value):
-            self.encode(value)
+            self._encode_value(value)
 
     def encode_rational(self, value: Fraction) -> None:
         # Semantic tag 30
