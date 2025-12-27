@@ -22,16 +22,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     environment: release
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Build wheels
-      uses: pypa/cibuildwheel@v3.1.2
+      uses: pypa/cibuildwheel@v3.3.0
       env:
         CBOR2_BUILD_C_EXTENSION: "1"
         CIBW_SKIP: "*t-*"
         CIBW_ARCHS: "auto64"
         CIBW_TEST_GROUPS: "test"
         CIBW_TEST_COMMAND: "python -m pytest {project}/tests"
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v6
       with:
         name: wheels-${{ matrix.os }}
         path: wheelhouse/*.whl
@@ -40,9 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: 3.x
     - name: Install dependencies
@@ -51,7 +51,7 @@ jobs:
       run: python -m build .
       env:
         CBOR2_BUILD_C_EXTENSION: "0"
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v6
       with:
         name: sdist
         path: dist/*
@@ -66,7 +66,7 @@ jobs:
       id-token: write
     steps:
     - name: Download generated packaging artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
     - name: Move the packages to dist/
       run: |
         mkdir dist
@@ -83,7 +83,7 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - id: changelog
       uses: agronholm/release-notes@v1
       with:
