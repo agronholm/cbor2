@@ -1090,3 +1090,89 @@ class TestDecoderReuse:
         result = impl.loads(data)
         assert result == ["hello", "hello"]
         assert result[0] is result[1]  # Same object reference
+
+
+def test_decode_from_bytes_in_hook_preserves_buffer(impl):
+    """Test that calling decode_from_bytes from a hook preserves stream buffer state.
+
+    This is a documented use case from docs/customizing.rst where hooks decode
+    embedded CBOR data. Before the fix, the stream's readahead buffer would be
+    corrupted, causing subsequent reads to fail or return wrong data.
+    """
+
+    def tag_hook(decoder, tag):
+        if tag.tag == 999:
+            # Decode embedded CBOR (documented pattern)
+            return decoder.decode_from_bytes(tag.value)
+        return tag
+
+    # Test data: array with [tag(999, embedded_cbor), "after_hook", "final"]
+    # embedded_cbor encodes: [1, 2, 3]
+    data = unhexlify(
+        "83"  # array(3)
+        "d903e7"  # tag(999)
+        "44"  # bytes(4)
+        "83010203"  # embedded: array [1, 2, 3]
+        "6a"  # text(10)
+        "61667465725f686f6f6b"  # "after_hook"
+        "65"  # text(5)
+        "66696e616c"  # "final"
+    )
+
+    # Decode from stream (not bytes) to use readahead buffer
+    stream = BytesIO(data)
+    decoder = impl.CBORDecoder(stream, tag_hook=tag_hook)
+    result = decoder.decode()
+
+    # Verify all values decoded correctly
+    assert result == [[1, 2, 3], "after_hook", "final"]
+
+    # First element should be the decoded embedded CBOR
+    assert result[0] == [1, 2, 3]
+    # Second element should be "after_hook" (not corrupted)
+    assert result[1] == "after_hook"
+    # Third element should be "final"
+    assert result[2] == "final"
+
+
+def test_decode_from_bytes_deeply_nested_in_hook(impl):
+    """Test deeply nested decode_from_bytes calls preserve buffer state.
+
+    This tests tag(999, tag(888, tag(777, [1,2,3]))) where each tag value
+    is embedded CBOR that triggers the hook recursively.
+
+    Before the fix, even a single level would corrupt the buffer. With multiple
+    levels, the buffer would be completely corrupted, mixing data from different
+    BytesIO objects and the original stream.
+    """
+
+    def tag_hook(decoder, tag):
+        if tag.tag in [999, 888, 777]:
+            # Recursively decode embedded CBOR
+            return decoder.decode_from_bytes(tag.value)
+        return tag
+
+    # Test data: [tag(999, tag(888, tag(777, [1,2,3]))), "after", "final"]
+    # Each tag contains embedded CBOR
+    data = unhexlify(
+        "83"  # array(3)
+        "d903e7"  # tag(999)
+        "4c"  # bytes(12)
+        "d9037848d903094483010203"  # embedded: tag(888, tag(777, [1,2,3]))
+        "65"  # text(5)
+        "6166746572"  # "after"
+        "65"  # text(5)
+        "66696e616c"  # "final"
+    )
+
+    # Decode from stream to use readahead buffer
+    stream = BytesIO(data)
+    decoder = impl.CBORDecoder(stream, tag_hook=tag_hook)
+    result = decoder.decode()
+
+    # With the fix: all three levels of nesting work correctly
+    # Without the fix: buffer corruption at each level, test fails
+    assert result == [[1, 2, 3], "after", "final"]
+    assert result[0] == [1, 2, 3]
+    assert result[1] == "after"
+    assert result[2] == "final"
