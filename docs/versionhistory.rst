@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.8.0** (2025-12-30)
 
 - Added readahead buffering to C decoder for improved performance.
   The decoder now uses a 4 KB buffer by default to reduce the number of read calls.
