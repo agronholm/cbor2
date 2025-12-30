@@ -114,11 +114,11 @@ def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict
             k = str(k)
 
         if isinstance(v, dict):
-            v = key_to_str(v, dict_ids)
+            rval[k] = key_to_str(v, dict_ids)
         elif isinstance(v, (tuple, list, set)):
-            v = [key_to_str(x, dict_ids) for x in v]
-
-        rval[k] = v
+            rval[k] = [key_to_str(x, dict_ids) for x in v]
+        else:
+            rval[k] = v
 
     return rval
 

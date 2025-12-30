@@ -669,16 +669,7 @@ def test_encode_stringrefs_array(impl):
 def test_encode_stringrefs_dict(impl):
     value = {"aaaa": "mmmm", "bbbb": "bbbb", "cccc": "aaaa", "mmmm": "aaaa"}
     expected = unhexlify(
-        "d90100"
-        "a4"
-        "6461616161"
-        "646d6d6d6d"
-        "6462626262"
-        "d81902"
-        "6463636363"
-        "d81900"
-        "d81901"
-        "d81900"
+        "d90100a46461616161646d6d6d6d6462626262d819026463636363d81900d81901d81900"
     )
     assert impl.dumps(value, string_referencing=True, canonical=True) == expected
 

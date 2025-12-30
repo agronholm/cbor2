@@ -732,15 +732,13 @@ def test_ipnetwork(impl, payload, expected):
 def test_bad_ipnetwork(impl):
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify("d90105a244c0a80064181844c0a800001818"))
-        assert str(exc.value).endswith(
-            "invalid ipnetwork value %r" % {b"\xc0\xa8\x00d": 24, b"\xc0\xa8\x00\x00": 24}
-        )
+        invalid_value = {b"\xc0\xa8\x00d": 24, b"\xc0\xa8\x00\x00": 24}
+        assert str(exc.value).endswith(f"invalid ipnetwork value {invalid_value!r}")
         assert isinstance(exc, ValueError)
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify("d90105a144c0a80064420102"))
-        assert str(exc.value).endswith(
-            "invalid ipnetwork value %r" % {b"\xc0\xa8\x00d": b"\x01\x02"}
-        )
+        invalid_value = {b"\xc0\xa8\x00d": b"\x01\x02"}
+        assert str(exc.value).endswith(f"invalid ipnetwork value {invalid_value}")
         assert isinstance(exc, ValueError)
 
 
