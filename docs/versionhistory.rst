@@ -7,10 +7,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
-- Added readahead buffering to C decoder for improved performance. The decoder
-  now uses a 4KB buffer by default to reduce the number of read calls.
+- Added readahead buffering to C decoder for improved performance.
+  The decoder now uses a 4 KB buffer by default to reduce the number of read calls.
   Benchmarks show 20-140% performance improvements for decoding operations.
-  Read buffer size can be configured via the new ``read_size`` parameter.
   (`#268+ <https://github.com/agronholm/cbor2/pull/268>`_; PR by @andreer)
 - Fixed Python decoder not preserving share index when decoding array items containing
   nested shareable tags, causing shared references to resolve to wrong objects
