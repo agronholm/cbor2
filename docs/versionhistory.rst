@@ -10,29 +10,29 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Added readahead buffering to C decoder for improved performance.
   The decoder now uses a 4 KB buffer by default to reduce the number of read calls.
   Benchmarks show 20-140% performance improvements for decoding operations.
-  (`#268+ <https://github.com/agronholm/cbor2/pull/268>`_; PR by @andreer)
+  (`#268 <https://github.com/agronholm/cbor2/pull/268>`_; PR by @andreer)
 - Fixed Python decoder not preserving share index when decoding array items containing
   nested shareable tags, causing shared references to resolve to wrong objects
-  (`#267+ <https://github.com/agronholm/cbor2/pull/267>`_; PR by @andreer)
+  (`#267 <https://github.com/agronholm/cbor2/pull/267>`_; PR by @andreer)
 - Reset shared reference state at the start of each top-level encode/decode operation
-  (`#266+ <https://github.com/agronholm/cbor2/pull/266>`_; PR by @andreer)
+  (`#266 <https://github.com/agronholm/cbor2/pull/266>`_; PR by @andreer)
 
 **5.7.1** (2025-10-24)
 
 - Improved performance on decoding large definite bytestrings
-  (#240 <https://github.com/agronholm/cbor2/issues/240>_; PR by @dwpaley)
+  (`#240 <https://github.com/agronholm/cbor2/issues/240>`_; PR by @dwpaley)
 - Fixed a read(-1) vulnerability caused by boundary handling error
-  (#264 <https://github.com/agronholm/cbor2/issues/264>_; PR by @tylzh97)
+  (`#264 <https://github.com/agronholm/cbor2/issues/264>`_; PR by @tylzh97)
 
 **5.7.0** (2025-08-14)
 
 - Added support for Python 3.14 (no free-threading support yet, sorry)
 - Dropped support for Python 3.8
-  (`#247+ <https://github.com/agronholm/cbor2/pull/247>`_; PR by @hugovk)
+  (`#247 <https://github.com/agronholm/cbor2/pull/247>`_; PR by @hugovk)
 - Added support for encoding indefinite containers
-  (`#256+ <https://github.com/agronholm/cbor2/pull/256>`_; PR by @CZDanol)
+  (`#256 <https://github.com/agronholm/cbor2/pull/256>`_; PR by @CZDanol)
 - Added complex number support (tag 43000)
-  (`#249+ <https://github.com/agronholm/cbor2/pull/249>`_; PR by @chillenb)
+  (`#249 <https://github.com/agronholm/cbor2/pull/249>`_; PR by @chillenb)
 
 **5.6.5** (2024-10-09)
 
