@@ -14,10 +14,6 @@ def test_one_input(data: bytes):
         pass
 
 
-def main():
+if __name__ == "__main__":
     atheris.Setup(sys.argv, test_one_input)
     atheris.Fuzz()
-
-
-if __name__ == "__main__":
-    main()
