@@ -145,20 +145,15 @@ def test(op):
 
 def format_leaks(result):
     if result.objgraph.comparison:
-        return "%d objs (/%d)" % (
-            sum(leak[-1] for leak in result.objgraph.comparison),
-            result.objgraph.count,
-        )
+        num_objs = sum(leak[-1] for leak in result.objgraph.comparison)
+        return f"{num_objs} objs (/{result.objgraph.count})"
     elif result.malloc.comparison and (
         result.malloc.count < result.malloc.comparison[0].size_diff
     ):
         # Running the loop always results in *some* memory allocation, but as
         # long as the bytes allocated are less than the number of loops it's
         # unlikely to be an actual leak
-        return "%d bytes (/%d)" % (
-            result.malloc.comparison[0].size_diff,
-            result.malloc.count,
-        )
+        return f"{result.malloc.comparison[0].size_diff} bytes (/{result.malloc.count})"
     else:
         return "-"
 

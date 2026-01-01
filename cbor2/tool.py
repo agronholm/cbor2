@@ -13,9 +13,10 @@ import re
 import sys
 import uuid
 from collections.abc import Callable, Collection, Iterable, Iterator
+from contextlib import ExitStack
 from datetime import datetime
 from functools import partial
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar
 
 from . import CBORDecoder, CBORSimpleValue, CBORTag, FrozenDict, load, undefined
 
@@ -67,7 +68,7 @@ class DefaultEncoder(json.JSONEncoder):
 
 
 def iterdecode(
-    f: io.BytesIO,
+    f: BinaryIO,
     tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
     object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
@@ -113,11 +114,11 @@ def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict
             k = str(k)
 
         if isinstance(v, dict):
-            v = key_to_str(v, dict_ids)
+            rval[k] = key_to_str(v, dict_ids)
         elif isinstance(v, (tuple, list, set)):
-            v = [key_to_str(x, dict_ids) for x in v]
-
-        rval[k] = v
+            rval[k] = [key_to_str(x, dict_ids) for x in v]
+        else:
+            rval[k] = v
 
     return rval
 
@@ -133,7 +134,7 @@ def main() -> None:
     parser.add_argument(
         "infiles",
         nargs="*",
-        type=argparse.FileType("rb"),
+        default=["-"],
         help="Collection of CBOR files to process or - for stdin",
     )
     parser.add_argument(
@@ -168,42 +169,37 @@ def main() -> None:
         "-i",
         "--tag-ignore",
         type=str,
+        default="",
         help="Comma separated list of tags to ignore and only return the value",
     )
     options = parser.parse_args()
 
-    outfile = options.outfile
-    sort_keys = options.sort_keys
-    pretty = options.pretty
-    sequence = options.sequence
-    decode = options.decode
-    infiles = options.infiles or [sys.stdin]
-
-    closefd = True
-    if outfile == "-":
+    if options.outfile == "-":
         outfile = 1
         closefd = False
-
-    if options.tag_ignore:
-        ignore_s = options.tag_ignore.split(",")
-        droptags = {int(n) for n in ignore_s if (len(n) and n[0].isdigit())}
     else:
-        droptags = set()
+        outfile = options.outfile
+        closefd = True
 
+    ignore_s = options.tag_ignore.split(",")
+    droptags = {int(n) for n in ignore_s if (len(n) and n[0].isdigit())}
     my_hook = partial(tag_hook, ignore_tags=droptags)
 
     with open(
         outfile, mode="w", encoding="utf-8", errors="backslashreplace", closefd=closefd
-    ) as outfile:
-        for infile in infiles:
-            if hasattr(infile, "buffer") and not decode:
-                infile = infile.buffer
+    ) as outfp:
+        for path in options.infiles:
+            with ExitStack() as stack:
+                if path == "-":
+                    infile: BinaryIO = sys.stdin.buffer
+                else:
+                    infile = stack.enter_context(open(path, mode="rb"))
 
-            with infile:
-                if decode:
+                if options.decode:
                     infile = io.BytesIO(base64.b64decode(infile.read()))
+
                 try:
-                    if sequence:
+                    if options.sequence:
                         objs: Iterable[Any] = iterdecode(infile, tag_hook=my_hook)
                     else:
                         objs = (load(infile, tag_hook=my_hook),)
@@ -211,13 +207,13 @@ def main() -> None:
                     for obj in objs:
                         json.dump(
                             key_to_str(obj),
-                            outfile,
-                            sort_keys=sort_keys,
-                            indent=(None, 4)[pretty],
+                            outfp,
+                            sort_keys=options.sort_keys,
+                            indent=(None, 4)[options.pretty],
                             cls=DefaultEncoder,
                             ensure_ascii=False,
                         )
-                        outfile.write("\n")
+                        outfp.write("\n")
                 except (ValueError, EOFError) as e:  # pragma: no cover
                     raise SystemExit(e)
 

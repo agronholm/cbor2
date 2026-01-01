@@ -78,11 +78,42 @@ def test_encoders_load_type(impl):
 
 
 def test_encode_length(impl):
-    # This test is purely for coverage in the C variant
-    with BytesIO() as stream:
-        encoder = impl.CBOREncoder(stream)
-        encoder.encode_length(0, 1)
-        assert stream.getvalue() == b"\x01"
+    fp = None
+    encoder = None
+
+    def reset_encoder():
+        nonlocal fp, encoder
+        fp = BytesIO()
+        encoder = impl.CBOREncoder(fp)
+
+    reset_encoder()
+    encoder.encode_length(0, 1)
+    assert fp.getvalue() == b"\x01"
+
+    # Array of size 2
+    reset_encoder()
+    encoder.encode_length(4, 2)
+    assert fp.getvalue() == b"\x82"
+
+    # Array of indefinite size
+    reset_encoder()
+    encoder.encode_length(4, None)
+    assert fp.getvalue() == b"\x9f"
+
+    # Map of size 0
+    reset_encoder()
+    encoder.encode_length(5, 0)
+    assert fp.getvalue() == b"\xa0"
+
+    # Map of indefinite size
+    reset_encoder()
+    encoder.encode_length(5, None)
+    assert fp.getvalue() == b"\xbf"
+
+    # Indefinite container break
+    reset_encoder()
+    encoder.encode_break()
+    assert fp.getvalue() == b"\xff"
 
 
 def test_canonical_attr(impl):
@@ -320,6 +351,22 @@ def test_naive_datetime(impl):
     ids=["normal", "negative", "nan", "inf", "neginf"],
 )
 def test_decimal(impl, value, expected):
+    expected = unhexlify(expected)
+    assert impl.dumps(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (3.1 + 2.1j, "d9a7f882fb4008cccccccccccdfb4000cccccccccccd"),
+        (1.0e300j, "d9a7f882fb0000000000000000fb7e37e43c8800759c"),
+        (0.0j, "d9a7f882fb0000000000000000fb0000000000000000"),
+        (complex(float("inf"), float("inf")), "d9a7f882f97c00f97c00"),
+        (complex(float("inf"), 0.0), "d9a7f882f97c00fb0000000000000000"),
+        (complex(float("nan"), float("inf")), "d9a7f882f97e00f97c00"),
+    ],
+)
+def test_complex(impl, value, expected):
     expected = unhexlify(expected)
     assert impl.dumps(value) == expected
 
@@ -622,16 +669,7 @@ def test_encode_stringrefs_array(impl):
 def test_encode_stringrefs_dict(impl):
     value = {"aaaa": "mmmm", "bbbb": "bbbb", "cccc": "aaaa", "mmmm": "aaaa"}
     expected = unhexlify(
-        "d90100"
-        "a4"
-        "6461616161"
-        "646d6d6d6d"
-        "6462626262"
-        "d81902"
-        "6463636363"
-        "d81900"
-        "d81901"
-        "d81900"
+        "d90100a46461616161646d6d6d6d6462626262d819026463636363d81900d81901d81900"
     )
     assert impl.dumps(value, string_referencing=True, canonical=True) == expected
 
@@ -654,3 +692,89 @@ def test_invariant_encode_decode(impl, val):
     undergoing an encode and decode)
     """
     assert impl.loads(impl.dumps(val)) == val
+
+
+def test_indefinite_containers(impl):
+    expected = b"\x82\x00\x01"
+    assert impl.dumps([0, 1]) == expected
+
+    expected = b"\x9f\x00\x01\xff"
+    assert impl.dumps([0, 1], indefinite_containers=True) == expected
+    assert impl.dumps([0, 1], indefinite_containers=True, canonical=True) == expected
+
+    expected = b"\xa0"
+    assert impl.dumps({}) == expected
+
+    expected = b"\xbf\xff"
+    assert impl.dumps({}, indefinite_containers=True) == expected
+    assert impl.dumps({}, indefinite_containers=True, canonical=True) == expected
+
+
+class TestEncoderReuse:
+    """
+    Tests for correct behavior when reusing CBOREncoder instances.
+    """
+
+    def test_encoder_reuse_resets_shared_containers(self, impl):
+        """
+        Shared container tracking should be scoped to a single encode operation,
+        not persist across multiple encodes on the same encoder instance.
+        """
+        fp = BytesIO()
+        encoder = impl.CBOREncoder(fp, value_sharing=True)
+        shared_obj = ["hello"]
+
+        # First encode: object is tracked in shared containers
+        encoder.encode([shared_obj, shared_obj])
+
+        # Second encode on new fp: should produce valid standalone CBOR
+        # (not a sharedref pointing to stale first-encode data)
+        encoder.fp = BytesIO()
+        encoder.encode(shared_obj)
+        second_output = encoder.fp.getvalue()
+
+        # The second output must be decodable on its own
+        result = impl.loads(second_output)
+        assert result == ["hello"]
+
+    def test_encode_to_bytes_resets_shared_containers(self, impl):
+        """
+        encode_to_bytes should also reset shared container tracking between calls.
+        """
+        fp = BytesIO()
+        encoder = impl.CBOREncoder(fp, value_sharing=True)
+        shared_obj = ["hello"]
+
+        # First encode
+        encoder.encode_to_bytes([shared_obj, shared_obj])
+
+        # Second encode should produce valid standalone CBOR
+        result_bytes = encoder.encode_to_bytes(shared_obj)
+        result = impl.loads(result_bytes)
+        assert result == ["hello"]
+
+    def test_encoder_hook_does_not_reset_state(self, impl):
+        """
+        When a custom encoder hook calls encode(), the shared container
+        tracking should be preserved (not reset mid-operation).
+        """
+
+        class Custom:
+            def __init__(self, value):
+                self.value = value
+
+        def custom_encoder(encoder, obj):
+            # Hook encodes the wrapped value
+            encoder.encode(obj.value)
+
+        # Encode a Custom wrapping a list
+        data = impl.dumps(Custom(["a", "b"]), default=custom_encoder)
+
+        # Verify the output decodes correctly
+        result = impl.loads(data)
+        assert result == ["a", "b"]
+
+        # Test nested Custom objects - hook should work recursively
+        data2 = impl.dumps(Custom(Custom(["x"])), default=custom_encoder)
+        result2 = impl.loads(data2)
+        assert result2 == ["x"]

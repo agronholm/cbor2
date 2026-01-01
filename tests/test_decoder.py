@@ -13,7 +13,7 @@ from fractions import Fraction
 from io import BytesIO
 from ipaddress import ip_address, ip_network
 from pathlib import Path
-from typing import Type, cast
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -260,6 +260,28 @@ def test_string_oversized(impl) -> None:
         (impl.loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799")),)
 
 
+def test_string_issue_264_multiple_chunks_utf8_boundary(impl) -> None:
+    """Test for Issue #264: UTF-8 characters split across multiple 65536-byte chunk boundaries."""
+    import struct
+
+    # Construct: 65535 'a' + '€' (3 bytes) + 65533 'b' + '€' (3 bytes) + 100 'd'
+    # Total: 131174 bytes, which spans 3 chunks (65536 + 65536 + 102)
+    total_bytes = 65535 + 3 + 65533 + 3 + 100
+
+    payload = b"\x7a" + struct.pack(">I", total_bytes)  # major type 3, 4-byte length
+    payload += b"a" * 65535
+    payload += "€".encode()  # U+20AC: E2 82 AC
+    payload += b"b" * 65533
+    payload += "€".encode()
+    payload += b"d" * 100
+
+    expected = "a" * 65535 + "€" + "b" * 65533 + "€" + "d" * 100
+
+    result = impl.loads(payload)
+    assert result == expected
+    assert len(result) == 131170  # 65535 + 1 + 65533 + 1 + 100 characters
+
+
 @pytest.mark.parametrize(
     "payload, expected",
     [
@@ -492,10 +514,10 @@ def test_datetime_date_out_of_range(impl):
     with pytest.raises(impl.CBORDecodeError) as excinfo:
         impl.loads(unhexlify("a6c11b00002401001b000000000000ff00"))
 
-    if sys.maxsize == 2147483647:
-        cause_exc_class = OverflowError
-    elif platform.system() == "Windows":
+    if platform.system() == "Windows":
         cause_exc_class = OSError
+    elif sys.maxsize == 2147483647:
+        cause_exc_class = OverflowError
     else:
         cause_exc_class = ValueError
 
@@ -537,6 +559,45 @@ def test_decimal_precision(impl):
 def test_bigfloat(impl):
     decoded = impl.loads(unhexlify("c5822003"))
     assert decoded == Decimal("1.5")
+
+
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        ("d9a7f882f90000f90000", 0.0j),
+        ("d9a7f882fb0000000000000000fb0000000000000000", 0.0j),
+        ("d9a7f882f98000f98000", -0.0j),
+        ("d9a7f882f90000f93c00", 1.0j),
+        ("d9a7f882fb0000000000000000fb3ff199999999999a", 1.1j),
+        ("d9a7f882f93e00f93e00", 1.5 + 1.5j),
+        ("d9a7f882f97bfff97bff", 65504.0 + 65504.0j),
+        ("d9a7f882fa47c35000fa47c35000", 100000.0 + 100000.0j),
+        ("d9a7f882f90000fb7e37e43c8800759c", 1.0e300j),
+        ("d9a7f882f90000f90001", 5.960464477539063e-8j),
+        ("d9a7f882f90000f90400", 0.00006103515625j),
+        ("d9a7f882f90000f9c400", -4.0j),
+        ("d9a7f882f90000fbc010666666666666", -4.1j),
+        ("d9a7f882f90000f97c00", complex(0.0, float("inf"))),
+        ("d9a7f882f97c00f90000", complex(float("inf"), 0.0)),
+        ("d9a7f882f90000f9fc00", complex(0.0, float("-inf"))),
+        ("d9a7f882f90000fa7f800000", complex(0.0, float("inf"))),
+        ("d9a7f882f90000faff800000", complex(0.0, float("-inf"))),
+        ("d9a7f882f97e00fb0000000000000000", complex(float("nan"), 0.0)),
+        ("d9a7f882fb0000000000000000f97e00", complex(0.0, float("nan"))),
+        ("d9a7f882f97e00f97e00", complex(float("nan"), float("nan"))),
+    ],
+)
+def test_complex(impl, payload, expected):
+    decoded = impl.loads(unhexlify(payload))
+    if math.isnan(expected.real):
+        assert math.isnan(decoded.real)
+    else:
+        assert expected.real == decoded.real
+
+    if math.isnan(expected.imag):
+        assert math.isnan(decoded.imag)
+    else:
+        assert expected.imag == decoded.imag
 
 
 def test_rational(impl):
@@ -671,15 +732,13 @@ def test_ipnetwork(impl, payload, expected):
 def test_bad_ipnetwork(impl):
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify("d90105a244c0a80064181844c0a800001818"))
-        assert str(exc.value).endswith(
-            "invalid ipnetwork value %r" % {b"\xc0\xa8\x00d": 24, b"\xc0\xa8\x00\x00": 24}
-        )
+        invalid_value = {b"\xc0\xa8\x00d": 24, b"\xc0\xa8\x00\x00": 24}
+        assert str(exc.value).endswith(f"invalid ipnetwork value {invalid_value!r}")
         assert isinstance(exc, ValueError)
     with pytest.raises(impl.CBORDecodeError) as exc:
         impl.loads(unhexlify("d90105a144c0a80064420102"))
-        assert str(exc.value).endswith(
-            "invalid ipnetwork value %r" % {b"\xc0\xa8\x00d": b"\x01\x02"}
-        )
+        invalid_value = {b"\xc0\xa8\x00d": b"\x01\x02"}
+        assert str(exc.value).endswith(f"invalid ipnetwork value {invalid_value}")
         assert isinstance(exc, ValueError)
 
 
@@ -717,6 +776,12 @@ def test_cyclic_array(impl):
 def test_cyclic_map(impl):
     decoded = impl.loads(unhexlify("d81ca100d81d00"))
     assert decoded == {0: decoded}
+
+
+def test_nested_shareable_in_array(impl):
+    decoded = impl.loads(unhexlify("82d81c82d81c61616162d81d00"))
+    assert decoded == [["a", "b"], ["a", "b"]]
+    assert decoded[0] is decoded[1]
 
 
 def test_string_ref(impl):
@@ -831,14 +896,14 @@ def test_load_from_file(impl, tmpdir):
 
 def test_nested_dict(impl):
     value = impl.loads(unhexlify("A1D9177082010201"))
-    assert type(value) is dict  # noqa: E721
+    assert type(value) is dict
     assert value == {impl.CBORTag(6000, (1, 2)): 1}
 
 
 def test_set(impl):
     payload = unhexlify("d9010283616361626161")
     value = impl.loads(payload)
-    assert type(value) is set  # noqa: E721
+    assert type(value) is set
     assert value == {"a", "b", "c"}
 
 
@@ -955,9 +1020,157 @@ def test_decimal_payload_unpacking(impl, data, expected):
     ],
 )
 def test_oversized_read(impl, payload: bytes, tmp_path: Path) -> None:
-    CBORDecodeEOF = cast(Type[Exception], getattr(impl, "CBORDecodeEOF"))
+    CBORDecodeEOF = cast(type[Exception], getattr(impl, "CBORDecodeEOF"))
     with pytest.raises(CBORDecodeEOF, match="premature end of stream"):
         dummy_path = tmp_path / "testdata"
         dummy_path.write_bytes(payload)
         with dummy_path.open("rb") as f:
             impl.load(f)
+
+
+class TestDecoderReuse:
+    """
+    Tests for correct behavior when reusing CBORDecoder instances.
+    """
+
+    def test_decoder_reuse_resets_shared_refs(self, impl):
+        """
+        Shared references should be scoped to a single decode operation,
+        not persist across multiple decodes on the same decoder instance.
+        """
+        # Message with shareable tag (28)
+        msg1 = impl.dumps(impl.CBORTag(28, "first_value"))
+
+        # Message with sharedref tag (29) referencing index 0
+        msg2 = impl.dumps(impl.CBORTag(29, 0))
+
+        # Reuse decoder across messages
+        decoder = impl.CBORDecoder(BytesIO(msg1))
+        result1 = decoder.decode()
+        assert result1 == "first_value"
+
+        # Second decode should fail - sharedref(0) doesn't exist in this context
+        decoder.fp = BytesIO(msg2)
+        with pytest.raises(impl.CBORDecodeValueError, match="shared reference"):
+            decoder.decode()
+
+    def test_decode_from_bytes_resets_shared_refs(self, impl):
+        """
+        decode_from_bytes should also reset shared references between calls.
+        """
+        msg1 = impl.dumps(impl.CBORTag(28, "value"))
+        msg2 = impl.dumps(impl.CBORTag(29, 0))
+
+        decoder = impl.CBORDecoder(BytesIO(b""))
+        decoder.decode_from_bytes(msg1)
+
+        with pytest.raises(impl.CBORDecodeValueError, match="shared reference"):
+            decoder.decode_from_bytes(msg2)
+
+    def test_shared_refs_within_single_decode(self, impl):
+        """
+        Shared references must work correctly within a single decode operation.
+
+        Note: This tests non-cyclic sibling references [shareable(x), sharedref(0)],
+        which is a different pattern from test_cyclic_array/test_cyclic_map that
+        test self-referencing structures like shareable([sharedref(0)]).
+        """
+        # [shareable("hello"), sharedref(0)] -> ["hello", "hello"]
+        data = unhexlify(
+            "82"  # array(2)
+            "d81c"  # tag(28) shareable
+            "65"  # text(5)
+            "68656c6c6f"  # "hello"
+            "d81d"  # tag(29) sharedref
+            "00"  # unsigned(0)
+        )
+
+        result = impl.loads(data)
+        assert result == ["hello", "hello"]
+        assert result[0] is result[1]  # Same object reference
+
+
+def test_decode_from_bytes_in_hook_preserves_buffer(impl):
+    """Test that calling decode_from_bytes from a hook preserves stream buffer state.
+
+    This is a documented use case from docs/customizing.rst where hooks decode
+    embedded CBOR data. Before the fix, the stream's readahead buffer would be
+    corrupted, causing subsequent reads to fail or return wrong data.
+    """
+
+    def tag_hook(decoder, tag):
+        if tag.tag == 999:
+            # Decode embedded CBOR (documented pattern)
+            return decoder.decode_from_bytes(tag.value)
+        return tag
+
+    # Test data: array with [tag(999, embedded_cbor), "after_hook", "final"]
+    # embedded_cbor encodes: [1, 2, 3]
+    data = unhexlify(
+        "83"  # array(3)
+        "d903e7"  # tag(999)
+        "44"  # bytes(4)
+        "83010203"  # embedded: array [1, 2, 3]
+        "6a"  # text(10)
+        "61667465725f686f6f6b"  # "after_hook"
+        "65"  # text(5)
+        "66696e616c"  # "final"
+    )
+
+    # Decode from stream (not bytes) to use readahead buffer
+    stream = BytesIO(data)
+    decoder = impl.CBORDecoder(stream, tag_hook=tag_hook)
+    result = decoder.decode()
+
+    # Verify all values decoded correctly
+    assert result == [[1, 2, 3], "after_hook", "final"]
+
+    # First element should be the decoded embedded CBOR
+    assert result[0] == [1, 2, 3]
+    # Second element should be "after_hook" (not corrupted)
+    assert result[1] == "after_hook"
+    # Third element should be "final"
+    assert result[2] == "final"
+
+
+def test_decode_from_bytes_deeply_nested_in_hook(impl):
+    """Test deeply nested decode_from_bytes calls preserve buffer state.
+
+    This tests tag(999, tag(888, tag(777, [1,2,3]))) where each tag value
+    is embedded CBOR that triggers the hook recursively.
+
+    Before the fix, even a single level would corrupt the buffer. With multiple
+    levels, the buffer would be completely corrupted, mixing data from different
+    BytesIO objects and the original stream.
+    """
+
+    def tag_hook(decoder, tag):
+        if tag.tag in [999, 888, 777]:
+            # Recursively decode embedded CBOR
+            return decoder.decode_from_bytes(tag.value)
+        return tag
+
+    # Test data: [tag(999, tag(888, tag(777, [1,2,3]))), "after", "final"]
+    # Each tag contains embedded CBOR
+    data = unhexlify(
+        "83"  # array(3)
+        "d903e7"  # tag(999)
+        "4c"  # bytes(12)
+        "d9037848d903094483010203"  # embedded: tag(888, tag(777, [1,2,3]))
+        "65"  # text(5)
+        "6166746572"  # "after"
+        "65"  # text(5)
+        "66696e616c"  # "final"
+    )
+
+    # Decode from stream to use readahead buffer
+    stream = BytesIO(data)
+    decoder = impl.CBORDecoder(stream, tag_hook=tag_hook)
+    result = decoder.decode()
+
+    # With the fix: all three levels of nesting work correctly
+    # Without the fix: buffer corruption at each level, test fails
+    assert result == [[1, 2, 3], "after", "final"]
+    assert result[0] == [1, 2, 3]
+    assert result[1] == "after"
+    assert result[2] == "final"

@@ -11,28 +11,28 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "pypy-3.10"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "pypy-3.10"]
         include:
         - os: macos-latest
-          python-version: "3.8"
+          python-version: "3.9"
         - os: macos-latest
-          python-version: "3.12"
+          python-version: "3.13"
         - os: windows-latest
-          python-version: "3.8"
+          python-version: "3.9"
         - os: windows-latest
-          python-version: "3.12"
+          python-version: "3.13"
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
         cache: pip
         cache-dependency-path: pyproject.toml
-    - name: Install dependencies
-      run: pip install -e .[test]
+    - name: Install the project and its dependencies
+      run: pip install --group test -e .
       env:
         CFLAGS: "-UNDEBUG"
         CBOR2_BUILD_C_EXTENSION: "${{ matrix.python-version == 'pypy-3.10' && '0' || '1' }}"

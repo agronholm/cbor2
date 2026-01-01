@@ -525,31 +525,10 @@ error:
 int
 _CBOR2_init_timezone_utc(void)
 {
-#if PY_VERSION_HEX >= 0x03070000
     Py_INCREF(PyDateTime_TimeZone_UTC);
     _CBOR2_timezone_utc = PyDateTime_TimeZone_UTC;
     _CBOR2_timezone = NULL;
     return 0;
-#else
-    PyObject* datetime;
-
-    // from datetime import timezone
-    // utc = timezone.utc
-    datetime = PyImport_ImportModule("datetime");
-    if (!datetime)
-        goto error;
-    _CBOR2_timezone = PyObject_GetAttr(datetime, _CBOR2_str_timezone);
-    Py_DECREF(datetime);
-    if (!_CBOR2_timezone)
-        goto error;
-    _CBOR2_timezone_utc = PyObject_GetAttr(_CBOR2_timezone, _CBOR2_str_utc);
-    if (!_CBOR2_timezone_utc)
-        goto error;
-    return 0;
-error:
-    PyErr_SetString(PyExc_ImportError, "unable to import timezone from datetime");
-    return -1;
-#endif
 }
 
 
@@ -642,6 +621,7 @@ PyObject *_CBOR2_str_FrozenDict = NULL;
 PyObject *_CBOR2_str_fromordinal = NULL;
 PyObject *_CBOR2_str_getvalue = NULL;
 PyObject *_CBOR2_str_groups = NULL;
+PyObject *_CBOR2_str_imag = NULL;
 PyObject *_CBOR2_str_ip_address = NULL;
 PyObject *_CBOR2_str_ip_network = NULL;
 PyObject *_CBOR2_str_is_infinite = NULL;
@@ -658,6 +638,7 @@ PyObject *_CBOR2_str_parsestr = NULL;
 PyObject *_CBOR2_str_pattern = NULL;
 PyObject *_CBOR2_str_prefixlen = NULL;
 PyObject *_CBOR2_str_read = NULL;
+PyObject *_CBOR2_str_real = NULL;
 PyObject *_CBOR2_str_s = NULL;
 PyObject *_CBOR2_str_timestamp = NULL;
 PyObject *_CBOR2_str_toordinal = NULL;
@@ -976,6 +957,7 @@ PyInit__cbor2(void)
     INTERN_STRING(fromordinal);
     INTERN_STRING(getvalue);
     INTERN_STRING(groups);
+    INTERN_STRING(imag);
     INTERN_STRING(ip_address);
     INTERN_STRING(ip_network);
     INTERN_STRING(is_infinite);
@@ -992,6 +974,7 @@ PyInit__cbor2(void)
     INTERN_STRING(pattern);
     INTERN_STRING(prefixlen);
     INTERN_STRING(read);
+    INTERN_STRING(real);
     INTERN_STRING(s);
     INTERN_STRING(timestamp);
     INTERN_STRING(toordinal);
