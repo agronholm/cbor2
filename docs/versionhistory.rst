@@ -5,6 +5,14 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed C decoder ignoring the ``str_errors`` setting when decoding strings, and improved
+  string decoding performance by using stack allocation for small strings and eliminating
+  unnecessary conditionals. Benchmarks show 9-17% faster deserialization.
+  (`#255 <https://github.com/agronholm/cbor2/issues/255>`_,
+  `#170 <https://github.com/agronholm/cbor2/pull/170>`_; PR by @andreer)
+
 **5.8.0** (2025-12-30)
 
 - Added readahead buffering to C decoder for improved performance.
