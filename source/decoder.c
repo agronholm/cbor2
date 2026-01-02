@@ -102,7 +102,6 @@ CBORDecoder_clear(CBORDecoderObject *self)
     Py_CLEAR(self->object_hook);
     Py_CLEAR(self->shareables);
     Py_CLEAR(self->stringref_namespace);
-    Py_CLEAR(self->str_errors);
     if (self->readahead) {
         PyMem_Free(self->readahead);
         self->readahead = NULL;
@@ -148,7 +147,7 @@ CBORDecoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         self->tag_hook = Py_None;
         Py_INCREF(Py_None);
         self->object_hook = Py_None;
-        self->str_errors = PyBytes_FromString("strict");
+        self->str_errors = NULL;  // NULL means strict mode
         self->immutable = false;
         self->shared_index = -1;
         self->decode_depth = 0;
@@ -348,9 +347,8 @@ _CBORDecoder_set_object_hook(CBORDecoderObject *self, PyObject *value,
 static PyObject *
 _CBORDecoder_get_str_errors(CBORDecoderObject *self, void *closure)
 {
-    return PyUnicode_DecodeASCII(
-            PyBytes_AS_STRING(self->str_errors),
-            PyBytes_GET_SIZE(self->str_errors), "strict");
+    const char *mode = self->str_errors ? self->str_errors : "strict";
+    return PyUnicode_FromString(mode);
 }
 
 
@@ -359,27 +357,23 @@ static int
 _CBORDecoder_set_str_errors(CBORDecoderObject *self, PyObject *value,
                             void *closure)
 {
-    PyObject *tmp, *bytes;
-
     if (!value) {
         PyErr_SetString(PyExc_AttributeError,
                         "cannot delete str_errors attribute");
         return -1;
     }
     if (PyUnicode_Check(value)) {
-        bytes = PyUnicode_AsASCIIString(value);
+        PyObject *bytes = PyUnicode_AsASCIIString(value);
         if (bytes) {
             const char *mode = PyBytes_AS_STRING(bytes);
-            if (!strcmp(mode, "strict") || !strcmp(mode, "error") || !strcmp(mode, "replace")) {
-                tmp = self->str_errors;
-                if (!strcmp(mode, "error")) {
-                    Py_DECREF(bytes);
-                    bytes = PyBytes_FromString("strict");
-                    if (!bytes)
-                        return -1;
-                }
-                self->str_errors = bytes;
-                Py_DECREF(tmp);
+            if (!strcmp(mode, "strict") || !strcmp(mode, "error")) {
+                self->str_errors = NULL;
+                Py_DECREF(bytes);
+                return 0;
+            }
+            if (!strcmp(mode, "replace")) {
+                self->str_errors = "replace";
+                Py_DECREF(bytes);
                 return 0;
             }
             Py_DECREF(bytes);
@@ -840,7 +834,7 @@ decode_definite_short_string(CBORDecoderObject *self, Py_ssize_t length)
         return NULL;
 
     const char *bytes = PyBytes_AS_STRING(bytes_obj);
-    PyObject *ret = PyUnicode_FromStringAndSize(bytes, length);
+    PyObject *ret = PyUnicode_DecodeUTF8(bytes, length, self->str_errors);
     Py_DECREF(bytes_obj);
     if (ret && string_namespace_add(self, ret, length) == -1) {
         Py_DECREF(ret);

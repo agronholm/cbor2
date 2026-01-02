@@ -1188,3 +1188,34 @@ def test_str_errors_invalid_mode(impl):
     for invalid_mode in ["invalid", "ignore", "backslashreplace"]:
         with pytest.raises(ValueError, match="invalid str_errors"):
             impl.loads(payload, str_errors=invalid_mode)
+
+
+@pytest.mark.parametrize(
+    "mode, expected",
+    [
+        ("strict", None),  # Should raise exception
+        ("replace", "hello\ufffdworld"),  # Should replace invalid byte with U+FFFD
+    ],
+    ids=["strict_mode", "replace_mode"],
+)
+def test_str_errors_handling(impl, mode, expected):
+    invalid_utf8 = b"\x6Bhello\xFFworld"  # \xFF is invalid UTF-8
+
+    if expected is None:
+        with pytest.raises(
+            impl.CBORDecodeValueError, match="error decoding unicode string"
+        ):
+            impl.loads(invalid_utf8, str_errors=mode)
+    else:
+        result = impl.loads(invalid_utf8, str_errors=mode)
+        assert result == expected
+        assert len(result) == 11
+        assert result[5] == "\ufffd"
+
+
+def test_str_errors_valid_utf8_unchanged(impl):
+    payload = b"\x78\x19Hello \xc3\xbcnicode \xe6\xb0\xb4 world!"
+    result_strict = impl.loads(payload, str_errors="strict")
+    result_replace = impl.loads(payload, str_errors="replace")
+    assert result_strict == result_replace
+    assert result_strict == "Hello \u00fcnicode \u6c34 world!"
