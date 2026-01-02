@@ -1219,3 +1219,36 @@ def test_str_errors_valid_utf8_unchanged(impl):
     result_replace = impl.loads(payload, str_errors="replace")
     assert result_strict == result_replace
     assert result_strict == "Hello \u00fcnicode \u6c34 world!"
+
+
+@pytest.mark.parametrize("length", [255, 256, 257])
+def test_string_stack_threshold_boundary(impl, length):
+    """Test stack (<=256) vs heap (>256) allocation boundary."""
+    test_string = "a" * length
+    if length < 24:
+        payload = bytes([0x60 + length])
+    elif length < 256:
+        payload = b"\x78" + bytes([length])
+    else:
+        payload = b"\x79" + struct.pack(">H", length)
+    payload += test_string.encode("utf-8")
+    assert impl.loads(payload) == test_string
+
+
+@pytest.mark.parametrize(
+    "payload, mode, expected",
+    [
+        (b"\x66hello\xFF", "replace", "hello\ufffd"),  # <=256 bytes: stack path
+        (
+            b"\x79\x01\x05" + b"a" * 260 + b"\xFF",
+            "replace",
+            "a" * 260 + "\ufffd",
+        ),  # >256: heap path
+    ],
+    ids=["short_string", "long_string"],
+)
+def test_str_errors_different_lengths(impl, payload, mode, expected):
+    """Tests both stack (<=256 bytes) and heap (>256 bytes) allocation paths."""
+    result = impl.loads(payload, str_errors=mode)
+    assert result == expected
+    assert result[-1] == "\ufffd"
