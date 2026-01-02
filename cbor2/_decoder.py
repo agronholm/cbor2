@@ -161,9 +161,7 @@ class CBORDecoder:
         elif value in ("strict", "replace"):
             self._str_errors = value
         else:
-            raise ValueError(
-                f"invalid str_errors value {value!r} (must be 'strict' or 'replace')"
-            )
+            raise ValueError(f"invalid str_errors value {value!r} (must be 'strict' or 'replace')")
 
     def set_shareable(self, value: T) -> T:
         """

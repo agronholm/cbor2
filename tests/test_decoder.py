@@ -1199,12 +1199,10 @@ def test_str_errors_invalid_mode(impl):
     ids=["strict_mode", "replace_mode"],
 )
 def test_str_errors_handling(impl, mode, expected):
-    invalid_utf8 = b"\x6Bhello\xFFworld"  # \xFF is invalid UTF-8
+    invalid_utf8 = b"\x6bhello\xffworld"  # \xFF is invalid UTF-8
 
     if expected is None:
-        with pytest.raises(
-            impl.CBORDecodeValueError, match="error decoding unicode string"
-        ):
+        with pytest.raises(impl.CBORDecodeValueError, match="error decoding unicode string"):
             impl.loads(invalid_utf8, str_errors=mode)
     else:
         result = impl.loads(invalid_utf8, str_errors=mode)
@@ -1238,9 +1236,9 @@ def test_string_stack_threshold_boundary(impl, length):
 @pytest.mark.parametrize(
     "payload, mode, expected",
     [
-        (b"\x66hello\xFF", "replace", "hello\ufffd"),  # <=256 bytes: stack path
+        (b"\x66hello\xff", "replace", "hello\ufffd"),  # <=256 bytes: stack path
         (
-            b"\x79\x01\x05" + b"a" * 260 + b"\xFF",
+            b"\x79\x01\x05" + b"a" * 260 + b"\xff",
             "replace",
             "a" * 260 + "\ufffd",
         ),  # >256: heap path
