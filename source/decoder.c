@@ -829,13 +829,17 @@ decode_bytestring(CBORDecoderObject *self, uint8_t subtype)
 static PyObject *
 decode_definite_short_string(CBORDecoderObject *self, Py_ssize_t length)
 {
-    PyObject *bytes_obj = fp_read_object(self, length);
-    if (!bytes_obj)
-        return NULL;
+    char *buf = PyMem_Malloc(length);
+    if (!buf)
+        return PyErr_NoMemory();
 
-    const char *bytes = PyBytes_AS_STRING(bytes_obj);
-    PyObject *ret = PyUnicode_DecodeUTF8(bytes, length, self->str_errors);
-    Py_DECREF(bytes_obj);
+    if (fp_read(self, buf, length) == -1) {
+        PyMem_Free(buf);
+        return NULL;
+    }
+
+    PyObject *ret = PyUnicode_DecodeUTF8(buf, length, self->str_errors);
+    PyMem_Free(buf);
     if (ret && string_namespace_add(self, ret, length) == -1) {
         Py_DECREF(ret);
         return NULL;
