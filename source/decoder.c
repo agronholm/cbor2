@@ -369,10 +369,15 @@ _CBORDecoder_set_str_errors(CBORDecoderObject *self, PyObject *value,
     if (PyUnicode_Check(value)) {
         bytes = PyUnicode_AsASCIIString(value);
         if (bytes) {
-            if (!strcmp(PyBytes_AS_STRING(bytes), "strict") ||
-                    !strcmp(PyBytes_AS_STRING(bytes), "error") ||
-                    !strcmp(PyBytes_AS_STRING(bytes), "replace")) {
+            const char *mode = PyBytes_AS_STRING(bytes);
+            if (!strcmp(mode, "strict") || !strcmp(mode, "error") || !strcmp(mode, "replace")) {
                 tmp = self->str_errors;
+                if (!strcmp(mode, "error")) {
+                    Py_DECREF(bytes);
+                    bytes = PyBytes_FromString("strict");
+                    if (!bytes)
+                        return -1;
+                }
                 self->str_errors = bytes;
                 Py_DECREF(tmp);
                 return 0;
@@ -381,8 +386,7 @@ _CBORDecoder_set_str_errors(CBORDecoderObject *self, PyObject *value,
         }
     }
     PyErr_Format(PyExc_ValueError,
-            "invalid str_errors value %R (must be one of 'strict', "
-            "'error', or 'replace')", value);
+            "invalid str_errors value %R (must be 'strict' or 'replace')", value);
     return -1;
 }
 

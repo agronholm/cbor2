@@ -1174,3 +1174,17 @@ def test_decode_from_bytes_deeply_nested_in_hook(impl):
     assert result[0] == [1, 2, 3]
     assert result[1] == "after"
     assert result[2] == "final"
+
+
+def test_str_errors_error_alias(impl):
+    """'error' is not a valid Python string error handler, normalize to 'strict'."""
+    with BytesIO(b"\x65hello") as stream:
+        decoder = impl.CBORDecoder(stream, str_errors="error")
+        assert decoder.str_errors == "strict"
+
+
+def test_str_errors_invalid_mode(impl):
+    payload = b"\x65hello"
+    for invalid_mode in ["invalid", "ignore", "backslashreplace"]:
+        with pytest.raises(ValueError, match="invalid str_errors"):
+            impl.loads(payload, str_errors=invalid_mode)

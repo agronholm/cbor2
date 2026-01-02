@@ -151,17 +151,18 @@ class CBORDecoder:
             raise ValueError("object_hook must be None or a callable")
 
     @property
-    def str_errors(self) -> Literal["strict", "error", "replace"]:
+    def str_errors(self) -> Literal["strict", "replace"]:
         return self._str_errors
 
     @str_errors.setter
-    def str_errors(self, value: Literal["strict", "error", "replace"]) -> None:
-        if value in ("strict", "error", "replace"):
+    def str_errors(self, value: Literal["strict", "replace", "error"]) -> None:
+        if value == "error":
+            self._str_errors = "strict"
+        elif value in ("strict", "replace"):
             self._str_errors = value
         else:
             raise ValueError(
-                f"invalid str_errors value {value!r} (must be one of 'strict', "
-                "'error', or 'replace')"
+                f"invalid str_errors value {value!r} (must be 'strict' or 'replace')"
             )
 
     def set_shareable(self, value: T) -> T:
