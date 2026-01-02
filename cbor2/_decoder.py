@@ -65,6 +65,7 @@ class CBORDecoder:
 
     _fp: IO[bytes]
     _fp_read: Callable[[int], bytes]
+    _str_errors: Literal["strict", "replace"]
 
     def __init__(
         self,
