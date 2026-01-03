@@ -5,6 +5,12 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed ``str_errors`` parameter being ignored in C extension when decoding strings with
+  invalid UTF-8 byte sequences (broken since 5.6.0)
+  (`#255 <https://github.com/agronholm/cbor2/issues/255>`_; PR by @topher200)
+
 **5.8.0** (2025-12-30)
 
 - Added readahead buffering to C decoder for improved performance.

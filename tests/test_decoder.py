@@ -255,6 +255,27 @@ def test_string_invalid_utf8(impl, payload: str) -> None:
     assert isinstance(exc.value.__cause__, UnicodeDecodeError)
 
 
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        pytest.param(b"cfo\x90", "fo\ufffd", id="issue_255_short"),
+        pytest.param(unhexlify("6198"), "\ufffd", id="short"),
+        pytest.param(
+            unhexlify("7a00010000" + "61" * 65535 + "c3"), "a" * 65535 + "\ufffd", id="long"
+        ),
+        pytest.param(unhexlify("7f6198ff"), "\ufffd", id="indefinite"),
+    ],
+)
+def test_string_invalid_utf8_with_str_errors_replace(impl, payload: bytes, expected: str) -> None:
+    """Test for Issue #255: str_errors='replace' should replace invalid UTF-8 bytes.
+
+    When str_errors='replace' is specified, invalid UTF-8 byte sequences should
+    be replaced with the Unicode replacement character (U+FFFD).
+    """
+    result = impl.loads(payload, str_errors="replace")
+    assert result == expected
+
+
 def test_string_oversized(impl) -> None:
     with pytest.raises(impl.CBORDecodeEOF, match="premature end of stream"):
         (impl.loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799")),)
