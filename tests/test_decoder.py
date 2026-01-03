@@ -1174,3 +1174,79 @@ def test_decode_from_bytes_deeply_nested_in_hook(impl):
     assert result[0] == [1, 2, 3]
     assert result[1] == "after"
     assert result[2] == "final"
+
+
+def test_str_errors_error_alias(impl):
+    """'error' is not a valid Python string error handler, normalize to 'strict'."""
+    with BytesIO(b"\x65hello") as stream:
+        decoder = impl.CBORDecoder(stream, str_errors="error")
+        assert decoder.str_errors == "strict"
+
+
+def test_str_errors_invalid_mode(impl):
+    payload = b"\x65hello"
+    for invalid_mode in ["invalid", "ignore", "backslashreplace"]:
+        with pytest.raises(ValueError, match="invalid str_errors"):
+            impl.loads(payload, str_errors=invalid_mode)
+
+
+@pytest.mark.parametrize(
+    "mode, expected",
+    [
+        ("strict", None),  # Should raise exception
+        ("replace", "hello\ufffdworld"),  # Should replace invalid byte with U+FFFD
+    ],
+    ids=["strict_mode", "replace_mode"],
+)
+def test_str_errors_handling(impl, mode, expected):
+    invalid_utf8 = b"\x6bhello\xffworld"  # \xFF is invalid UTF-8
+
+    if expected is None:
+        with pytest.raises(impl.CBORDecodeValueError, match="error decoding unicode string"):
+            impl.loads(invalid_utf8, str_errors=mode)
+    else:
+        result = impl.loads(invalid_utf8, str_errors=mode)
+        assert result == expected
+        assert len(result) == 11
+        assert result[5] == "\ufffd"
+
+
+def test_str_errors_valid_utf8_unchanged(impl):
+    payload = b"\x78\x19Hello \xc3\xbcnicode \xe6\xb0\xb4 world!"
+    result_strict = impl.loads(payload, str_errors="strict")
+    result_replace = impl.loads(payload, str_errors="replace")
+    assert result_strict == result_replace
+    assert result_strict == "Hello \u00fcnicode \u6c34 world!"
+
+
+@pytest.mark.parametrize("length", [255, 256, 257])
+def test_string_stack_threshold_boundary(impl, length):
+    """Test stack (<=256) vs heap (>256) allocation boundary."""
+    test_string = "a" * length
+    if length < 24:
+        payload = bytes([0x60 + length])
+    elif length < 256:
+        payload = b"\x78" + bytes([length])
+    else:
+        payload = b"\x79" + struct.pack(">H", length)
+    payload += test_string.encode("utf-8")
+    assert impl.loads(payload) == test_string
+
+
+@pytest.mark.parametrize(
+    "payload, mode, expected",
+    [
+        (b"\x66hello\xff", "replace", "hello\ufffd"),  # <=256 bytes: stack path
+        (
+            b"\x79\x01\x05" + b"a" * 260 + b"\xff",
+            "replace",
+            "a" * 260 + "\ufffd",
+        ),  # >256: heap path
+    ],
+    ids=["short_string", "long_string"],
+)
+def test_str_errors_different_lengths(impl, payload, mode, expected):
+    """Tests both stack (<=256 bytes) and heap (>256 bytes) allocation paths."""
+    result = impl.loads(payload, str_errors=mode)
+    assert result == expected
+    assert result[-1] == "\ufffd"
