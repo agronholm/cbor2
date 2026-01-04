@@ -905,18 +905,20 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
         }
 
         consumed = chunk_length;  // workaround for https://github.com/python/cpython/issues/99612
-        string = PyUnicode_DecodeUTF8Stateful(source_buffer, chunk_length, NULL, &consumed);
+        const char *errors = self->str_errors_strict ? NULL : PyBytes_AS_STRING(self->str_errors);
+        string = PyUnicode_DecodeUTF8Stateful(source_buffer, chunk_length, errors, &consumed);
         if (!string)
             goto error;
 
         if (ret) {
             // Concatenate the result to the existing result
             PyObject *joined = PyUnicode_Concat(ret, string);
+            Py_DECREF(string);
+            string = NULL;
             if (!joined)
                 goto error;
 
-            Py_DECREF(string);
-            string = NULL;
+            Py_DECREF(ret);
             ret = joined;
         } else {
             // Set the result to the decoded string
@@ -946,8 +948,35 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
         chunk = NULL;
     }
 
-    if (ret && string_namespace_add(self, ret, length) == -1)
-        goto error;
+    // Handle any remaining bytes in the buffer (incomplete UTF-8 sequences)
+    if (buffer_length > 0) {
+        string = PyUnicode_DecodeUTF8(buffer, buffer_length,
+            PyBytes_AS_STRING(self->str_errors));
+        if (!string)
+            goto error;
+
+        if (ret) {
+            PyObject *joined = PyUnicode_Concat(ret, string);
+            Py_DECREF(string);
+            string = NULL;
+            if (!joined)
+                goto error;
+
+            Py_DECREF(ret);
+            ret = joined;
+        } else {
+            ret = string;
+            string = NULL;
+        }
+    }
+
+    if (buffer)
+        PyMem_Free(buffer);
+
+    if (ret && string_namespace_add(self, ret, length) == -1) {
+        Py_DECREF(ret);
+        return NULL;
+    }
 
     return ret;
 error:

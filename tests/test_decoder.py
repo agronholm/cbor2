@@ -1250,3 +1250,23 @@ def test_str_errors_different_lengths(impl, payload, mode, expected):
     result = impl.loads(payload, str_errors=mode)
     assert result == expected
     assert result[-1] == "\ufffd"
+
+
+def test_str_errors_long_string_over_65536_bytes(impl):
+    """Issue #255: str_errors not respected for strings >65536 bytes."""
+    # 65537 bytes: 65536 'a' + 1 invalid UTF-8 byte
+    payload = unhexlify("7a00010001" + "61" * 65536 + "c3")
+    result = impl.loads(payload, str_errors="replace")
+    assert len(result) == 65537
+    assert result[-1] == "\ufffd"
+
+
+def test_str_errors_long_string_invalid_middle(impl):
+    """Test str_errors with invalid UTF-8 in the middle of a long string."""
+    # 65536 'a' + invalid byte + 65536 'b' = 131073 bytes
+    payload = unhexlify("7a00020001" + "61" * 65536 + "c3" + "62" * 65536)
+    result = impl.loads(payload, str_errors="replace")
+    assert len(result) == 131073
+    assert result[65536] == "\ufffd"
+    assert result[:65536] == "a" * 65536
+    assert result[65537:] == "b" * 65536
