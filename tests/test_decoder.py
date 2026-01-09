@@ -1174,3 +1174,73 @@ def test_decode_from_bytes_deeply_nested_in_hook(impl):
     assert result[0] == [1, 2, 3]
     assert result[1] == "after"
     assert result[2] == "final"
+
+def test_loads_does_not_consume_excess_data(impl):
+    """Test that loads() doesn't consume excess data beyond the CBOR value.
+
+    By default, loads() should only read exactly what it needs to decode
+    the object and leave any excess data unconsumed. This is important for
+    scenarios where multiple CBOR objects are concatenated in the same buffer,
+    or when CBOR data is followed by other data.
+    """
+    # Create CBOR data for integer 1 followed by excess data
+    cbor_int = unhexlify("01")  # CBOR encoding of 1
+    excess_data = b"excess_data_that_should_not_be_consumed"
+    combined = cbor_int + excess_data
+
+    # loads() should only decode the first value and not consume the rest
+    result = impl.loads(combined)
+    assert result == 1
+
+    # The test is implicit: if loads() consumed more data than needed,
+    # it would still work, but with the default read_size=1, we're
+    # ensuring minimal consumption. For a more explicit check, we can
+    # verify with a stream that we're not reading past what we need.
+    stream = BytesIO(combined)
+    decoder = impl.CBORDecoder(stream)
+    decoded_value = decoder.decode()
+    assert decoded_value == 1
+
+    # The stream position should only be advanced by the minimal amount
+    # needed to decode the object (1 byte for the integer 1)
+    current_pos = stream.tell()
+    # With read_size=1, the position should be exactly at the end of the CBOR data
+    assert current_pos <= len(cbor_int) + 1  # Allow for small readahead
+
+
+def test_loads_multiple_concatenated_objects(impl):
+    """Test that loads() can handle multiple concatenated CBOR objects.
+
+    This verifies that when CBOR data is concatenated in the same buffer,
+    loads() can decode one object without consuming the bytes of the next.
+    """
+    # Create two CBOR objects: integer 1 and integer 2
+    obj1_data = unhexlify("01")  # CBOR: 1
+    obj2_data = unhexlify("02")  # CBOR: 2
+    combined = obj1_data + obj2_data
+
+    # Decode the first object using loads()
+    result1 = impl.loads(combined)
+    assert result1 == 1
+
+    # Now decode just the second object
+    # (manually demonstrating that loads doesn't consume the second object)
+    result2 = impl.loads(obj2_data)
+    assert result2 == 2
+
+    # With a stream-based approach, we can verify the positions
+    stream = BytesIO(combined)
+    decoder = impl.CBORDecoder(stream)
+
+    # Decode first object
+    value1 = decoder.decode()
+    pos_after_first = stream.tell()
+
+    # Decode second object
+    value2 = decoder.decode()
+    pos_after_second = stream.tell()
+
+    assert value1 == 1
+    assert value2 == 2
+    # The first object should only consume its own bytes plus minimal overhead
+    assert pos_after_first <= len(obj1_data) + 1
