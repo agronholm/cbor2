@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // Default readahead buffer size for streaming reads
-#define CBOR2_DEFAULT_READ_SIZE 4096
+#define CBOR2_DEFAULT_READ_SIZE 1
 
 typedef struct {
     PyObject_HEAD
