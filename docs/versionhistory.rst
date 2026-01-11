@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Rewrote the encoder and decoder in Rust for better maintainability and memory safety
+
 **5.8.0** (2025-12-30)
 
 - Added readahead buffering to C decoder for improved performance.

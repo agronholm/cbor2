@@ -1,6 +1,7 @@
 [build-system]
 requires = [
     "setuptools >= 77",
+    "setuptools-rust",
     "setuptools_scm[toml] >= 6.4"
 ]
 build-backend = "setuptools.build_meta"
@@ -16,16 +17,16 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Typing :: Typed",
+    "Programming Language :: Rust",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
-requires-python = ">= 3.9"
+requires-python = ">= 3.10"
 dynamic = ["version"]
 
 [project.urls]
@@ -56,6 +57,10 @@ benchmarks = [
 
 [tool.setuptools.packages.find]
 include = ["cbor2"]
+
+[[tool.setuptools-rust.ext-modules]]
+target = "cbor2._cbor2"
+path = "rust/Cargo.toml"
 
 [tool.setuptools_scm]
 version_scheme = "post-release"
@@ -90,7 +95,7 @@ relative_files = true
 show_missing = true
 
 [tool.tox]
-env_list = ["py39", "py310", "py311", "py312", "py313", "py314", "pypy3"]
+env_list = ["py310", "py311", "py312", "py313", "py314", "pypy3"]
 skip_missing_interpreters = true
 requires = ["tox >= 4.22"]
 
