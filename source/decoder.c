@@ -905,8 +905,7 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
         }
 
         consumed = chunk_length;  // workaround for https://github.com/python/cpython/issues/99612
-        const char *errors = self->str_errors_strict ? NULL : PyBytes_AS_STRING(self->str_errors);
-        string = PyUnicode_DecodeUTF8Stateful(source_buffer, chunk_length, errors, &consumed);
+        string = PyUnicode_DecodeUTF8Stateful(source_buffer, chunk_length, self->str_errors, &consumed);
         if (!string)
             goto error;
 
@@ -950,8 +949,7 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
 
     // Handle any remaining bytes in the buffer (incomplete UTF-8 sequences)
     if (buffer_length > 0) {
-        string = PyUnicode_DecodeUTF8(buffer, buffer_length,
-            PyBytes_AS_STRING(self->str_errors));
+        string = PyUnicode_DecodeUTF8(buffer, buffer_length, self->str_errors);
         if (!string)
             goto error;
 
