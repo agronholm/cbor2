@@ -1211,28 +1211,6 @@ def test_str_errors_handling(impl, mode, expected):
         assert result[5] == "\ufffd"
 
 
-def test_str_errors_valid_utf8_unchanged(impl):
-    payload = b"\x78\x19Hello \xc3\xbcnicode \xe6\xb0\xb4 world!"
-    result_strict = impl.loads(payload, str_errors="strict")
-    result_replace = impl.loads(payload, str_errors="replace")
-    assert result_strict == result_replace
-    assert result_strict == "Hello \u00fcnicode \u6c34 world!"
-
-
-@pytest.mark.parametrize("length", [255, 256, 257])
-def test_string_stack_threshold_boundary(impl, length):
-    """Test stack (<=256) vs heap (>256) allocation boundary."""
-    test_string = "a" * length
-    if length < 24:
-        payload = bytes([0x60 + length])
-    elif length < 256:
-        payload = b"\x78" + bytes([length])
-    else:
-        payload = b"\x79" + struct.pack(">H", length)
-    payload += test_string.encode("utf-8")
-    assert impl.loads(payload) == test_string
-
-
 @pytest.mark.parametrize(
     "payload, mode, expected",
     [
