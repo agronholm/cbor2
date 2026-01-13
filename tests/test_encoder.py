@@ -7,6 +7,7 @@ from email.mime.text import MIMEText
 from fractions import Fraction
 from io import BytesIO
 from ipaddress import ip_address, ip_network
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -23,21 +24,22 @@ from cbor2 import (
     shareable_encoder,
     undefined,
 )
+from cbor2._decoder import loads
 
 from .hypothesis_strategies import compound_types_strategy
 
 
-def test_fp_attr():
+def test_bad_fp():
+    # Test for fp=None
     with pytest.raises(ValueError):
         CBOREncoder(None)
+
+    # Test for fp having a non-callable "write" attribute
     with pytest.raises(ValueError):
+        CBOREncoder(SimpleNamespace(write=None))
 
-        class A:
-            pass
 
-        foo = A()
-        foo.write = None
-        CBOREncoder(foo)
+def test_del_fp_attr():
     with BytesIO() as stream:
         encoder = CBOREncoder(stream)
         assert encoder.fp is stream
@@ -88,41 +90,46 @@ def test_encoders_load_type():
 
 
 def test_encode_length():
-    fp = None
-    encoder = None
+    fp = BytesIO()
+    encoder = CBOREncoder(fp)
 
     def reset_encoder():
         nonlocal fp, encoder
         fp = BytesIO()
         encoder = CBOREncoder(fp)
 
-    reset_encoder()
     encoder.encode_length(0, 1)
+    encoder.flush()
     assert fp.getvalue() == b"\x01"
 
     # Array of size 2
     reset_encoder()
     encoder.encode_length(4, 2)
+    encoder.flush()
     assert fp.getvalue() == b"\x82"
 
     # Array of indefinite size
     reset_encoder()
     encoder.encode_length(4, None)
+    encoder.flush()
     assert fp.getvalue() == b"\x9f"
 
     # Map of size 0
     reset_encoder()
     encoder.encode_length(5, 0)
+    encoder.flush()
     assert fp.getvalue() == b"\xa0"
 
     # Map of indefinite size
     reset_encoder()
     encoder.encode_length(5, None)
+    encoder.flush()
     assert fp.getvalue() == b"\xbf"
 
     # Indefinite container break
     reset_encoder()
     encoder.encode_break()
+    encoder.flush()
     assert fp.getvalue() == b"\xff"
 
 

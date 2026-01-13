@@ -1,9 +1,11 @@
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, UndefinedType};
+use bigdecimal::{BigDecimal, ToPrimitive};
+use half::f16;
 use num_bigint::BigInt;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyBytes, PyComplex, PyFloat, PyInt, PyMapping, PySequence, PySet, PyString, PyTuple};
-use pyo3::{pyclass, Py, PyAny};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyComplex, PyFloat, PyFrozenSet, PyInt, PyMapping, PySequence, PySet, PyString, PyTuple};
+use pyo3::{pyclass, IntoPyObjectExt, Py, PyAny};
 use std::collections::HashMap;
 
 #[pyclass(subclass, module = "cbor2")]
@@ -18,7 +20,6 @@ pub struct CBOREncoder {
     #[pyo3(get)]
     pub value_sharing: bool,
 
-    #[pyo3(get)]
     pub default: Option<Py<PyAny>>,
 
     #[pyo3(get)]
@@ -34,29 +35,86 @@ pub struct CBOREncoder {
     pub indefinite_containers: bool,
 
     buffer: Vec<u8>,
-    shared_containers: HashMap<Py<PyInt>, (Py<PyAny>, Option<usize>)>,
+    shared_containers: HashMap<usize, (Py<PyAny>, Option<Py<PyInt>>)>,
     string_references: HashMap<String, u64>,
     bytes_references: HashMap<String, u64>,
 }
 
 const MAX_BUFFER_SIZE: usize = 4096;
 
+pub fn with(
+    cm: &Bound<'_, PyAny>,
+    f: impl FnOnce(Bound<'_, PyAny>) -> PyResult<()>,
+) -> PyResult<()> {
+    let py = cm.py();
+    let enter_fn = cm.getattr("__enter__")?;
+    let exit_fn = cm.getattr("__exit__")?;
+    let managed = enter_fn.call0()?;
+    match f(managed) {
+        Ok(_) => {
+            let none = py.None();
+            exit_fn.call1((&none, &none, &none)).map(|_| ())
+        }
+        Err(exc) => {
+            let exit_result =
+                exit_fn.call1((exc.get_type(py), exc.value(py), exc.traceback(py)))?;
+            match exit_result.is_truthy()? {
+                true => Ok(()),
+                false => Err(exc),
+            }
+        }
+    }
+}
 
-// pub fn call_contextmanager<T>(cm: &Bound<'_, PyAny>, f: impl FnOnce(&Bound<'_, PyAny>) -> PyResult<T>) -> PyResult<T> {
-//     let managed = cm.call_method0("__enter__")?;
-//     let result = f(&managed);
-//     let py = cm.py();
-//     match result {
-//         Ok(_) => {
-//             let none = py.None();
-//             managed.call_method1("__exit__", (&none, &none, &none))
-//         },
-//         Err(exc) => {
-//             managed.call_method1("__exit__", (exc.get_type(py), exc, exc.traceback(py)))
-//         },
-//     }?;
-//     result
-// }
+impl CBOREncoder {
+    fn encode_shared_internal(
+        slf: &Bound<'_, Self>,
+        value: &Bound<'_, PyAny>,
+        f: impl FnOnce() -> PyResult<()>,
+    ) -> PyResult<()> {
+        let py = slf.py();
+        let value_sharing = slf.borrow().value_sharing;
+        let value_id = value.as_ptr() as usize;
+        let instance = slf.borrow();
+        let option = instance.shared_containers.get(&value_id);
+        match option {
+            None => {
+                drop(instance);
+                slf.borrow_mut();
+                if value_sharing {
+                    // Mark the container as shareable
+                    let next_index = PyInt::new(py, slf.borrow().shared_containers.len()).unbind();
+                    slf.borrow_mut()
+                        .shared_containers
+                        .insert(value_id, (value.clone().unbind(), Some(next_index)));
+                    f().map(|_| ())
+                } else {
+                    slf.borrow_mut()
+                        .shared_containers
+                        .insert(value_id, (value.clone().unbind(), None));
+                    let result = f();
+                    slf.borrow_mut().shared_containers.remove(&value_id);
+                    result.map(|_| ())
+                }
+            }
+            Some((_, None)) => {
+                let exc =
+                    py.import("cbor2._types")?
+                        .getattr("CBOREncodeValueError")?
+                        .call1(("cyclic data structure detected but value sharing is disabled",))?;
+                Err(PyErr::from_value(exc))
+            },
+            Some((_, Some(index))) => {
+                // Generate a reference to the previous index instead of
+                // encoding this again
+                let value = index.clone_ref(py);
+                drop(instance);
+                slf.borrow_mut().encode_length(py, 6, Some(0x1D))?;
+                CBOREncoder::encode_int(slf, value.bind(py))
+            }
+        }
+    }
+}
 
 #[pymethods]
 impl CBOREncoder {
@@ -112,19 +170,22 @@ impl CBOREncoder {
 
     #[setter]
     fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
-        if fp.is_none() || !fp.hasattr("write")? {
-            return Err(PyErr::new::<PyValueError, _>(
+        let result = fp.getattr("write");
+        if let Ok(write) = result && write.is_callable() {
+            self.fp = fp.clone().unbind();
+            Ok(())
+        } else {
+            Err(PyValueError::new_err(
                 "fp must be a file-like object with a write() method",
-            ));
+            ))
         }
-
-        self.fp = fp.clone().unbind();
-        Ok(())
     }
 
     #[getter]
     fn timezone(&self, py: Python<'_>) -> Option<Py<PyAny>> {
-        self.timezone.as_ref().map(|timezone| timezone.clone_ref(py))
+        self.timezone
+            .as_ref()
+            .map(|timezone| timezone.clone_ref(py))
     }
 
     #[setter]
@@ -132,7 +193,9 @@ impl CBOREncoder {
         if let Some(timezone) = timezone {
             let tzinfo = timezone.py().import("datetime")?.getattr("tzinfo")?;
             if !timezone.is_instance(&tzinfo)? {
-                return Err(PyErr::new::<PyTypeError, _>("timezone must be a tzinfo object"));
+                return Err(PyErr::new::<PyTypeError, _>(
+                    "timezone must be a tzinfo object",
+                ));
             }
 
             self.timezone = Some(timezone.clone().unbind());
@@ -195,286 +258,388 @@ impl CBOREncoder {
         self.maybe_flush(py)
     }
 
-    pub fn encode_value(&mut self, py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
-        if let Ok(string) = obj.cast::<PyString>() {
-            self.encode_string(py, string)
-        } else if let Ok(bytes) = obj.cast::<PyBytes>() {
-            self.encode_bytes(py, bytes)
-        } else if let Ok(bool) = obj.cast::<PyBool>() {
-            self.encode_bool(py, bool.is_true())
-        } else if let Ok(integer) = obj.cast::<PyInt>() {
-            self.encode_int(py, integer)
-        } else if let Ok(float) = obj.cast::<PyFloat>() {
-            self.encode_float(py, float)
-        } else if let Ok(complex) = obj.cast::<PyComplex>() {
-            self.encode_complex(py, complex)
-        } else if let Ok(map) = obj.cast::<PyMapping>() {
-            self.encode_map(py, map)
-        } else if let Ok(sequence) = obj.cast::<PySequence>() {
-            self.encode_array(py, sequence)
-        } else if let Ok(set) = obj.cast::<PySet>() {
-            self.encode_set(py, set)
+    #[pyo3(signature = (bytes: "bytes", /))]
+    pub fn write(&mut self, py: Python<'_>, bytes: Vec<u8>) -> PyResult<()> {
+        self.fp.call_method1(py, "write", (&bytes,)).map(|_| ())
+    }
+
+    pub fn encode_value(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
+        let decimal_type = slf.py().import("decimal")?.getattr("Decimal")?;
+        if obj.is_none() {
+            CBOREncoder::encode_none(slf)
+        } else if obj.is_exact_instance_of::<UndefinedType>() {
+            CBOREncoder::encode_undefined(slf)
+        } else if obj.is_exact_instance_of::<BreakMarkerType>() {
+            CBOREncoder::encode_break(slf)
         } else if let Ok(simple_value) = obj.cast::<CBORSimpleValue>() {
-            self.encode_simple_value(py, simple_value)
+            CBOREncoder::encode_simple_value(slf, simple_value)
         } else if let Ok(tag) = obj.cast::<CBORTag>() {
             let tag = tag.get();
-            self.encode_semantic(py, tag.tag, tag.value.bind(py))
-        } else if obj.is_none() {
-            self.encode_none(py)
-        } else if obj.is_exact_instance_of::<UndefinedType>() {
-            self.encode_undefined(py)
-        } else if obj.is_exact_instance_of::<BreakMarkerType>() {
-            self.encode_break(py)
-        // } else if let Some(default) = self.default {
-        //     default.call1(py, (self.into_pyobject(py)?, obj,))?;
-        //     Ok(())
+            CBOREncoder::encode_semantic(slf, tag.tag, tag.value.bind(slf.py()))
+        } else if let Ok(string) = obj.cast::<PyString>() {
+            CBOREncoder::encode_string(slf, string)
+        } else if let Ok(bytes) = obj.cast::<PyBytes>() {
+            CBOREncoder::encode_bytes(slf, bytes)
+        } else if let Ok(bytearray) = obj.cast::<PyByteArray>() {
+            CBOREncoder::encode_bytearray(slf, bytearray)
+        } else if let Ok(bool) = obj.cast::<PyBool>() {
+            CBOREncoder::encode_bool(slf, bool.is_true())
+        } else if let Ok(integer) = obj.cast::<PyInt>() {
+            CBOREncoder::encode_int(slf, integer)
+        } else if let Ok(integer) = obj.cast::<PyInt>() {
+            CBOREncoder::encode_int(slf, integer)
+        } else if let Ok(float) = obj.cast::<PyFloat>() {
+            CBOREncoder::encode_float(slf, float)
+        } else if let Ok(complex) = obj.cast::<PyComplex>() {
+            CBOREncoder::encode_complex(slf, complex)
+        } else if obj.is_instance(&decimal_type)? {
+            CBOREncoder::encode_decimal(slf, obj)
+        } else if let Ok(map) = obj.cast::<PyMapping>() {
+            CBOREncoder::encode_map(slf, map)
+        } else if let Ok(sequence) = obj.cast::<PySequence>() {
+            CBOREncoder::encode_array(slf, sequence)
+        } else if let Ok(set) = obj.cast::<PySet>() {
+            CBOREncoder::encode_set(slf, set)
+        } else if let Ok(set) = obj.cast::<PyFrozenSet>() {
+            CBOREncoder::encode_frozenset(slf, set)
+        } else if let Some(default) = &slf.borrow().default {
+            default.call1(slf.py(), (slf, obj)).map(|_| ())
         } else {
-            Err(PyTypeError::new_err(format!(
-                "cannot encode type {}",
-                obj.get_type().to_string()
-            )))
+            let msg = format!("cannot encode type {}", obj.get_type().to_string());
+            let exc = slf.py().import("cbor2._types")?
+                .getattr("CBOREncodeError")?
+                .call1((msg,))?;
+            Err(PyErr::from_value(exc))
         }
     }
 
-    pub fn encode(&mut self, py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
-        self.encode_value(py, obj)?;
-        self.flush(py)
+    pub fn encode(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
+        CBOREncoder::encode_value(slf, obj)?;
+        slf.borrow_mut().flush(slf.py())
     }
 
-    // pub fn encode_shared(&mut self, py: Python<'_>, encoder: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    // #[pyo3(signature = (
+    //     encoder: "Callable[[CBOREncoder, typing.Any], typing.Any]",
+    //     value: "typing.Any"
+    // ))]
+    // pub fn encode_shared(
+    //     slf: &Bound<'_, Self>,
+    //     encoder: &Bound<'_, PyAny>,
+    //     value: &Bound<'_, PyAny>,
+    // ) -> PyResult<()> {
+    //     let py = slf.py();
+    //     let instance = slf.borrow();
+    //     let value_sharing = instance.value_sharing;
+    //     let shared_containers = &instance.shared_containers;
+    //
     //     let id = py.import("builtins")?.getattr("id")?;
-    //     let value_id = id.call1((value,))?;
-    //     let value = value.unbind();
-    //     match self.shared_containers.get(&value_id.unbind()) {
+    //     let value_id = id.call1((value,))?.extract::<usize>()?;
+    //     match shared_containers.get(&value_id) {
     //         Some((_, index)) => {
     //             match index {
     //                 Some(index) => {
     //                     // Generate a reference to the previous index instead of
     //                     // encoding this again
-    //                     self.encode_length(py, 6, Some(0x1D))?;
-    //                     self.encode_int(py, index)
+    //                     slf.borrow_mut().encode_length(py, 6, Some(0x1D))?;
+    //                     CBOREncoder::encode_int(slf, index.bind(py))
     //                 }
     //                 None => {
-    //                     Err(PyErr::new::<CBOREncodeValueError, _>("cyclic data structure detected but value sharing is disabled"))
+    //                     let error_class =
+    //                         py.import("cbor2._types")?.getattr("CBOREncodeValueError")?;
+    //                     let error = error_class.call1((
+    //                         "cyclic data structure detected but value sharing is disabled",
+    //                     ))?;
+    //                     Err(PyErr::from_value(error))
     //                 }
     //             }
     //         }
     //         None => {
-    //             if self.value_sharing {
+    //             if value_sharing {
     //                 // Mark the container as shareable
-    //                 //         self._shared_containers[value_id] = (
-    //                 //             value,
-    //                 //             len(self._shared_containers),
-    //                 //         )
-    //                 //         self.encode_length(6, 0x1C)
-    //                 encoder.call1((self, value))?;
-    //                 self.shared_containers.insert(value_id, (value.unbind(), self.shared_containers.len()));
-    //                 Ok(())
+    //                 let next_index = PyInt::new(py, instance.shared_containers.len()).unbind();
+    //                 slf.borrow_mut()
+    //                     .shared_containers
+    //                     .insert(value_id, (value.clone().unbind(), Some(next_index)));
+    //                 encoder.call1((slf, value)).map(|_| ())
     //             } else {
-    //                 self.shared_containers.insert(value_id, (value.unbind(), None));
-    //                 Ok(())
-    //                 //         try:
-    //                 //             encoder(self, value)
-    //                 //         finally:
-    //                 //             del self._shared_containers[value_id]
+    //                 slf.borrow_mut()
+    //                     .shared_containers
+    //                     .insert(value_id, (value.clone().unbind(), None));
+    //                 let result = encoder.call1((slf.clone(), value));
+    //                 slf.borrow_mut().shared_containers.remove(&value_id);
+    //                 result.map(|_| ())
     //             }
     //         }
     //     }
     // }
 
+    #[pyo3(signature = (major_tag: "int", length: "int | None" = None))]
     pub fn encode_length(
         &mut self,
         py: Python<'_>,
-        mut major_tag: u8,
+        major_tag: u8,
         length: Option<u64>,
     ) -> PyResult<()> {
-        major_tag <<= 5;
+        // println!("packing: major_tag={}", major_tag);
+        let major_tag = major_tag << 5;
+        // println!("packing: major_tag<<5 = {}", major_tag);
         match length {
             Some(len) => match len {
-                ..24 => {
-                    self.fp_write_byte(py, major_tag | len as u8)?;
-                }
+                ..24 => self.fp_write_byte(py, major_tag | len as u8),
                 24..256 => {
                     self.fp_write_byte(py, major_tag | 24)?;
-                    self.fp_write(py, (len as u8).to_be_bytes().to_vec())?;
+                    self.fp_write(py, (len as u8).to_be_bytes().to_vec())
                 }
                 256..65536 => {
                     self.fp_write_byte(py, major_tag | 25)?;
-                    self.fp_write(py, (len as u16).to_be_bytes().to_vec())?;
+                    self.fp_write(py, (len as u16).to_be_bytes().to_vec())
                 }
                 65536..4294967296 => {
                     self.fp_write_byte(py, major_tag | 26)?;
-                    self.fp_write(py, (len as u32).to_be_bytes().to_vec())?;
+                    self.fp_write(py, (len as u32).to_be_bytes().to_vec())
                 }
                 _ => {
                     self.fp_write_byte(py, major_tag | 27)?;
-                    self.fp_write(py, len.to_be_bytes().to_vec())?;
+                    self.fp_write(py, len.to_be_bytes().to_vec())
                 }
             },
             None => {
                 // Indefinite
-                self.buffer.push(major_tag | 31);
+                self.fp_write_byte(py, major_tag | 31)
             }
         }
-        Ok(())
     }
 
-    pub fn encode_string(&mut self, py: Python<'_>, obj: &Bound<'_, PyString>) -> PyResult<()> {
+    pub fn encode_string(slf: &Bound<'_, Self>, obj: &Bound<'_, PyString>) -> PyResult<()> {
+        let py = slf.py();
         let encoded = obj.to_str()?.as_bytes();
-        self.encode_length(py, 3, Some(encoded.len() as u64))?;
-        self.fp_write(py, encoded.to_vec())
+        slf.borrow_mut()
+            .encode_length(py, 3, Some(encoded.len() as u64))?;
+        slf.borrow_mut().fp_write(py, encoded.to_vec())
     }
 
-    pub fn encode_bytes(&mut self, py: Python<'_>, obj: &Bound<'_, PyBytes>) -> PyResult<()> {
+    pub fn encode_bytes(slf: &Bound<'_, Self>, obj: &Bound<'_, PyBytes>) -> PyResult<()> {
+        let py = slf.py();
         let bytes = obj.as_bytes();
-        self.encode_length(py, 2, Some(bytes.len() as u64))?;
-        self.fp_write(py, bytes.to_vec())
+        slf.borrow_mut()
+            .encode_length(py, 2, Some(bytes.len() as u64))?;
+        slf.borrow_mut().fp_write(py, bytes.to_vec())
     }
 
-    fn encode_array(&mut self, py: Python<'_>, obj: &Bound<'_, PySequence>) -> PyResult<()> {
-        self.encode_length(
-            py,
+    pub fn encode_bytearray(slf: &Bound<'_, Self>, obj: &Bound<'_, PyByteArray>) -> PyResult<()> {
+        let py = slf.py();
+        slf.borrow_mut().encode_length(py, 2, Some(obj.len() as u64))?;
+        slf.borrow_mut().fp_write(py, obj.to_vec())
+    }
+
+    fn encode_array(slf: &Bound<'_, Self>, obj: &Bound<'_, PySequence>) -> PyResult<()> {
+        let indefinite_containers = slf.borrow().indefinite_containers;
+        slf.borrow_mut().encode_length(
+            slf.py(),
             4,
-            if !self.indefinite_containers {
+            if !indefinite_containers {
                 Some(obj.len()? as u64)
             } else {
                 None
             },
         )?;
-        for value in obj.try_iter()? {
-            self.encode_value(py, &value?)?;
-        }
+        CBOREncoder::encode_shared_internal(slf, obj, || {
+            for value in obj.try_iter()? {
+                CBOREncoder::encode_value(slf, &value?)?;
+            }
+            Ok(())
+        })?;
 
-        if self.indefinite_containers {
-            self.encode_break(py)?;
+        if indefinite_containers {
+            CBOREncoder::encode_break(slf)?;
         }
         Ok(())
     }
 
-    fn encode_map(&mut self, py: Python<'_>, obj: &Bound<'_, PyMapping>) -> PyResult<()> {
-        self.encode_length(
+    fn encode_map(slf: &Bound<'_, Self>, obj: &Bound<'_, PyMapping>) -> PyResult<()> {
+        let indefinite_containers = slf.borrow().indefinite_containers;
+        let py = slf.py();
+        slf.borrow_mut().encode_length(
             py,
             5,
-            if !self.indefinite_containers {
+            if !indefinite_containers {
                 Some(obj.len()? as u64)
             } else {
                 None
             },
         )?;
-        for item in obj.items()?.try_iter()? {
-            let (key, value): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
-            self.encode_value(py, &key)?;
-            self.encode_value(py, &value)?;
-        }
+        CBOREncoder::encode_shared_internal(slf, obj, || {
+            for item in obj.items()?.try_iter()? {
+                let (key, value): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
+                CBOREncoder::encode_value(slf, &key)?;
+                CBOREncoder::encode_value(slf, &value)?;
+            }
+            Ok(())
+        })?;
 
-        if self.indefinite_containers {
-            self.encode_break(py)?
+        if indefinite_containers {
+            CBOREncoder::encode_break(slf)?
         }
         Ok(())
     }
 
-    pub fn encode_break(&mut self, py: Python<'_>) -> PyResult<()> {
+    pub fn encode_break(slf: &Bound<'_, Self>) -> PyResult<()> {
         // Break stop code for indefinite containers
-        self.fp_write_byte(py, 0xff)
+        slf.borrow_mut().fp_write_byte(slf.py(), 0xff)
     }
 
-    pub fn encode_int(&mut self, py: Python<'_>, integer: &Bound<'_, PyInt>) -> PyResult<()> {
-        if let Ok(value) = integer.extract::<i64>() {
-            if value >= 0 {
-                self.encode_length(py, 0, Some(value as u64))
-            } else {
-                self.encode_length(py, 1, Some(-(value + 1) as u64))
-            }
-        } else {
-            let mut value: BigInt = integer.extract()?;
-            let tag: u64;
-            if value >= BigInt::ZERO {
-                tag = 0x02;
-            } else {
-                tag = 0x03;
-                value = -value - 1;
-            };
-            let (_, payload) = value.to_bytes_be();
+    pub fn encode_int(slf: &Bound<'_, Self>, integer: &Bound<'_, PyInt>) -> PyResult<()> {
+        let py = slf.py();
+        if integer.ge(18446744073709551616_i128)? {
+            println!("integer {} is greater or equivalent to {}", integer, 18446744073709551616_i128);
+            let (_, payload) = integer.extract::<BigInt>()?.to_bytes_be();
             let py_payload = PyBytes::new(py, &payload);
-            self.encode_semantic(py, tag, py_payload.as_any())
+            CBOREncoder::encode_semantic(slf, 2, py_payload.as_any())
+        } else if integer.lt(-18446744073709551616_i128)? {
+            println!("integer {} is lower than {}", integer, -18446744073709551616_i128);
+            let mut value = integer.extract::<BigInt>()?;
+            value = -value - 1;
+            let (_, payload) = value .to_bytes_be();
+            let py_payload = PyBytes::new(py, &payload);
+            CBOREncoder::encode_semantic(slf, 3, py_payload.as_any())
+        } else if integer.ge(0)? {
+            let value: u64 = integer.extract()?;
+            slf.borrow_mut().encode_length(py, 0, Some(value))
+        } else {
+            let value = integer.add(1)?.abs()?.extract::<u64>()?;
+            slf.borrow_mut().encode_length(py, 1, Some(value))
         }
     }
 
-    pub fn encode_bool(&mut self, py: Python<'_>, value: bool) -> PyResult<()> {
-        self.fp_write_byte(py, if value { b'\xf5' } else { b'\xf4' })
+    pub fn encode_bool(slf: &Bound<'_, Self>, value: bool) -> PyResult<()> {
+        slf.borrow_mut()
+            .fp_write_byte(slf.py(), if value { b'\xf5' } else { b'\xf4' })
     }
 
-    pub fn encode_none(&mut self, py: Python<'_>) -> PyResult<()> {
-        self.fp_write_byte(py, b'\xf6')
+    pub fn encode_none(slf: &Bound<'_, Self>) -> PyResult<()> {
+        slf.borrow_mut().fp_write_byte(slf.py(), b'\xf6')
     }
 
-    pub fn encode_undefined(&mut self, py: Python<'_>) -> PyResult<()> {
-        self.fp_write_byte(py, b'\xf7')
+    pub fn encode_undefined(slf: &Bound<'_, Self>) -> PyResult<()> {
+        slf.borrow_mut().fp_write_byte(slf.py(), b'\xf7')
     }
 
     pub fn encode_semantic(
-        &mut self,
-        py: Python<'_>,
+        slf: &Bound<'_, Self>,
         tag: u64,
         value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
-        let old_string_referencing = self.string_referencing;
+        let old_string_referencing = slf.borrow().string_referencing;
         if tag == 256 {
-            self.string_referencing = true;
+            let mut this = slf.borrow_mut();
+            this.string_referencing = true;
+
             // TODO: move the string/bytestring references here temporarily
         }
-        let mut result = self.encode_length(py, 6, Some(tag));
+        let mut result = slf.borrow_mut().encode_length(slf.py(), 6, Some(tag));
         if result.is_ok() {
-            result = self.encode(py, &value);
+            result = CBOREncoder::encode(slf, &value);
         }
-        self.string_referencing = old_string_referencing;
+        slf.borrow_mut().string_referencing = old_string_referencing;
         // TODO: restore the string/bytestring references to the instance
         result
     }
 
-    pub fn encode_set(&mut self, py: Python<'_>, value: &Bound<'_, PySet>) -> PyResult<()> {
+    pub fn encode_set(slf: &Bound<'_, Self>, value: &Bound<'_, PySet>) -> PyResult<()> {
         // Semantic tag 258
-        self.encode_semantic(py, 258, PyTuple::new(py, value)?.as_any())
+        CBOREncoder::encode_semantic(slf, 258, PyTuple::new(slf.py(), value)?.as_any())
     }
+
+    pub fn encode_frozenset(slf: &Bound<'_, Self>, value: &Bound<'_, PyFrozenSet>) -> PyResult<()> {
+        // Semantic tag 258
+        CBOREncoder::encode_semantic(slf, 258, PyTuple::new(slf.py(), value)?.as_any())
+    }
+
+    //
+    // Semantic decoders (major tag 6)
+    //
+
+    pub fn encode_decimal(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        if value.call_method0("is_nan")?.is_truthy()? {
+            slf.borrow_mut().fp_write(slf.py(), vec![0xf9, 0x7e, 0x00])
+        } else if value.call_method0("is_infinite")?.is_truthy()? {
+            let signed = value.call_method0("is_signed")?.is_truthy()?;
+            let middle = if signed { 0xfc } else { 0x7c };
+            slf.borrow_mut().fp_write(slf.py(), vec![0xf9, middle, 0x00])
+        } else {
+            let py = slf.py();
+            let decimal: BigDecimal = value.extract()?;
+            let (digits, exp) = decimal.as_bigint_and_exponent();
+            let py_exp = (-exp).into_bound_py_any(py)?;
+            let py_digits = digits.into_bound_py_any(py)?;
+            let parts = PyTuple::new(py, &[py_exp, py_digits])?;
+            CBOREncoder::encode_semantic(slf, 4, &parts)
+        }
+    }
+
+    // def encode_decimal(self, value: Decimal) -> None:
+        // # Semantic tag 4
+        // if value.is_nan():
+        //     self._fp_write(b"\xf9\x7e\x00")
+        // elif value.is_infinite():
+        //     self._fp_write(b"\xf9\x7c\x00" if value > 0 else b"\xf9\xfc\x00")
+        // else:
+        //     dt = value.as_tuple()
+        //     sig = 0
+        //     for digit in dt.digits:
+        //         sig = (sig * 10) + digit
+        //     if dt.sign:
+        //         sig = -sig
+        //     with self.disable_value_sharing():
+        //         self.encode_semantic(CBORTag(4, [dt.exponent, sig]))
 
     //
     // Special encoders (major tag 7)
     //
 
     fn encode_simple_value(
-        &mut self,
-        py: Python<'_>,
+        slf: &Bound<'_, Self>,
         obj: &Bound<'_, CBORSimpleValue>,
     ) -> PyResult<()> {
+        let py = slf.py();
         let value = obj.get().value;
         if value < 24 {
-            self.fp_write_byte(py, 0xe0 | value)
+            slf.borrow_mut().fp_write_byte(py, 0xe0 | value)
         } else {
-            self.fp_write_byte(py, 0xf8)?;
-            self.fp_write_byte(py, value)
+            slf.borrow_mut().fp_write(py, vec![0xf8, value])
         }
     }
 
-    fn encode_float(&mut self, py: Python<'_>, value: &Bound<'_, PyFloat>) -> PyResult<()> {
+    fn encode_float(slf: &Bound<'_, Self>, value: &Bound<'_, PyFloat>) -> PyResult<()> {
+        let py = slf.py();
         let value = value.extract::<f64>()?;
         if value.is_nan() {
-            self.fp_write(py, b"\xf9\x7e\x00".to_vec())
+            slf.borrow_mut().fp_write(py, vec![0xf9, 0x7e, 0x00])
         } else if value.is_infinite() {
-            self.fp_write(py, b"\xf9\x7c\x00".to_vec())
+            let middle = if value.is_sign_positive() { 0x7c } else { 0xfc };
+            slf.borrow_mut().fp_write(py, vec![0xf9, middle, 0x00])
         } else {
-            self.fp_write_byte(py, 0xfb)?;
-            self.fp_write(py, value.to_be_bytes().to_vec())
+            if slf.borrow().canonical {
+                // Find the shortest form that did not lose precision with the cast
+                let value_32 = value as f32;
+                if value_32 as f64 == value {
+                    let value_16 = f16::from_f32(value_32);
+                    if value_16.to_f32() == value_32 {
+                        slf.borrow_mut().fp_write_byte(py, 0xf9)?;
+                        return slf.borrow_mut().fp_write(py, value_16.to_be_bytes().to_vec())
+                    } else {
+                        slf.borrow_mut().fp_write_byte(py, 0xfa)?;
+                        return slf.borrow_mut().fp_write(py, value_32.to_be_bytes().to_vec())
+                    }
+                }
+            }
+            slf.borrow_mut().fp_write_byte(py, 0xfb)?;
+            slf.borrow_mut().fp_write(py, value.to_be_bytes().to_vec())
         }
     }
 
-    fn encode_complex(&mut self, py: Python<'_>, value: &Bound<'_, PyComplex>) -> PyResult<()> {
-        let tuple = PyTuple::new(py, [value.real(), value.imag()])?;
-        self.encode_semantic(py, 43000, tuple.as_any())
+    fn encode_complex(slf: &Bound<'_, Self>, value: &Bound<'_, PyComplex>) -> PyResult<()> {
+        let tuple = PyTuple::new(slf.py(), [value.real(), value.imag()])?;
+        CBOREncoder::encode_semantic(slf, 43000, tuple.as_any())
     }
-
-    // def encode_complex(self, value: complex) -> None:
-    //     # Semantic tag 43000
-    //     with self.disable_value_sharing():
-    //         self.encode_semantic(CBORTag(43000, [value.real, value.imag]))
-
 }

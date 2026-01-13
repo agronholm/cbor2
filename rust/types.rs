@@ -1,3 +1,4 @@
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyIterator, PyString, PyTuple};
 use pyo3::{Bound, Py, PyAny, PyResult, Python, pyclass, pymethods};
@@ -17,11 +18,14 @@ pub struct CBORTag {
 #[pymethods]
 impl CBORTag {
     #[new]
-    pub fn new(tag: u64, value: Bound<'_, PyAny>) -> Self {
-        Self {
+    pub fn new(tag: Bound<'_, PyAny>, value: Bound<'_, PyAny>) -> PyResult<Self> {
+        let tag: u64 = tag.extract().map_err(|_| {
+            PyTypeError::new_err("CBORTag tags must be positive integers less than 2**64")
+        })?;
+        Ok(Self {
             tag,
             value: value.unbind(),
-        }
+        })
     }
 }
 

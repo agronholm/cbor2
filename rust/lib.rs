@@ -175,7 +175,7 @@ mod _cbor2 {
         string_referencing: bool,
         indefinite_containers: bool,
     ) -> PyResult<()> {
-        let mut encoder = CBOREncoder::new(
+        let encoder = CBOREncoder::new(
             fp,
             datetime_as_timestamp,
             timezone,
@@ -186,7 +186,8 @@ mod _cbor2 {
             string_referencing,
             indefinite_containers,
         )?;
-        encoder.encode(py, obj)
+        let instance = Bound::new(py, encoder)?;
+        CBOREncoder::encode(&instance, obj)
     }
 
     ///  Serialize an object to a bytestring.
