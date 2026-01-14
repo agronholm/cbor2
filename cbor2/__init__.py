@@ -1,9 +1,13 @@
+from ._cbor2 import CBORDecoder as CBORDecoder
 from ._cbor2 import CBOREncoder as CBOREncoder
 from ._cbor2 import CBORSimpleValue as CBORSimpleValue
 from ._cbor2 import CBORTag as CBORTag
 from ._cbor2 import FrozenDict as FrozenDict
+from ._cbor2 import break_marker as break_marker
 from ._cbor2 import dump as dump
 from ._cbor2 import dumps as dumps
+from ._cbor2 import load as load
+from ._cbor2 import loads as loads
 from ._cbor2 import undefined as undefined
 from ._encoder import shareable_encoder as shareable_encoder
 from ._types import CBORDecodeEOF as CBORDecodeEOF
