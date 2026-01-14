@@ -8,7 +8,7 @@ from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
-from typing import IO, TYPE_CHECKING, Any, TypeVar, cast, overload
+from typing import IO, TYPE_CHECKING, Any, Literal, TypeVar, cast, overload
 
 from ._types import (
     CBORDecodeEOF,
@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from email.message import Message
     from fractions import Fraction
     from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
-    from typing import Literal
     from uuid import UUID
 
 T = TypeVar("T")
