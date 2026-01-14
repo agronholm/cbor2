@@ -264,9 +264,12 @@ mod _cbor2 {
         Ok(fp.call_method0("getvalue")?.cast_into::<PyBytes>()?)
     }
 
-    // #[pymodule_init]
-    // fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    //     // Arbitrary code to run at the module initialization
-    //     m.add("double2", m.getattr("double")?)
-    // }
+    #[pymodule_init]
+    fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        // Register cbor2.FrozenDict as a Mapping subclass
+        let py = m.py();
+        let frozen_dict_type = py.get_type::<FrozenDict>();
+        py.import("collections.abc")?.getattr("Mapping")?.call_method1("register", (frozen_dict_type,))?;
+        Ok(())
+    }
 }
