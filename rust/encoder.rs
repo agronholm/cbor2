@@ -491,12 +491,10 @@ impl CBOREncoder {
     pub fn encode_int(slf: &Bound<'_, Self>, integer: &Bound<'_, PyInt>) -> PyResult<()> {
         let py = slf.py();
         if integer.ge(18446744073709551616_i128)? {
-            println!("integer {} is greater or equivalent to {}", integer, 18446744073709551616_i128);
             let (_, payload) = integer.extract::<BigInt>()?.to_bytes_be();
             let py_payload = PyBytes::new(py, &payload);
             CBOREncoder::encode_semantic(slf, 2, py_payload.as_any())
         } else if integer.lt(-18446744073709551616_i128)? {
-            println!("integer {} is lower than {}", integer, -18446744073709551616_i128);
             let mut value = integer.extract::<BigInt>()?;
             value = -value - 1;
             let (_, payload) = value .to_bytes_be();
