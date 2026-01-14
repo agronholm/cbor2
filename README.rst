@@ -10,6 +10,9 @@
 .. image:: https://readthedocs.org/projects/cbor2/badge/?version=latest
   :target: https://cbor2.readthedocs.io/en/latest/?badge=latest
   :alt: Documentation Status
+.. image:: https://tidelift.com/badges/package/pypi/cbor2
+  :target: https://tidelift.com/subscription/pkg/pypi-cbor2
+  :alt: Tidelift
 
 About
 =====
