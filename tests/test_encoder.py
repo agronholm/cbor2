@@ -432,7 +432,6 @@ def test_uuid():
 )
 def test_ipaddress(value, expected):
     expected = unhexlify(expected)
-    print(dumps(value).hex())
     assert dumps(value) == expected
 
 

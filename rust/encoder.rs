@@ -11,7 +11,7 @@ use pyo3::types::{
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::collections::HashMap;
 
-#[pyclass(subclass, module = "cbor2")]
+#[pyclass(module = "cbor2")]
 pub struct CBOREncoder {
     pub fp: Py<PyAny>,
 
@@ -248,9 +248,9 @@ impl CBOREncoder {
                 return Err(PyErr::new::<PyTypeError, _>("default must be callable"));
             }
 
-            self.timezone = Some(default.clone().unbind());
+            self.default = Some(default.clone().unbind());
         } else {
-            self.timezone = None;
+            self.default = None;
         }
         Ok(())
     }

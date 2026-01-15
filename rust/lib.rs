@@ -2,16 +2,15 @@ mod decoder;
 mod encoder;
 mod types;
 
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyType};
+use pyo3::prelude::pymodule;
 
 /// A Python module implemented in Rust.
 #[pymodule]
 mod _cbor2 {
+    use std::collections::HashMap;
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
-    use pyo3::types::{PyBytes, PyDict, PyType};
+    use pyo3::types::{PyBytes, PyDict, PyInt, PyType};
 
     #[pymodule_export]
     use crate::encoder::CBOREncoder;
@@ -28,17 +27,8 @@ mod _cbor2 {
     #[pymodule_export]
     use crate::types::FrozenDict;
 
-    #[pymodule_export]
-    use crate::types::UndefinedType;
-
-    #[pymodule_export]
     use crate::types::BreakMarkerType;
-
-    #[pymodule_export]
-    const undefined: UndefinedType = UndefinedType;
-
-    #[pymodule_export]
-    const break_marker: BreakMarkerType = BreakMarkerType;
+    use crate::types::UndefinedType;
 
     ///  Deserialize an object from a bytestring.
     ///
@@ -267,12 +257,20 @@ mod _cbor2 {
         Ok(fp.call_method0("getvalue")?.cast_into::<PyBytes>()?)
     }
 
-    fn add_encoder(encoders: &Bound<'_, PyDict>, cbor_encoder_type: &Bound<'_, PyType>, class_fqdn: &str, encoder_func_name: &str) -> PyResult<()> {
+    fn add_encoder(
+        encoders: &Bound<'_, PyDict>,
+        cbor_encoder_type: &Bound<'_, PyType>,
+        class_fqdn: &str,
+        encoder_func_name: &str,
+    ) -> PyResult<()> {
         if let Some((module_name, class_name)) = class_fqdn.rsplit_once('.') {
             let py_type = encoders.py().import(module_name)?.getattr(class_name)?;
             encoders.set_item(py_type, cbor_encoder_type.getattr(encoder_func_name)?)
         } else {
-            Err(PyValueError::new_err(format!("Invalid fully qualified type name: {}", class_fqdn)))
+            Err(PyValueError::new_err(format!(
+                "Invalid fully qualified type name: {}",
+                class_fqdn
+            )))
         }
     }
 
@@ -281,26 +279,88 @@ mod _cbor2 {
         // Register cbor2.FrozenDict as a Mapping subclass
         let py = m.py();
         let frozen_dict_type = py.get_type::<FrozenDict>();
-        py.import("collections.abc")?.getattr("Mapping")?.call_method1("register", (frozen_dict_type,))?;
+        py.import("collections.abc")?
+            .getattr("Mapping")?
+            .call_method1("register", (frozen_dict_type,))?;
+
+        // Add the singleton special objects
+        m.add("undefined", UndefinedType)?;
+        m.add("break_marker", BreakMarkerType)?;
 
         // Register encoder callbacks
         let cbor_encoder_type = py.get_type::<CBOREncoder>();
         let encoders = PyDict::new(py);
-        add_encoder(&encoders, &cbor_encoder_type, "decimal.Decimal", "encode_decimal")?;
-        add_encoder(&encoders, &cbor_encoder_type, "datetime.datetime", "encode_datetime")?;
-        add_encoder(&encoders, &cbor_encoder_type, "datetime.date", "encode_date")?;
-        add_encoder(&encoders, &cbor_encoder_type, "fractions.Fraction", "encode_rational")?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "decimal.Decimal",
+            "encode_decimal",
+        )?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "datetime.datetime",
+            "encode_datetime",
+        )?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "datetime.date",
+            "encode_date",
+        )?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "fractions.Fraction",
+            "encode_rational",
+        )?;
         add_encoder(&encoders, &cbor_encoder_type, "re.Pattern", "encode_regexp")?;
-        add_encoder(&encoders, &cbor_encoder_type, "email.mime.text.MIMEText", "encode_mime")?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "email.mime.text.MIMEText",
+            "encode_mime",
+        )?;
         add_encoder(&encoders, &cbor_encoder_type, "uuid.UUID", "encode_uuid")?;
-        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv4Address", "encode_ipv4_address")?;
-        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv6Address", "encode_ipv6_address")?;
-        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv4Network", "encode_ipv4_network")?;
-        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv6Network", "encode_ipv6_network")?;
-        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv4Interface", "encode_ipv4_interface")?;
-        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv6Interface", "encode_ipv6_interface")?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "ipaddress.IPv4Address",
+            "encode_ipv4_address",
+        )?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "ipaddress.IPv6Address",
+            "encode_ipv6_address",
+        )?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "ipaddress.IPv4Network",
+            "encode_ipv4_network",
+        )?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "ipaddress.IPv6Network",
+            "encode_ipv6_network",
+        )?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "ipaddress.IPv4Interface",
+            "encode_ipv4_interface",
+        )?;
+        add_encoder(
+            &encoders,
+            &cbor_encoder_type,
+            "ipaddress.IPv6Interface",
+            "encode_ipv6_interface",
+        )?;
         m.add("encoders", encoders)?;
 
+        // Register decoder callbacks
         let decoders = PyDict::new(py);
         m.add("decoders", decoders)?;
 
