@@ -13,7 +13,7 @@ typedef struct {
     PyObject *object_hook;
     PyObject *shareables;
     PyObject *stringref_namespace;
-    PyObject *str_errors;
+    const char *str_errors;  // NULL for strict, "replace" for replace mode
     bool immutable;
     Py_ssize_t shared_index;
     Py_ssize_t decode_depth;
