@@ -95,10 +95,14 @@ Tag   Semantics                                Python type(s)
 35    Regular expression                       re.Pattern (result of ``re.compile(...)``)
 36    MIME message                             email.message.Message
 37    Binary UUID                              uuid.UUID
+52    IPv4 address/network                     :class:`ipaddress.IPv4Address` or
+                                               :class:`ipaddress.IPv4Network`
+54    IPv6 address/network                     :class:`ipaddress.IPv6Address` or
+                                               :class:`ipaddress.IPv6Network`
 256   String reference namespace               N/A
 258   Set of unique items                      set
-260   Network address                          :class:`ipaddress.IPv4Address` (or IPv6)
-261   Network prefix                           :class:`ipaddress.IPv4Network` (or IPv6)
+260   Network address (**decode only**)        :class:`ipaddress.IPv4Address` (or IPv6)
+261   Network prefix (**decode only**)         :class:`ipaddress.IPv4Network` (or IPv6)
 43000 Single complex number                    complex
 55799 Self-Described CBOR                      object
 ===== ======================================== ====================================================

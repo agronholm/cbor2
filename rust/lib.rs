@@ -2,13 +2,16 @@ mod decoder;
 mod encoder;
 mod types;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyType};
 
 /// A Python module implemented in Rust.
 #[pymodule]
 mod _cbor2 {
+    use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
-    use pyo3::types::{PyBytes, PyDict};
+    use pyo3::types::{PyBytes, PyDict, PyType};
 
     #[pymodule_export]
     use crate::encoder::CBOREncoder;
@@ -264,6 +267,15 @@ mod _cbor2 {
         Ok(fp.call_method0("getvalue")?.cast_into::<PyBytes>()?)
     }
 
+    fn add_encoder(encoders: &Bound<'_, PyDict>, cbor_encoder_type: &Bound<'_, PyType>, class_fqdn: &str, encoder_func_name: &str) -> PyResult<()> {
+        if let Some((module_name, class_name)) = class_fqdn.rsplit_once('.') {
+            let py_type = encoders.py().import(module_name)?.getattr(class_name)?;
+            encoders.set_item(py_type, cbor_encoder_type.getattr(encoder_func_name)?)
+        } else {
+            Err(PyValueError::new_err(format!("Invalid fully qualified type name: {}", class_fqdn)))
+        }
+    }
+
     #[pymodule_init]
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
         // Register cbor2.FrozenDict as a Mapping subclass
@@ -271,30 +283,22 @@ mod _cbor2 {
         let frozen_dict_type = py.get_type::<FrozenDict>();
         py.import("collections.abc")?.getattr("Mapping")?.call_method1("register", (frozen_dict_type,))?;
 
+        // Register encoder callbacks
         let cbor_encoder_type = py.get_type::<CBOREncoder>();
         let encoders = PyDict::new(py);
-        let decimal_type = py.import("decimal")?.getattr("Decimal")?;
-        let datetime_type = py.import("datetime")?.getattr("datetime")?;
-        let date_type = py.import("datetime")?.getattr("date")?;
-        let fraction_type = py.import("fractions")?.getattr("Fraction")?;
-        let pattern_type = py.import("re")?.getattr("Pattern")?;
-        let message_type = py.import("email.mime.text")?.getattr("MIMEText")?;
-        let uuid_type = py.import("uuid")?.getattr("UUID")?;
-        let ipv4address_type = py.import("ipaddress")?.getattr("IPv4Address")?;
-        let ipv6address_type = py.import("ipaddress")?.getattr("IPv6Address")?;
-        let ipv4network_type = py.import("ipaddress")?.getattr("IPv4Network")?;
-        let ipv6network_type = py.import("ipaddress")?.getattr("IPv6Network")?;
-        encoders.set_item(decimal_type, cbor_encoder_type.getattr("encode_decimal")?)?;
-        encoders.set_item(datetime_type, cbor_encoder_type.getattr("encode_datetime")?)?;
-        encoders.set_item(date_type, cbor_encoder_type.getattr("encode_date")?)?;
-        encoders.set_item(fraction_type, cbor_encoder_type.getattr("encode_rational")?)?;
-        encoders.set_item(pattern_type, cbor_encoder_type.getattr("encode_regexp")?)?;
-        encoders.set_item(message_type, cbor_encoder_type.getattr("encode_mime")?)?;
-        encoders.set_item(uuid_type, cbor_encoder_type.getattr("encode_uuid")?)?;
-        encoders.set_item(ipv4address_type, cbor_encoder_type.getattr("encode_ipaddress")?)?;
-        encoders.set_item(ipv6address_type, cbor_encoder_type.getattr("encode_ipaddress")?)?;
-        encoders.set_item(ipv4network_type, cbor_encoder_type.getattr("encode_ipnetwork")?)?;
-        encoders.set_item(ipv6network_type, cbor_encoder_type.getattr("encode_ipnetwork")?)?;
+        add_encoder(&encoders, &cbor_encoder_type, "decimal.Decimal", "encode_decimal")?;
+        add_encoder(&encoders, &cbor_encoder_type, "datetime.datetime", "encode_datetime")?;
+        add_encoder(&encoders, &cbor_encoder_type, "datetime.date", "encode_date")?;
+        add_encoder(&encoders, &cbor_encoder_type, "fractions.Fraction", "encode_rational")?;
+        add_encoder(&encoders, &cbor_encoder_type, "re.Pattern", "encode_regexp")?;
+        add_encoder(&encoders, &cbor_encoder_type, "email.mime.text.MIMEText", "encode_mime")?;
+        add_encoder(&encoders, &cbor_encoder_type, "uuid.UUID", "encode_uuid")?;
+        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv4Address", "encode_ipv4_address")?;
+        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv6Address", "encode_ipv6_address")?;
+        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv4Network", "encode_ipv4_network")?;
+        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv6Network", "encode_ipv6_network")?;
+        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv4Interface", "encode_ipv4_interface")?;
+        add_encoder(&encoders, &cbor_encoder_type, "ipaddress.IPv6Interface", "encode_ipv6_interface")?;
         m.add("encoders", encoders)?;
 
         let decoders = PyDict::new(py);

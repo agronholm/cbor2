@@ -5,8 +5,8 @@ use num_bigint::BigInt;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{
-    PyBool, PyByteArray, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyMapping,
-    PySequence, PySet, PyString, PyTuple,
+    PyBool, PyByteArray, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList,
+    PyMapping, PyNone, PySequence, PySet, PyString, PyTuple,
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::collections::HashMap;
@@ -617,7 +617,9 @@ impl CBOREncoder {
                     inner_encode_datetime(slf, &value)
                 }
                 None => raise_cbor_error(
-                    slf.py(), "CBOREncodeError", "naive datetime encountered and no default timezone has been set",
+                    slf.py(),
+                    "CBOREncodeError",
+                    "naive datetime encountered and no default timezone has been set",
                 ),
             }
         } else {
@@ -700,18 +702,70 @@ impl CBOREncoder {
         }
     }
 
-    pub fn encode_ipaddress(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
-        // Semantic tag 260
-        CBOREncoder::encode_semantic(slf, 260, &value.getattr("packed")?)
+    pub fn encode_ipv4_address(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        // Semantic tag 52
+        CBOREncoder::encode_semantic(slf, 52, &value.getattr("packed")?)
     }
 
-    pub fn encode_ipnetwork(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
-        // Semantic tag 261
-        let network_addr = value.getattr("network_address")?.getattr("packed")?;
+    pub fn encode_ipv4_network(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        // Semantic tag 52
+        let packed_addr = value
+            .getattr("network_address")?
+            .getattr("packed")?
+            .call_method1("rstrip", (b"\x00",))?;
         let prefixlen = value.getattr("prefixlen")?;
-        let dict = PyDict::new(slf.py());
-        dict.set_item(network_addr, prefixlen)?;
-        CBOREncoder::encode_semantic(slf, 261, &dict)
+        let elements = PyTuple::new(slf.py(), &[prefixlen, packed_addr])?;
+        CBOREncoder::encode_semantic(slf, 52, &elements)
+    }
+
+    pub fn encode_ipv4_interface(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        // Semantic tag 52
+        let packed_addr = value.getattr("packed")?;
+        let prefixlen = value.getattr("network")?.getattr("prefixlen")?;
+        let elements = PyTuple::new(slf.py(), [packed_addr, prefixlen])?;
+        CBOREncoder::encode_semantic(slf, 52, &elements)
+    }
+
+    pub fn encode_ipv6_address(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        // Semantic tag 54
+        let packed_addr = value.getattr("packed")?;
+        let scope_id = value.getattr("scope_id")?;
+        if scope_id.is_none() {
+            CBOREncoder::encode_semantic(slf, 54, &value.getattr("packed")?)
+        } else {
+            // Scoped (addr, prefixlen, scope ID)
+            let scope_id = scope_id.str()?;
+            let none = PyNone::get(slf.py());
+            let elements = PyTuple::new(
+                slf.py(),
+                [&packed_addr, &none, &scope_id.encode_utf8()?.into_any()],
+            )?;
+            CBOREncoder::encode_semantic(slf, 54, &elements)
+        }
+    }
+
+    pub fn encode_ipv6_network(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        // Semantic tag 54
+        let py = slf.py();
+        let packed_addr = value
+            .getattr("network_address")?
+            .getattr("packed")?
+            .call_method1("rstrip", (b"\x00",))?;
+        let prefixlen = value.getattr("prefixlen")?;
+        let elements = PyTuple::new(py, [prefixlen, packed_addr])?;
+        CBOREncoder::encode_semantic(slf, 54, &elements)
+    }
+
+    pub fn encode_ipv6_interface(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        // Semantic tag 54
+        let packed_addr = value.getattr("packed")?;
+        let prefixlen = value.getattr("network")?.getattr("prefixlen")?;
+        let scope_id = value.getattr("scope_id")?;
+        let elements = PyList::new(slf.py(), [packed_addr, prefixlen])?;
+        if !scope_id.is_none() {
+            elements.append(scope_id.cast_into::<PyString>()?.encode_utf8()?)?;
+        }
+        CBOREncoder::encode_semantic(slf, 54, &elements)
     }
 
     //

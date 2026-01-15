@@ -6,7 +6,14 @@ from decimal import Decimal
 from email.mime.text import MIMEText
 from fractions import Fraction
 from io import BytesIO
-from ipaddress import ip_address, ip_network
+from ipaddress import (
+    IPv4Address,
+    IPv4Interface,
+    IPv4Network,
+    IPv6Address,
+    IPv6Interface,
+    IPv6Network,
+)
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -403,38 +410,29 @@ def test_uuid():
 @pytest.mark.parametrize(
     "value, expected",
     [
-        (ip_address("192.10.10.1"), "d9010444c00a0a01"),
-        (
-            ip_address("2001:db8:85a3::8a2e:370:7334"),
-            "d901045020010db885a3000000008a2e03707334",
+        pytest.param(IPv4Address("192.0.2.1"), "d83444c0000201", id="ipv4addr"),
+        pytest.param(IPv4Network("192.0.2.0/24"), "d83482181843c00002", id="ipv4net"),
+        pytest.param(IPv4Interface("192.0.2.1/24"), "d8348244c00002011818", id="ipv4if"),
+        pytest.param(
+            IPv6Address("2001:0db8:1234:deed:beef:cafe:face:feed"),
+            "d8365020010db81234deedbeefcafefacefeed",
+            id="ipv6addr",
         ),
-    ],
-    ids=[
-        "ipv4",
-        "ipv6",
+        pytest.param(
+            IPv6Network("2001:db8:1234::/48"),
+            "d8368218304620010db81234",
+            id="ipv6net",
+        ),
+        pytest.param(
+            IPv6Interface("fe80::202:2ff:ffff:fe03:303%eth0/64"),
+            "d8368350fe8000000000020202fffffffe03030318404465746830",
+            id="ipv6if",
+        ),
     ],
 )
 def test_ipaddress(value, expected):
     expected = unhexlify(expected)
-    assert dumps(value) == expected
-
-
-@pytest.mark.parametrize(
-    "value, expected",
-    [
-        (ip_network("192.168.0.100/24", False), "d90105a144c0a800001818"),
-        (
-            ip_network("2001:db8:85a3:0:0:8a2e::/96", False),
-            "d90105a15020010db885a3000000008a2e000000001860",
-        ),
-    ],
-    ids=[
-        "ipv4",
-        "ipv6",
-    ],
-)
-def test_ipnetwork(value, expected):
-    expected = unhexlify(expected)
+    print(dumps(value).hex())
     assert dumps(value) == expected
 
 

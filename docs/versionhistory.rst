@@ -7,7 +7,11 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
-- Rewrote the encoder and decoder in Rust for better maintainability and memory safety
+- **MAJOR REWRITE**:
+  The Python and C implementations of the encoder and decoder were replaced with a single,
+  Rust-based implementation in the interest of maintainability and memory safety
+- Changed the encoding of IP addresses to use the semantic tags 52 and 54 instead of the deprecated
+  260 and 261 (`#232 <https://github.com/agronholm/cbor2/issues/232>`_)
 
 **5.8.0** (2025-12-30)
 
