@@ -76,19 +76,6 @@ def test_write():
             encoder.write(1)
 
 
-def test_encoders_load_type():
-    with BytesIO() as stream:
-        encoder = CBOREncoder(stream)
-        encoder._encoders[(1, 2, 3)] = lambda self, value: None
-        with pytest.raises(ValueError) as exc:
-            encoder.encode(object())
-            assert str(exc.value).endswith(
-                "invalid deferred encoder type (1, 2, 3) (must be a 2-tuple "
-                "of module name and type name, e.g. ('collections', "
-                "'defaultdict'))"
-            )
-
-
 def test_encode_length():
     fp = BytesIO()
     encoder = CBOREncoder(fp)

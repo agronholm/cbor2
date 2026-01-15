@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 #[pymodule]
 mod _cbor2 {
     use pyo3::prelude::*;
-    use pyo3::types::PyBytes;
+    use pyo3::types::{PyBytes, PyDict};
 
     #[pymodule_export]
     use crate::encoder::CBOREncoder;
@@ -270,6 +270,36 @@ mod _cbor2 {
         let py = m.py();
         let frozen_dict_type = py.get_type::<FrozenDict>();
         py.import("collections.abc")?.getattr("Mapping")?.call_method1("register", (frozen_dict_type,))?;
+
+        let cbor_encoder_type = py.get_type::<CBOREncoder>();
+        let encoders = PyDict::new(py);
+        let decimal_type = py.import("decimal")?.getattr("Decimal")?;
+        let datetime_type = py.import("datetime")?.getattr("datetime")?;
+        let date_type = py.import("datetime")?.getattr("date")?;
+        let fraction_type = py.import("fractions")?.getattr("Fraction")?;
+        let pattern_type = py.import("re")?.getattr("Pattern")?;
+        let message_type = py.import("email.mime.text")?.getattr("MIMEText")?;
+        let uuid_type = py.import("uuid")?.getattr("UUID")?;
+        let ipv4address_type = py.import("ipaddress")?.getattr("IPv4Address")?;
+        let ipv6address_type = py.import("ipaddress")?.getattr("IPv6Address")?;
+        let ipv4network_type = py.import("ipaddress")?.getattr("IPv4Network")?;
+        let ipv6network_type = py.import("ipaddress")?.getattr("IPv6Network")?;
+        encoders.set_item(decimal_type, cbor_encoder_type.getattr("encode_decimal")?)?;
+        encoders.set_item(datetime_type, cbor_encoder_type.getattr("encode_datetime")?)?;
+        encoders.set_item(date_type, cbor_encoder_type.getattr("encode_date")?)?;
+        encoders.set_item(fraction_type, cbor_encoder_type.getattr("encode_rational")?)?;
+        encoders.set_item(pattern_type, cbor_encoder_type.getattr("encode_regexp")?)?;
+        encoders.set_item(message_type, cbor_encoder_type.getattr("encode_mime")?)?;
+        encoders.set_item(uuid_type, cbor_encoder_type.getattr("encode_uuid")?)?;
+        encoders.set_item(ipv4address_type, cbor_encoder_type.getattr("encode_ipaddress")?)?;
+        encoders.set_item(ipv6address_type, cbor_encoder_type.getattr("encode_ipaddress")?)?;
+        encoders.set_item(ipv4network_type, cbor_encoder_type.getattr("encode_ipnetwork")?)?;
+        encoders.set_item(ipv6network_type, cbor_encoder_type.getattr("encode_ipnetwork")?)?;
+        m.add("encoders", encoders)?;
+
+        let decoders = PyDict::new(py);
+        m.add("decoders", decoders)?;
+
         Ok(())
     }
 }
