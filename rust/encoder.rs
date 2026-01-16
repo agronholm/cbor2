@@ -2,7 +2,7 @@ use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, UndefinedType};
 use bigdecimal::BigDecimal;
 use half::f16;
 use num_bigint::BigInt;
-use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{
     PyBool, PyByteArray, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList,
@@ -33,6 +33,9 @@ pub struct CBOREncoder {
 
     #[pyo3(get)]
     pub string_referencing: bool,
+
+    #[pyo3(get)]
+    pub string_namespacing: bool,
 
     #[pyo3(get)]
     pub indefinite_containers: bool,
@@ -83,29 +86,32 @@ fn raise_cbor_error(py: Python<'_>, class_name: &str, msg: &str) -> PyResult<()>
 impl CBOREncoder {
     fn encode_shared_internal(
         slf: &Bound<'_, Self>,
-        value: &Bound<'_, PyAny>,
+        obj: &Bound<'_, PyAny>,
         f: impl FnOnce() -> PyResult<()>,
     ) -> PyResult<()> {
         let py = slf.py();
         let value_sharing = slf.borrow().value_sharing;
-        let value_id = value.as_ptr() as usize;
-        let instance = slf.borrow();
-        let option = instance.shared_containers.get(&value_id);
+        let id = py.import("builtins")?.getattr("id")?;
+        let value_id = id.call1((obj,))?.extract::<usize>()?;
+
+        let mut this = slf.borrow_mut();
+        let option = this.shared_containers.get(&value_id);
         match option {
             None => {
-                drop(instance);
-                slf.borrow_mut();
                 if value_sharing {
                     // Mark the container as shareable
-                    let next_index = PyInt::new(py, slf.borrow().shared_containers.len()).unbind();
-                    slf.borrow_mut()
+                    let next_index = PyInt::new(py, this.shared_containers.len()).unbind();
+                    this
                         .shared_containers
-                        .insert(value_id, (value.clone().unbind(), Some(next_index)));
+                        .insert(value_id, (obj.clone().unbind(), Some(next_index.clone_ref(py))));
+                    this.encode_length(py, 6, Some(28))?;
+                    drop(this);
                     f().map(|_| ())
                 } else {
-                    slf.borrow_mut()
+                    this
                         .shared_containers
-                        .insert(value_id, (value.clone().unbind(), None));
+                        .insert(value_id, (obj.clone().unbind(), None));
+                    drop(this);
                     let result = f();
                     slf.borrow_mut().shared_containers.remove(&value_id);
                     result.map(|_| ())
@@ -122,16 +128,15 @@ impl CBOREncoder {
                 // Generate a reference to the previous index instead of
                 // encoding this again
                 let value = index.clone_ref(py);
-                drop(instance);
-                slf.borrow_mut().encode_length(py, 6, Some(0x1D))?;
-                CBOREncoder::encode_int(slf, value.bind(py))
+                this.encode_length(py, 6, Some(29))?;
+                drop(this);
+                Self::encode_int(slf, value.bind(py))
             }
         }
     }
 
-    /// Disable value sharing in the encoder for the duration of the context
-    /// block.
-    pub fn disable_value_sharing<T>(slf: &Bound<'_, CBOREncoder>, f: impl FnOnce() -> T) -> T {
+    /// Call the given function with value sharing disabled in the encoder.
+    pub fn disable_value_sharing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
         let mut this = slf.borrow_mut();
         let old_value_sharing = this.value_sharing;
         this.value_sharing = false;
@@ -140,6 +145,31 @@ impl CBOREncoder {
         slf.borrow_mut().value_sharing = old_value_sharing;
         result
     }
+
+    /// Call the given function with string namespacing disabled in the encoder.
+    pub fn disable_string_namespacing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
+        let mut this = slf.borrow_mut();
+        let old_string_namespacing = this.string_namespacing;
+        this.string_namespacing = false;
+        drop(this);
+        let result = f();
+        slf.borrow_mut().string_namespacing = old_string_namespacing;
+        result
+    }
+
+    pub fn encode_container_internal(
+        slf: &Bound<'_, Self>,
+        obj: &Bound<'_, PyAny>,
+        f: impl FnOnce() -> PyResult<()>,
+    ) -> PyResult<()> {
+        if slf.borrow().string_namespacing {
+            // Create a new string reference domain
+            slf.borrow_mut().encode_length(slf.py(), 6, Some(256))?;
+        }
+
+        Self::disable_string_namespacing(slf, || Self::encode_shared_internal(slf, obj, f))
+    }
+
 }
 
 #[pymethods]
@@ -179,6 +209,7 @@ impl CBOREncoder {
             canonical,
             date_as_datetime,
             string_referencing,
+            string_namespacing: string_referencing,
             indefinite_containers,
             encoders: encoders.copy()?.unbind(),
             buffer: Vec::new(),
@@ -295,40 +326,40 @@ impl CBOREncoder {
         }
 
         if obj.is_none() {
-            CBOREncoder::encode_none(slf)
+            Self::encode_none(slf)
         } else if obj.is_exact_instance_of::<UndefinedType>() {
-            CBOREncoder::encode_undefined(slf)
+            Self::encode_undefined(slf)
         } else if obj.is_exact_instance_of::<BreakMarkerType>() {
-            CBOREncoder::encode_break(slf)
+            Self::encode_break(slf)
         } else if let Ok(simple_value) = obj.cast::<CBORSimpleValue>() {
-            CBOREncoder::encode_simple_value(slf, simple_value)
+            Self::encode_simple_value(slf, simple_value)
         } else if let Ok(tag) = obj.cast::<CBORTag>() {
             let tag = tag.get();
-            CBOREncoder::encode_semantic(slf, tag.tag, tag.value.bind(slf.py()))
+            Self::encode_semantic(slf, tag.tag, tag.value.bind(slf.py()))
         } else if let Ok(string) = obj.cast::<PyString>() {
-            CBOREncoder::encode_string(slf, string)
+            Self::encode_string(slf, string)
         } else if let Ok(bytes) = obj.cast::<PyBytes>() {
-            CBOREncoder::encode_bytes(slf, bytes)
+            Self::encode_bytes(slf, bytes)
         } else if let Ok(bytearray) = obj.cast::<PyByteArray>() {
-            CBOREncoder::encode_bytearray(slf, bytearray)
+            Self::encode_bytearray(slf, bytearray)
         } else if let Ok(bool) = obj.cast::<PyBool>() {
-            CBOREncoder::encode_bool(slf, bool.is_true())
+            Self::encode_bool(slf, bool.is_true())
         } else if let Ok(integer) = obj.cast::<PyInt>() {
-            CBOREncoder::encode_int(slf, integer)
+            Self::encode_int(slf, integer)
         } else if let Ok(integer) = obj.cast::<PyInt>() {
-            CBOREncoder::encode_int(slf, integer)
+            Self::encode_int(slf, integer)
         } else if let Ok(float) = obj.cast::<PyFloat>() {
-            CBOREncoder::encode_float(slf, float)
+            Self::encode_float(slf, float)
         } else if let Ok(complex) = obj.cast::<PyComplex>() {
-            CBOREncoder::encode_complex(slf, complex)
+            Self::encode_complex(slf, complex)
         } else if let Ok(map) = obj.cast::<PyMapping>() {
-            CBOREncoder::encode_map(slf, map)
+            Self::encode_map(slf, map)
         } else if let Ok(sequence) = obj.cast::<PySequence>() {
-            CBOREncoder::encode_array(slf, sequence)
+            Self::encode_array(slf, sequence)
         } else if let Ok(set) = obj.cast::<PySet>() {
-            CBOREncoder::encode_set(slf, set)
+            Self::encode_set(slf, set)
         } else if let Ok(set) = obj.cast::<PyFrozenSet>() {
-            CBOREncoder::encode_frozenset(slf, set)
+            Self::encode_frozenset(slf, set)
         } else if let Some(default) = &slf.borrow().default {
             default.call1(slf.py(), (slf, obj)).map(|_| ())
         } else {
@@ -343,64 +374,62 @@ impl CBOREncoder {
     }
 
     pub fn encode(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
-        CBOREncoder::encode_value(slf, obj)?;
+        Self::encode_value(slf, obj)?;
         slf.borrow_mut().flush(slf.py())
     }
 
-    // #[pyo3(signature = (
-    //     encoder: "Callable[[CBOREncoder, typing.Any], typing.Any]",
-    //     value: "typing.Any"
-    // ))]
-    // pub fn encode_shared(
-    //     slf: &Bound<'_, Self>,
-    //     encoder: &Bound<'_, PyAny>,
-    //     value: &Bound<'_, PyAny>,
-    // ) -> PyResult<()> {
-    //     let py = slf.py();
-    //     let instance = slf.borrow();
-    //     let value_sharing = instance.value_sharing;
-    //     let shared_containers = &instance.shared_containers;
-    //
-    //     let id = py.import("builtins")?.getattr("id")?;
-    //     let value_id = id.call1((value,))?.extract::<usize>()?;
-    //     match shared_containers.get(&value_id) {
-    //         Some((_, index)) => {
-    //             match index {
-    //                 Some(index) => {
-    //                     // Generate a reference to the previous index instead of
-    //                     // encoding this again
-    //                     slf.borrow_mut().encode_length(py, 6, Some(0x1D))?;
-    //                     CBOREncoder::encode_int(slf, index.bind(py))
-    //                 }
-    //                 None => {
-    //                     let error_class =
-    //                         py.import("cbor2._types")?.getattr("CBOREncodeValueError")?;
-    //                     let error = error_class.call1((
-    //                         "cyclic data structure detected but value sharing is disabled",
-    //                     ))?;
-    //                     Err(PyErr::from_value(error))
-    //                 }
-    //             }
-    //         }
-    //         None => {
-    //             if value_sharing {
-    //                 // Mark the container as shareable
-    //                 let next_index = PyInt::new(py, instance.shared_containers.len()).unbind();
-    //                 slf.borrow_mut()
-    //                     .shared_containers
-    //                     .insert(value_id, (value.clone().unbind(), Some(next_index)));
-    //                 encoder.call1((slf, value)).map(|_| ())
-    //             } else {
-    //                 slf.borrow_mut()
-    //                     .shared_containers
-    //                     .insert(value_id, (value.clone().unbind(), None));
-    //                 let result = encoder.call1((slf.clone(), value));
-    //                 slf.borrow_mut().shared_containers.remove(&value_id);
-    //                 result.map(|_| ())
-    //             }
-    //         }
-    //     }
-    // }
+    #[pyo3(signature = (
+        encoder: "Callable[[CBOREncoder, typing.Any], typing.Any]",
+        value: "typing.Any"
+    ))]
+    pub fn encode_shared(
+        slf: &Bound<'_, Self>,
+        encoder: &Bound<'_, PyAny>,
+        value: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        let py = slf.py();
+        let value_sharing = slf.borrow().value_sharing;
+
+        let id = py.import("builtins")?.getattr("id")?;
+        let value_id = id.call1((value,))?.extract::<usize>()?;
+        match slf.borrow().shared_containers.get(&value_id) {
+            Some((_, index)) => {
+                match index {
+                    Some(index) => {
+                        // Generate a reference to the previous index instead of
+                        // encoding this again
+                        slf.borrow_mut().encode_length(py, 6, Some(0x1D))?;
+                        Self::encode_int(slf, index.bind(py))
+                    }
+                    None => {
+                        let error_class =
+                            py.import("cbor2._types")?.getattr("CBOREncodeValueError")?;
+                        let error = error_class.call1((
+                            "cyclic data structure detected but value sharing is disabled",
+                        ))?;
+                        Err(PyErr::from_value(error))
+                    }
+                }
+            }
+            None => {
+                let mut this = slf.borrow_mut();
+                if value_sharing {
+                    // Mark the container as shareable
+                    let next_index = PyInt::new(py, this.shared_containers.len()).unbind();
+                    this.shared_containers.insert(value_id, (value.clone().unbind(), Some(next_index)));
+                    drop(this);
+                    encoder.call1((slf, value)).map(|_| ())
+                } else {
+                    this.shared_containers
+                        .insert(value_id, (value.clone().unbind(), None));
+                    drop(this);
+                    let result = encoder.call1((slf.clone(), value));
+                    slf.borrow_mut().shared_containers.remove(&value_id);
+                    result.map(|_| ())
+                }
+            }
+        }
+    }
 
     #[pyo3(signature = (major_tag: "int", length: "int | None" = None))]
     pub fn encode_length(
@@ -409,9 +438,7 @@ impl CBOREncoder {
         major_tag: u8,
         length: Option<u64>,
     ) -> PyResult<()> {
-        // println!("packing: major_tag={}", major_tag);
         let major_tag = major_tag << 5;
-        // println!("packing: major_tag<<5 = {}", major_tag);
         match length {
             Some(len) => match len {
                 ..24 => self.fp_write_byte(py, major_tag | len as u8),
@@ -463,54 +490,53 @@ impl CBOREncoder {
     }
 
     fn encode_array(slf: &Bound<'_, Self>, obj: &Bound<'_, PySequence>) -> PyResult<()> {
-        let indefinite_containers = slf.borrow().indefinite_containers;
-        slf.borrow_mut().encode_length(
-            slf.py(),
-            4,
-            if !indefinite_containers {
-                Some(obj.len()? as u64)
-            } else {
-                None
-            },
-        )?;
-        CBOREncoder::encode_shared_internal(slf, obj, || {
+        Self::encode_container_internal(slf, obj, || {
+            let indefinite_containers = slf.borrow().indefinite_containers;
+            slf.borrow_mut().encode_length(
+                slf.py(),
+                4,
+                if !indefinite_containers {
+                    Some(obj.len()? as u64)
+                } else {
+                    None
+                },
+            )?;
+
             for value in obj.try_iter()? {
-                CBOREncoder::encode_value(slf, &value?)?;
+                Self::encode_value(slf, &value?)?;
+            }
+
+            if indefinite_containers {
+                Self::encode_break(slf)?;
             }
             Ok(())
-        })?;
-
-        if indefinite_containers {
-            CBOREncoder::encode_break(slf)?;
-        }
-        Ok(())
+        })
     }
 
     fn encode_map(slf: &Bound<'_, Self>, obj: &Bound<'_, PyMapping>) -> PyResult<()> {
-        let indefinite_containers = slf.borrow().indefinite_containers;
-        let py = slf.py();
-        slf.borrow_mut().encode_length(
-            py,
-            5,
-            if !indefinite_containers {
-                Some(obj.len()? as u64)
-            } else {
-                None
-            },
-        )?;
-        CBOREncoder::encode_shared_internal(slf, obj, || {
+        Self::encode_container_internal(slf, obj, || {
+            let indefinite_containers = slf.borrow().indefinite_containers;
+            slf.borrow_mut().encode_length(
+                slf.py(),
+                5,
+                if !indefinite_containers {
+                    Some(obj.len()? as u64)
+                } else {
+                    None
+                },
+            )?;
+
             for item in obj.items()?.try_iter()? {
                 let (key, value): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
-                CBOREncoder::encode_value(slf, &key)?;
-                CBOREncoder::encode_value(slf, &value)?;
+                Self::encode_value(slf, &key)?;
+                Self::encode_value(slf, &value)?;
+            }
+
+            if indefinite_containers {
+                Self::encode_break(slf)?
             }
             Ok(())
-        })?;
-
-        if indefinite_containers {
-            CBOREncoder::encode_break(slf)?
-        }
-        Ok(())
+        })
     }
 
     pub fn encode_break(slf: &Bound<'_, Self>) -> PyResult<()> {
@@ -523,13 +549,13 @@ impl CBOREncoder {
         if integer.ge(18446744073709551616_i128)? {
             let (_, payload) = integer.extract::<BigInt>()?.to_bytes_be();
             let py_payload = PyBytes::new(py, &payload);
-            CBOREncoder::encode_semantic(slf, 2, py_payload.as_any())
+            Self::encode_semantic(slf, 2, py_payload.as_any())
         } else if integer.lt(-18446744073709551616_i128)? {
             let mut value = integer.extract::<BigInt>()?;
             value = -value - 1;
             let (_, payload) = value.to_bytes_be();
             let py_payload = PyBytes::new(py, &payload);
-            CBOREncoder::encode_semantic(slf, 3, py_payload.as_any())
+            Self::encode_semantic(slf, 3, py_payload.as_any())
         } else if integer.ge(0)? {
             let value: u64 = integer.extract()?;
             slf.borrow_mut().encode_length(py, 0, Some(value))
@@ -566,7 +592,7 @@ impl CBOREncoder {
         }
         let mut result = slf.borrow_mut().encode_length(slf.py(), 6, Some(tag));
         if result.is_ok() {
-            result = CBOREncoder::encode(slf, &value);
+            result = Self::encode(slf, &value);
         }
         slf.borrow_mut().string_referencing = old_string_referencing;
         // TODO: restore the string/bytestring references to the instance
@@ -575,12 +601,12 @@ impl CBOREncoder {
 
     pub fn encode_set(slf: &Bound<'_, Self>, value: &Bound<'_, PySet>) -> PyResult<()> {
         // Semantic tag 258
-        CBOREncoder::encode_semantic(slf, 258, PyTuple::new(slf.py(), value)?.as_any())
+        Self::encode_semantic(slf, 258, PyTuple::new(slf.py(), value)?.as_any())
     }
 
     pub fn encode_frozenset(slf: &Bound<'_, Self>, value: &Bound<'_, PyFrozenSet>) -> PyResult<()> {
         // Semantic tag 258
-        CBOREncoder::encode_semantic(slf, 258, PyTuple::new(slf.py(), value)?.as_any())
+        Self::encode_semantic(slf, 258, PyTuple::new(slf.py(), value)?.as_any())
     }
 
     //
@@ -588,42 +614,53 @@ impl CBOREncoder {
     //
 
     pub fn encode_datetime(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
-        fn inner_encode_datetime(
-            slf: &Bound<'_, CBOREncoder>,
-            aware_datetime: &Bound<'_, PyAny>,
-        ) -> PyResult<()> {
-            let py = slf.py();
-            let formatted = aware_datetime
-                .call_method0("isoformat")?
-                .call_method1("replace", (intern!(py, "+00:00"), intern!(py, "Z")))?;
-            CBOREncoder::encode_semantic(slf, 1, formatted.as_any())
-        }
+        let py = slf.py();
+
+        let inner_encode_datetime = |aware_datetime: &Bound<'_, PyAny>| -> PyResult<()> {
+            let datetime_as_timestamp = slf.borrow().datetime_as_timestamp;
+            match datetime_as_timestamp {
+                false => {
+                    let formatted = aware_datetime
+                        .call_method0("isoformat")?
+                        .call_method1("replace", (intern!(py, "+00:00"), intern!(py, "Z")))?;
+                    Self::encode_semantic(slf, 0, formatted.as_any())
+                },
+                true => {
+                    let py_timestamp = aware_datetime.call_method0("timestamp")?;
+
+                    // If the timestamp can be converted to an integer without loss, encode that
+                    // integer instead
+                    let timestamp_float: f64 = py_timestamp.extract()?;
+                    let timestamp_int: u32 = timestamp_float as u32;
+                    let arg: Bound<'_, PyAny>;
+                    if timestamp_int as f64 == timestamp_float {
+                        arg = PyInt::new(py, timestamp_int).into_any();
+                    } else {
+                        arg = py_timestamp;
+                    }
+                    Self::encode_semantic(slf, 1, &arg)
+                }
+            }
+        };
 
         if value.getattr("tzinfo")?.is_none() {
             // value is a naive datetime (no time zone)
-            let this = slf.borrow();
-            if let Some(tz) = &this.timezone {
-                println!("timezone: {}", tz)
-            } else {
-                println!("no timezone!");
-                let tz2 = slf.getattr("timezone")?;
-                println!("timezone2: {}", tz2)
-            }
-            match &this.timezone {
+            let timezone = slf.borrow().timezone.as_ref().map(|tz| tz.clone_ref(py));
+            match timezone {
                 Some(timezone) => {
-                    let kwargs = PyDict::new(slf.py());
-                    kwargs.set_item("tzinfo", timezone.as_ref())?;
+                    let kwargs = PyDict::new(py);
+                    kwargs.set_item("tzinfo", timezone)?;
                     let value = value.call_method("replace", (), Some(&kwargs))?;
-                    inner_encode_datetime(slf, &value)
+                    inner_encode_datetime(&value)
                 }
                 None => raise_cbor_error(
-                    slf.py(),
+                    py,
                     "CBOREncodeError",
                     "naive datetime encountered and no default timezone has been set",
                 ),
             }
         } else {
-            inner_encode_datetime(slf, value)
+            inner_encode_datetime(value)
         }
     }
 
@@ -641,17 +678,17 @@ impl CBOREncoder {
             let time = py.import("datetime")?.getattr("time")?;
             let time_zero = time.call0()?;
             let value = datetime_type.call_method1("combine", (value, time_zero))?;
-            CBOREncoder::encode_datetime(slf, &value)
+            Self::encode_datetime(slf, &value)
         } else if datetime_as_timestamp {
             // Encode a date as a number of days since the Unix epoch
             // The baseline has to be adjusted as date.toordinal() returns the number of days from
             // the beginning of the ISO calendar
             let days_since_epoch: i32 = value.call_method0("toordinal")?.extract()?;
             let adjusted_delta = PyInt::new(slf.py(), days_since_epoch - 719163);
-            CBOREncoder::encode_semantic(slf, 100, &adjusted_delta)
+            Self::encode_semantic(slf, 100, &adjusted_delta)
         } else {
             let datestring = value.call_method0("isoformat")?;
-            CBOREncoder::encode_semantic(slf, 1004, &datestring)
+            Self::encode_semantic(slf, 1004, &datestring)
         }
     }
 
@@ -659,28 +696,28 @@ impl CBOREncoder {
         // Semantic tag 30
         let numerator = value.getattr("numerator")?;
         let denominator = value.getattr("denominator")?;
-        CBOREncoder::disable_value_sharing(slf, || {
+        Self::disable_value_sharing(slf, || {
             let tuple = PyTuple::new(slf.py(), &[numerator, denominator])?;
-            CBOREncoder::encode_semantic(slf, 30, &tuple)
+            Self::encode_semantic(slf, 30, &tuple)
         })
     }
 
     pub fn encode_regexp(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 35
         let pattern = value.getattr("pattern")?;
-        CBOREncoder::encode_semantic(slf, 35, &pattern.str()?.as_any())
+        Self::encode_semantic(slf, 35, &pattern.str()?.as_any())
     }
 
     pub fn encode_mime(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 36
         let string = value.call_method0("as_string")?;
-        CBOREncoder::encode_semantic(slf, 36, &string)
+        Self::encode_semantic(slf, 36, &string)
     }
 
     pub fn encode_uuid(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 37
         let bytes = value.getattr("bytes")?;
-        CBOREncoder::encode_semantic(slf, 37, &bytes)
+        Self::encode_semantic(slf, 37, &bytes)
     }
 
     pub fn encode_decimal(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -698,13 +735,13 @@ impl CBOREncoder {
             let py_exp = (-exp).into_bound_py_any(py)?;
             let py_digits = digits.into_bound_py_any(py)?;
             let parts = PyTuple::new(py, &[py_exp, py_digits])?;
-            CBOREncoder::encode_semantic(slf, 4, &parts)
+            Self::encode_semantic(slf, 4, &parts)
         }
     }
 
     pub fn encode_ipv4_address(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 52
-        CBOREncoder::encode_semantic(slf, 52, &value.getattr("packed")?)
+        Self::encode_semantic(slf, 52, &value.getattr("packed")?)
     }
 
     pub fn encode_ipv4_network(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -715,7 +752,7 @@ impl CBOREncoder {
             .call_method1("rstrip", (b"\x00",))?;
         let prefixlen = value.getattr("prefixlen")?;
         let elements = PyTuple::new(slf.py(), &[prefixlen, packed_addr])?;
-        CBOREncoder::encode_semantic(slf, 52, &elements)
+        Self::encode_semantic(slf, 52, &elements)
     }
 
     pub fn encode_ipv4_interface(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -723,7 +760,7 @@ impl CBOREncoder {
         let packed_addr = value.getattr("packed")?;
         let prefixlen = value.getattr("network")?.getattr("prefixlen")?;
         let elements = PyTuple::new(slf.py(), [packed_addr, prefixlen])?;
-        CBOREncoder::encode_semantic(slf, 52, &elements)
+        Self::encode_semantic(slf, 52, &elements)
     }
 
     pub fn encode_ipv6_address(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -731,7 +768,7 @@ impl CBOREncoder {
         let packed_addr = value.getattr("packed")?;
         let scope_id = value.getattr("scope_id")?;
         if scope_id.is_none() {
-            CBOREncoder::encode_semantic(slf, 54, &value.getattr("packed")?)
+            Self::encode_semantic(slf, 54, &value.getattr("packed")?)
         } else {
             // Scoped (addr, prefixlen, scope ID)
             let scope_id = scope_id.str()?;
@@ -740,7 +777,7 @@ impl CBOREncoder {
                 slf.py(),
                 [&packed_addr, &none, &scope_id.encode_utf8()?.into_any()],
             )?;
-            CBOREncoder::encode_semantic(slf, 54, &elements)
+            Self::encode_semantic(slf, 54, &elements)
         }
     }
 
@@ -753,7 +790,7 @@ impl CBOREncoder {
             .call_method1("rstrip", (b"\x00",))?;
         let prefixlen = value.getattr("prefixlen")?;
         let elements = PyTuple::new(py, [prefixlen, packed_addr])?;
-        CBOREncoder::encode_semantic(slf, 54, &elements)
+        Self::encode_semantic(slf, 54, &elements)
     }
 
     pub fn encode_ipv6_interface(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -765,7 +802,7 @@ impl CBOREncoder {
         if !scope_id.is_none() {
             elements.append(scope_id.cast_into::<PyString>()?.encode_utf8()?)?;
         }
-        CBOREncoder::encode_semantic(slf, 54, &elements)
+        Self::encode_semantic(slf, 54, &elements)
     }
 
     //
@@ -819,6 +856,6 @@ impl CBOREncoder {
 
     fn encode_complex(slf: &Bound<'_, Self>, value: &Bound<'_, PyComplex>) -> PyResult<()> {
         let tuple = PyTuple::new(slf.py(), [value.real(), value.imag()])?;
-        CBOREncoder::encode_semantic(slf, 43000, tuple.as_any())
+        Self::encode_semantic(slf, 43000, tuple.as_any())
     }
 }

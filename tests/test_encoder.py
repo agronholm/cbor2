@@ -310,6 +310,8 @@ def test_simple_val_as_key():
 )
 def test_datetime(value, as_timestamp, expected):
     expected = unhexlify(expected)
+    val = dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc)
+    print(f"val={val.hex()}")
     assert dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc) == expected
 
 

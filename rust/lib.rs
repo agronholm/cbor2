@@ -7,10 +7,9 @@ use pyo3::prelude::pymodule;
 /// A Python module implemented in Rust.
 #[pymodule]
 mod _cbor2 {
-    use std::collections::HashMap;
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
-    use pyo3::types::{PyBytes, PyDict, PyInt, PyType};
+    use pyo3::types::{PyBytes, PyDict, PyType};
 
     #[pymodule_export]
     use crate::encoder::CBOREncoder;
