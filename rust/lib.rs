@@ -9,7 +9,7 @@ use pyo3::prelude::pymodule;
 mod _cbor2 {
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
-    use pyo3::types::{PyBytes, PyDict, PyType};
+    use pyo3::types::{PyBytes, PyDict};
 
     #[pymodule_export]
     use crate::encoder::CBOREncoder;
@@ -256,23 +256,6 @@ mod _cbor2 {
         Ok(fp.call_method0("getvalue")?.cast_into::<PyBytes>()?)
     }
 
-    fn add_encoder(
-        encoders: &Bound<'_, PyDict>,
-        cbor_encoder_type: &Bound<'_, PyType>,
-        class_fqdn: &str,
-        encoder_func_name: &str,
-    ) -> PyResult<()> {
-        if let Some((module_name, class_name)) = class_fqdn.rsplit_once('.') {
-            let py_type = encoders.py().import(module_name)?.getattr(class_name)?;
-            encoders.set_item(py_type, cbor_encoder_type.getattr(encoder_func_name)?)
-        } else {
-            Err(PyValueError::new_err(format!(
-                "Invalid fully qualified type name: {}",
-                class_fqdn
-            )))
-        }
-    }
-
     #[pymodule_init]
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
         // Register cbor2.FrozenDict as a Mapping subclass
@@ -286,83 +269,65 @@ mod _cbor2 {
         m.add("undefined", UndefinedType)?;
         m.add("break_marker", BreakMarkerType)?;
 
-        // Register encoder callbacks
         let cbor_encoder_type = py.get_type::<CBOREncoder>();
+        let cbor_decoder_type = py.get_type::<CBORDecoder>();
         let encoders = PyDict::new(py);
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "decimal.Decimal",
-            "encode_decimal",
-        )?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "datetime.datetime",
-            "encode_datetime",
-        )?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "datetime.date",
-            "encode_date",
-        )?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "fractions.Fraction",
-            "encode_rational",
-        )?;
-        add_encoder(&encoders, &cbor_encoder_type, "re.Pattern", "encode_regexp")?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "email.mime.text.MIMEText",
-            "encode_mime",
-        )?;
-        add_encoder(&encoders, &cbor_encoder_type, "uuid.UUID", "encode_uuid")?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "ipaddress.IPv4Address",
-            "encode_ipv4_address",
-        )?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "ipaddress.IPv6Address",
-            "encode_ipv6_address",
-        )?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "ipaddress.IPv4Network",
-            "encode_ipv4_network",
-        )?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "ipaddress.IPv6Network",
-            "encode_ipv6_network",
-        )?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "ipaddress.IPv4Interface",
-            "encode_ipv4_interface",
-        )?;
-        add_encoder(
-            &encoders,
-            &cbor_encoder_type,
-            "ipaddress.IPv6Interface",
-            "encode_ipv6_interface",
-        )?;
+        let semantic_decoders = PyDict::new(py);
+
+        let register_encoder = |class_name: &str, encoder_func_name: &str| -> PyResult<()> {
+            let (module_name, class_name) = class_name.rsplit_once('.').ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "Invalid fully qualified type name: {}",
+                    class_name
+                ))
+            })?;
+            let py_type = py.import(module_name)?.getattr(class_name)?;
+            encoders.set_item(py_type, cbor_encoder_type.getattr(encoder_func_name)?)
+        };
+
+        let register_semantic_decoder = |tag: u32, decoder_func_name: &str| -> PyResult<()> {
+            semantic_decoders.set_item(tag, cbor_decoder_type.getattr(decoder_func_name)?)
+        };
+
+        // Register encoder callbacks
+        register_encoder("builtins.str", "encode_string")?;
+        register_encoder("builtins.bytes", "encode_bytes")?;
+        register_encoder("builtins.bytearray", "encode_bytearray")?;
+        register_encoder("builtins.int", "encode_int")?;
+        register_encoder("builtins.float", "encode_float")?;
+        register_encoder("builtins.complex", "encode_complex")?;
+        register_encoder("builtins.bool", "encode_bool")?;
+        register_encoder("decimal.Decimal", "encode_decimal")?;
+        register_encoder("datetime.datetime", "encode_datetime")?;
+        register_encoder("datetime.date", "encode_date")?;
+        register_encoder("fractions.Fraction", "encode_rational")?;
+        register_encoder("re.Pattern", "encode_regexp")?;
+        register_encoder("email.mime.text.MIMEText", "encode_mime")?;
+        register_encoder("uuid.UUID", "encode_uuid")?;
+        register_encoder("builtins.set", "encode_set")?;
+        register_encoder("builtins.frozenset", "encode_frozenset")?;
+        register_encoder("ipaddress.IPv4Address", "encode_ipv4_address")?;
+        register_encoder("ipaddress.IPv6Address", "encode_ipv6_address")?;
+        register_encoder("ipaddress.IPv4Network", "encode_ipv4_network")?;
+        register_encoder("ipaddress.IPv6Network", "encode_ipv6_network")?;
+        register_encoder("ipaddress.IPv4Interface", "encode_ipv4_interface")?;
+        register_encoder("ipaddress.IPv6Interface", "encode_ipv6_interface")?;
         m.add("encoders", encoders)?;
 
-        // Register decoder callbacks
-        let decoders = PyDict::new(py);
-        m.add("decoders", decoders)?;
-
+        // Register decoder callbacks for semantic tags
+        // register_semantic_decoder(0, "decode_datetime_from_string")?;
+        // register_semantic_decoder(1, "decode_datetime_from_timestamp")?;
+        // register_semantic_decoder(30, "decode_rational")?;
+        // register_semantic_decoder(35, "decode_regexp")?;
+        // register_semantic_decoder(36, "decode_mime")?;
+        // register_semantic_decoder(37, "decode_uuid")?;
+        // register_semantic_decoder(52, "decode_ipv4")?;
+        // register_semantic_decoder(54, "decode_ipv6")?;
+        // register_semantic_decoder(100, "decode_date_from_epoch")?;
+        // register_semantic_decoder(260, "decode_ipaddress")?;
+        // register_semantic_decoder(261, "decode_ipnetwork")?;
+        // register_semantic_decoder(1004, "decode_date_from_string")?;
+        m.add("semantic_decoders", semantic_decoders)?;
         Ok(())
     }
 }
