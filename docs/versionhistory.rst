@@ -13,7 +13,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   by passing ``read_size=4096`` when they don't need to access the stream directly
   after decoding. Added a direct read path for ``read_size=1`` to avoid buffer
   management overhead.
-  (PR by @andreer)
+  (`#275 <https://github.com/agronholm/cbor2/pull/275>`_; PR by @andreer)
+- Fixed C encoder not respecting string referencing when encoding string-type datetimes (tag 0)
+  (`#254 <https://github.com/agronholm/cbor2/issues/254>`_)
 
 **5.8.0** (2025-12-30)
 
