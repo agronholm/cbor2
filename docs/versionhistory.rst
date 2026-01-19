@@ -16,6 +16,11 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   instead of the deprecated 260 and 261 (`#232 <https://github.com/agronholm/cbor2/issues/232>`_)
 - Fixed string references to work with indefinite-length (byte/unicode) strings too
 
+**UNRELEASED**
+
+- Fixed C encoder not respecting string referencing when encoding string-type datetimes (tag 0)
+  (`#254 <https://github.com/agronholm/cbor2/issues/254>`_)
+
 **5.8.0** (2025-12-30)
 
 - Added readahead buffering to C decoder for improved performance.
