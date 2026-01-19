@@ -13,17 +13,28 @@ from fractions import Fraction
 from io import BytesIO
 from ipaddress import ip_address, ip_network
 from pathlib import Path
-from typing import cast
 from uuid import UUID
 
 import pytest
 
-from cbor2 import FrozenDict
+from cbor2 import (
+    CBORDecodeEOF,
+    CBORDecodeError,
+    CBORDecoder,
+    CBORDecodeValueError,
+    CBORSimpleValue,
+    CBORTag,
+    FrozenDict,
+    dumps,
+    load,
+    loads,
+    undefined,
+)
 
 
-def test_fp_attr(impl):
+def test_fp_attr() -> None:
     with pytest.raises(ValueError):
-        impl.CBORDecoder(None)
+        CBORDecoder(None)
     with pytest.raises(ValueError):
 
         class A:
@@ -31,19 +42,19 @@ def test_fp_attr(impl):
 
         foo = A()
         foo.read = None
-        impl.CBORDecoder(foo)
+        CBORDecoder(foo)
     with BytesIO(b"foobar") as stream:
-        decoder = impl.CBORDecoder(stream)
+        decoder = CBORDecoder(stream)
         assert decoder.fp is stream
         with pytest.raises(AttributeError):
             del decoder.fp
 
 
-def test_tag_hook_attr(impl):
+def test_tag_hook_attr() -> None:
     with BytesIO(b"foobar") as stream:
         with pytest.raises(ValueError):
-            impl.CBORDecoder(stream, tag_hook="foo")
-        decoder = impl.CBORDecoder(stream)
+            CBORDecoder(stream, tag_hook="foo")
+        decoder = CBORDecoder(stream)
 
         def tag_hook(decoder, tag):
             return None
@@ -54,11 +65,11 @@ def test_tag_hook_attr(impl):
             del decoder.tag_hook
 
 
-def test_object_hook_attr(impl):
+def test_object_hook_attr() -> None:
     with BytesIO(b"foobar") as stream:
         with pytest.raises(ValueError):
-            impl.CBORDecoder(stream, object_hook="foo")
-        decoder = impl.CBORDecoder(stream)
+            CBORDecoder(stream, object_hook="foo")
+        decoder = CBORDecoder(stream)
 
         def object_hook(decoder, data):
             return None
@@ -69,41 +80,41 @@ def test_object_hook_attr(impl):
             del decoder.object_hook
 
 
-def test_str_errors_attr(impl):
+def test_str_errors_attr() -> None:
     with BytesIO(b"foobar") as stream:
         with pytest.raises(ValueError):
-            impl.CBORDecoder(stream, str_errors=False)
+            CBORDecoder(stream, str_errors=False)
         with pytest.raises(ValueError):
-            impl.CBORDecoder(stream, str_errors="foo")
-        decoder = impl.CBORDecoder(stream)
+            CBORDecoder(stream, str_errors="foo")
+        decoder = CBORDecoder(stream)
         decoder.str_errors = "replace"
         assert decoder.str_errors == "replace"
         with pytest.raises(AttributeError):
             del decoder.str_errors
 
 
-def test_read(impl):
+def test_read() -> None:
     with BytesIO(b"foobar") as stream:
-        decoder = impl.CBORDecoder(stream)
+        decoder = CBORDecoder(stream)
         assert decoder.read(3) == b"foo"
         assert decoder.read(3) == b"bar"
         with pytest.raises(TypeError):
             decoder.read("foo")
-        with pytest.raises(impl.CBORDecodeError):
+        with pytest.raises(CBORDecodeError):
             decoder.read(10)
 
 
-def test_decode_from_bytes(impl):
+def test_decode_from_bytes() -> None:
     with BytesIO(b"foobar") as stream:
-        decoder = impl.CBORDecoder(stream)
+        decoder = CBORDecoder(stream)
         assert decoder.decode_from_bytes(b"\x01") == 1
         with pytest.raises(TypeError):
             decoder.decode_from_bytes("foo")
 
 
-def test_immutable_attr(impl):
+def test_immutable_attr() -> None:
     with BytesIO(unhexlify("d917706548656c6c6f")) as stream:
-        decoder = impl.CBORDecoder(stream)
+        decoder = CBORDecoder(stream)
         assert not decoder.immutable
 
         def tag_hook(decoder, tag):
@@ -113,14 +124,14 @@ def test_immutable_attr(impl):
         decoder.decode()
 
 
-def test_load(impl):
+def test_load() -> None:
     with pytest.raises(TypeError):
-        impl.load()
+        load()
     with pytest.raises(TypeError):
-        impl.loads()
-    assert impl.loads(s=b"\x01") == 1
+        loads()
+    assert loads(s=b"\x01") == 1
     with BytesIO(b"\x01") as stream:
-        assert impl.load(fp=stream) == 1
+        assert load(fp=stream) == 1
 
 
 @pytest.mark.parametrize(
@@ -146,14 +157,14 @@ def test_load(impl):
         ("3903e7", -1000),
     ],
 )
-def test_integer(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_integer(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
-def test_invalid_integer_subtype(impl):
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(b"\x1c")
+def test_invalid_integer_subtype() -> None:
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(b"\x1c")
         assert str(exc.value).endswith("unknown unsigned integer subtype 0x1c")
         assert isinstance(exc, ValueError)
 
@@ -182,14 +193,14 @@ def test_invalid_integer_subtype(impl):
         ("fbfff0000000000000", float("-inf")),
     ],
 )
-def test_float(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_float(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
 @pytest.mark.parametrize("payload", ["f97e00", "fa7fc00000", "fb7ff8000000000000"])
-def test_float_nan(impl, payload):
-    decoded = impl.loads(unhexlify(payload))
+def test_float_nan(payload):
+    decoded = loads(unhexlify(payload))
     assert math.isnan(decoded)
 
 
@@ -200,13 +211,13 @@ def test_float_nan(impl, payload):
 def special_values(request, impl):
     payload, expected = request.param
     if expected == "undefined":
-        expected = impl.undefined
+        expected = undefined
     return payload, expected
 
 
 def test_special(impl, special_values):
     payload, expected = special_values
-    decoded = impl.loads(unhexlify(payload))
+    decoded = loads(unhexlify(payload))
     assert decoded is expected
 
 
@@ -218,8 +229,8 @@ def test_special(impl, special_values):
         pytest.param("5a00011170" + "12" * 70000, b"\x12" * 70000, id="long"),
     ],
 )
-def test_binary(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_binary(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
@@ -235,8 +246,8 @@ def test_binary(impl, payload, expected):
         pytest.param("7a00010001" + "61" * 65535 + "c3b6", "a" * 65535 + "ö", id="split_unicode"),
     ],
 )
-def test_string(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_string(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
@@ -248,19 +259,19 @@ def test_string(impl, payload, expected):
         pytest.param("7f6198ff", id="indefinite"),
     ],
 )
-def test_string_invalid_utf8(impl, payload: str) -> None:
-    with pytest.raises(impl.CBORDecodeValueError, match="error decoding unicode string") as exc:
-        impl.loads(unhexlify(payload))
+def test_string_invalid_utf8(payload: str) -> None:
+    with pytest.raises(CBORDecodeValueError, match="error decoding unicode string") as exc:
+        loads(unhexlify(payload))
 
     assert isinstance(exc.value.__cause__, UnicodeDecodeError)
 
 
-def test_string_oversized(impl) -> None:
-    with pytest.raises(impl.CBORDecodeEOF, match="premature end of stream"):
-        (impl.loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799")),)
+def test_string_oversized() -> None:
+    with pytest.raises(CBORDecodeEOF, match="premature end of stream"):
+        (loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799")),)
 
 
-def test_string_issue_264_multiple_chunks_utf8_boundary(impl) -> None:
+def test_string_issue_264_multiple_chunks_utf8_boundary() -> None:
     """Test for Issue #264: UTF-8 characters split across multiple 65536-byte chunk boundaries."""
     import struct
 
@@ -277,7 +288,7 @@ def test_string_issue_264_multiple_chunks_utf8_boundary(impl) -> None:
 
     expected = "a" * 65535 + "€" + "b" * 65533 + "€" + "d" * 100
 
-    result = impl.loads(payload)
+    result = loads(payload)
     assert result == expected
     assert len(result) == 131170  # 65535 + 1 + 65533 + 1 + 100 characters
 
@@ -294,14 +305,14 @@ def test_string_issue_264_multiple_chunks_utf8_boundary(impl) -> None:
         ),
     ],
 )
-def test_array(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_array(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
 @pytest.mark.parametrize("payload, expected", [("a0", {}), ("a201020304", {1: 2, 3: 4})])
-def test_map(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_map(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
@@ -316,8 +327,8 @@ def test_map(impl, payload, expected):
         ),
     ],
 )
-def test_mixed_array_map(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_mixed_array_map(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
@@ -341,8 +352,8 @@ def test_mixed_array_map(impl, payload, expected):
         ("d901029f010203ff", {1, 2, 3}),
     ],
 )
-def test_streaming(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_streaming(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
@@ -353,9 +364,9 @@ def test_streaming(impl, payload, expected):
         "7f63737472a0",
     ],
 )
-def test_bad_streaming_strings(impl, payload):
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify(payload))
+def test_bad_streaming_strings(payload):
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify(payload))
         assert exc.match(r"non-(byte)?string found in indefinite length \1string")
         assert isinstance(exc, ValueError)
 
@@ -368,21 +379,21 @@ def test_bad_streaming_strings(impl, payload):
         ("f820", 32),
     ]
 )
-def simple_value(request, impl):
+def simple_value(request):
     payload, expected = request.param
-    return payload, expected, impl.CBORSimpleValue(expected)
+    return payload, expected, CBORSimpleValue(expected)
 
 
-def test_simple_value(impl, simple_value):
+def test_simple_value(simple_value):
     payload, expected, wrapped = simple_value
-    decoded = impl.loads(unhexlify(payload))
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
     assert decoded == wrapped
 
 
-def test_simple_val_as_key(impl):
-    decoded = impl.loads(unhexlify("A1F86301"))
-    assert decoded == {impl.CBORSimpleValue(99): 1}
+def test_simple_val_as_key() -> None:
+    decoded = loads(unhexlify("A1F86301"))
+    assert decoded == {CBORSimpleValue(99): 1}
 
 
 #
@@ -407,8 +418,8 @@ def test_simple_val_as_key(impl):
         "date/timestamp",
     ],
 )
-def test_date(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_date(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
@@ -441,78 +452,78 @@ def test_date(impl, payload, expected):
         "timestamp/eet",
     ],
 )
-def test_datetime(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_datetime(payload, expected):
+    decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
-def test_datetime_secfrac(impl):
-    decoded = impl.loads(b"\xc0\x78\x162018-08-02T07:00:59.1Z")
+def test_datetime_secfrac() -> None:
+    decoded = loads(b"\xc0\x78\x162018-08-02T07:00:59.1Z")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100000, tzinfo=timezone.utc)
-    decoded = impl.loads(b"\xc0\x78\x172018-08-02T07:00:59.01Z")
+    decoded = loads(b"\xc0\x78\x172018-08-02T07:00:59.01Z")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 10000, tzinfo=timezone.utc)
-    decoded = impl.loads(b"\xc0\x78\x182018-08-02T07:00:59.001Z")
+    decoded = loads(b"\xc0\x78\x182018-08-02T07:00:59.001Z")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 1000, tzinfo=timezone.utc)
-    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59.0001Z")
+    decoded = loads(b"\xc0\x78\x192018-08-02T07:00:59.0001Z")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100, tzinfo=timezone.utc)
-    decoded = impl.loads(b"\xc0\x78\x1a2018-08-02T07:00:59.00001Z")
+    decoded = loads(b"\xc0\x78\x1a2018-08-02T07:00:59.00001Z")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 10, tzinfo=timezone.utc)
-    decoded = impl.loads(b"\xc0\x78\x1b2018-08-02T07:00:59.000001Z")
+    decoded = loads(b"\xc0\x78\x1b2018-08-02T07:00:59.000001Z")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 1, tzinfo=timezone.utc)
-    decoded = impl.loads(b"\xc0\x78\x1c2018-08-02T07:00:59.0000001Z")
+    decoded = loads(b"\xc0\x78\x1c2018-08-02T07:00:59.0000001Z")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 0, tzinfo=timezone.utc)
 
 
-def test_datetime_secfrac_naive_float_to_int_cast(impl):
+def test_datetime_secfrac_naive_float_to_int_cast() -> None:
     # A secfrac that would have rounding errors if naively parsed as
     # `int(float(secfrac) * 1000000)`.
-    decoded = impl.loads(b"\xc0\x78\x202018-08-02T07:00:59.000251+00:00")
+    decoded = loads(b"\xc0\x78\x202018-08-02T07:00:59.000251+00:00")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 251, tzinfo=timezone.utc)
 
 
-def test_datetime_secfrac_overflow(impl):
-    decoded = impl.loads(b"\xc0\x78\x2c2018-08-02T07:00:59.100500999999999999+00:00")
+def test_datetime_secfrac_overflow() -> None:
+    decoded = loads(b"\xc0\x78\x2c2018-08-02T07:00:59.100500999999999999+00:00")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100500, tzinfo=timezone.utc)
-    decoded = impl.loads(b"\xc0\x78\x2c2018-08-02T07:00:59.999999999999999999+00:00")
+    decoded = loads(b"\xc0\x78\x2c2018-08-02T07:00:59.999999999999999999+00:00")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 999999, tzinfo=timezone.utc)
 
 
-def test_datetime_secfrac_requires_digit(impl):
-    with pytest.raises(impl.CBORDecodeError) as excinfo:
-        impl.loads(b"\xc0\x78\x1a2018-08-02T07:00:59.+00:00")
+def test_datetime_secfrac_requires_digit() -> None:
+    with pytest.raises(CBORDecodeError) as excinfo:
+        loads(b"\xc0\x78\x1a2018-08-02T07:00:59.+00:00")
     assert isinstance(excinfo.value, ValueError)
     assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.+00:00'"
 
-    with pytest.raises(impl.CBORDecodeError) as excinfo:
-        impl.loads(b"\xc0\x78\x152018-08-02T07:00:59.Z")
+    with pytest.raises(CBORDecodeError) as excinfo:
+        loads(b"\xc0\x78\x152018-08-02T07:00:59.Z")
     assert isinstance(excinfo.value, ValueError)
     assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.Z'"
 
 
-def test_bad_datetime(impl):
-    with pytest.raises(impl.CBORDecodeError) as excinfo:
-        impl.loads(unhexlify("c06b303030302d3132332d3031"))
+def test_bad_datetime() -> None:
+    with pytest.raises(CBORDecodeError) as excinfo:
+        loads(unhexlify("c06b303030302d3132332d3031"))
     assert isinstance(excinfo.value, ValueError)
     assert str(excinfo.value) == "invalid datetime string: '0000-123-01'"
 
 
-def test_datetime_overflow(impl):
-    with pytest.raises(impl.CBORDecodeError) as excinfo:
-        impl.loads(unhexlify("c11b9b9b9b0000000000"))
+def test_datetime_overflow() -> None:
+    with pytest.raises(CBORDecodeError) as excinfo:
+        loads(unhexlify("c11b9b9b9b0000000000"))
 
     assert isinstance(excinfo.value.__cause__, OverflowError)
 
 
-def test_datetime_value_too_large(impl):
-    with pytest.raises(impl.CBORDecodeError) as excinfo:
-        impl.loads(unhexlify("c11b1616161616161616161616161616"))
+def test_datetime_value_too_large() -> None:
+    with pytest.raises(CBORDecodeError) as excinfo:
+        loads(unhexlify("c11b1616161616161616161616161616"))
 
     assert excinfo.value.__cause__ is not None
 
 
-def test_datetime_date_out_of_range(impl):
-    with pytest.raises(impl.CBORDecodeError) as excinfo:
-        impl.loads(unhexlify("a6c11b00002401001b000000000000ff00"))
+def test_datetime_date_out_of_range() -> None:
+    with pytest.raises(CBORDecodeError) as excinfo:
+        loads(unhexlify("a6c11b00002401001b000000000000ff00"))
 
     if platform.system() == "Windows":
         cause_exc_class = OSError
@@ -524,40 +535,40 @@ def test_datetime_date_out_of_range(impl):
     assert isinstance(excinfo.value.__cause__, cause_exc_class)
 
 
-def test_datetime_timezone(impl):
-    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59+00:30")
+def test_datetime_timezone() -> None:
+    decoded = loads(b"\xc0\x78\x192018-08-02T07:00:59+00:30")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=30)))
-    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59-00:30")
+    decoded = loads(b"\xc0\x78\x192018-08-02T07:00:59-00:30")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=-30)))
-    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59+01:30")
+    decoded = loads(b"\xc0\x78\x192018-08-02T07:00:59+01:30")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=90)))
-    decoded = impl.loads(b"\xc0\x78\x192018-08-02T07:00:59-01:30")
+    decoded = loads(b"\xc0\x78\x192018-08-02T07:00:59-01:30")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, tzinfo=timezone(timedelta(minutes=-90)))
 
 
-def test_positive_bignum(impl):
+def test_positive_bignum() -> None:
     # Example from RFC 8949 section 3.4.3.
-    decoded = impl.loads(unhexlify("c249010000000000000000"))
+    decoded = loads(unhexlify("c249010000000000000000"))
     assert decoded == 18446744073709551616
 
 
-def test_negative_bignum(impl):
-    decoded = impl.loads(unhexlify("c349010000000000000000"))
+def test_negative_bignum() -> None:
+    decoded = loads(unhexlify("c349010000000000000000"))
     assert decoded == -18446744073709551617
 
 
-def test_fraction(impl):
-    decoded = impl.loads(unhexlify("c48221196ab3"))
+def test_fraction() -> None:
+    decoded = loads(unhexlify("c48221196ab3"))
     assert decoded == Decimal("273.15")
 
 
-def test_decimal_precision(impl):
-    decoded = impl.loads(unhexlify("c482384dc252011f1fe37d0c70ff50456ba8b891997b07d6"))
+def test_decimal_precision() -> None:
+    decoded = loads(unhexlify("c482384dc252011f1fe37d0c70ff50456ba8b891997b07d6"))
     assert decoded == Decimal("9.7703426561852468194804075821069770622934E-38")
 
 
-def test_bigfloat(impl):
-    decoded = impl.loads(unhexlify("c5822003"))
+def test_bigfloat() -> None:
+    decoded = loads(unhexlify("c5822003"))
     assert decoded == Decimal("1.5")
 
 
@@ -587,8 +598,8 @@ def test_bigfloat(impl):
         ("d9a7f882f97e00f97e00", complex(float("nan"), float("nan"))),
     ],
 )
-def test_complex(impl, payload, expected):
-    decoded = impl.loads(unhexlify(payload))
+def test_complex(payload, expected):
+    decoded = loads(unhexlify(payload))
     if math.isnan(expected.real):
         assert math.isnan(decoded.real)
     else:
@@ -600,42 +611,40 @@ def test_complex(impl, payload, expected):
         assert expected.imag == decoded.imag
 
 
-def test_rational(impl):
-    decoded = impl.loads(unhexlify("d81e820205"))
+def test_rational() -> None:
+    decoded = loads(unhexlify("d81e820205"))
     assert decoded == Fraction(2, 5)
 
 
-def test_rational_invalid_iterable(impl):
+def test_rational_invalid_iterable() -> None:
     with pytest.raises(
-        impl.CBORDecodeValueError, match="error decoding rational: input value was not a tuple"
+        CBORDecodeValueError, match="error decoding rational: input value was not a tuple"
     ):
-        impl.loads(unhexlify("d81e01"))
+        loads(unhexlify("d81e01"))
 
 
-def test_rational_zero_denominator(impl):
-    with pytest.raises(impl.CBORDecodeValueError, match="error decoding rational") as exc:
-        impl.loads(unhexlify("d81e820100"))
+def test_rational_zero_denominator() -> None:
+    with pytest.raises(CBORDecodeValueError, match="error decoding rational") as exc:
+        loads(unhexlify("d81e820100"))
 
     assert isinstance(exc.value.__cause__, ZeroDivisionError)
 
 
-def test_regex(impl):
-    decoded = impl.loads(unhexlify("d8236d68656c6c6f2028776f726c6429"))
+def test_regex() -> None:
+    decoded = loads(unhexlify("d8236d68656c6c6f2028776f726c6429"))
     expr = re.compile("hello (world)")
     assert decoded == expr
 
 
-def test_regex_unbalanced_parentheses(impl):
-    with pytest.raises(
-        impl.CBORDecodeValueError, match="error decoding regular expression"
-    ) as exc:
-        impl.loads(unhexlify("d8236c68656c6c6f2028776f726c64"))
+def test_regex_unbalanced_parentheses() -> None:
+    with pytest.raises(CBORDecodeValueError, match="error decoding regular expression") as exc:
+        loads(unhexlify("d8236c68656c6c6f2028776f726c64"))
 
     assert isinstance(exc.value.__cause__, re.error)
 
 
-def test_mime(impl):
-    decoded = impl.loads(
+def test_mime() -> None:
+    decoded = loads(
         unhexlify(
             "d824787b436f6e74656e742d547970653a20746578742f706c61696e3b20636861727365743d2269736f"
             "2d383835392d3135220a4d494d452d56657273696f6e3a20312e300a436f6e74656e742d5472616e7366"
@@ -647,28 +656,28 @@ def test_mime(impl):
     assert decoded.get_payload() == "Hello =A4uro"
 
 
-def test_mime_invalid_type(impl):
-    with pytest.raises(impl.CBORDecodeValueError, match="error decoding MIME message") as exc:
-        impl.loads(unhexlify("d82401"))
+def test_mime_invalid_type() -> None:
+    with pytest.raises(CBORDecodeValueError, match="error decoding MIME message") as exc:
+        loads(unhexlify("d82401"))
 
     assert isinstance(exc.value.__cause__, TypeError)
 
 
-def test_uuid(impl):
-    decoded = impl.loads(unhexlify("d825505eaffac8b51e480581277fdcc7842faf"))
+def test_uuid() -> None:
+    decoded = loads(unhexlify("d825505eaffac8b51e480581277fdcc7842faf"))
     assert decoded == UUID(hex="5eaffac8b51e480581277fdcc7842faf")
 
 
-def test_uuid_invalid_length(impl):
-    with pytest.raises(impl.CBORDecodeValueError, match="error decoding UUID value") as exc:
-        impl.loads(unhexlify("d8254f5eaffac8b51e480581277fdcc7842f"))
+def test_uuid_invalid_length() -> None:
+    with pytest.raises(CBORDecodeValueError, match="error decoding UUID value") as exc:
+        loads(unhexlify("d8254f5eaffac8b51e480581277fdcc7842f"))
 
     assert isinstance(exc.value.__cause__, ValueError)
 
 
-def test_uuid_invalid_type(impl):
-    with pytest.raises(impl.CBORDecodeValueError, match="error decoding UUID value") as exc:
-        impl.loads(unhexlify("d82501"))
+def test_uuid_invalid_type() -> None:
+    with pytest.raises(CBORDecodeValueError, match="error decoding UUID value") as exc:
+        loads(unhexlify("d82501"))
 
     assert isinstance(exc.value.__cause__, TypeError)
 
@@ -689,20 +698,20 @@ def test_uuid_invalid_type(impl):
         "mac",
     ],
 )
-def test_ipaddress(impl, payload, expected):
+def test_ipaddress(payload, expected):
     if isinstance(expected, tuple):
-        expected = impl.CBORTag(*expected)
+        expected = CBORTag(*expected)
     payload = unhexlify(payload)
-    assert impl.loads(payload) == expected
+    assert loads(payload) == expected
 
 
-def test_bad_ipaddress(impl):
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify("d9010443c00a0a"))
+def test_bad_ipaddress() -> None:
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify("d9010443c00a0a"))
         assert str(exc.value).endswith("invalid ipaddress value {!r}".format(b"\xc0\x0a\x0a"))
         assert isinstance(exc, ValueError)
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify("d9010401"))
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify("d9010401"))
         assert str(exc.value).endswith("invalid ipaddress value 1")
         assert isinstance(exc, ValueError)
 
@@ -721,46 +730,46 @@ def test_bad_ipaddress(impl):
         "ipv6",
     ],
 )
-def test_ipnetwork(impl, payload, expected):
+def test_ipnetwork(payload, expected):
     # XXX The following pytest.skip is only included to work-around a bug in
     # pytest under python 3.3 (which prevents the decorator above from skipping
     # correctly); remove when 3.3 support is dropped
     payload = unhexlify(payload)
-    assert impl.loads(payload) == expected
+    assert loads(payload) == expected
 
 
-def test_bad_ipnetwork(impl):
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify("d90105a244c0a80064181844c0a800001818"))
+def test_bad_ipnetwork() -> None:
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify("d90105a244c0a80064181844c0a800001818"))
         invalid_value = {b"\xc0\xa8\x00d": 24, b"\xc0\xa8\x00\x00": 24}
         assert str(exc.value).endswith(f"invalid ipnetwork value {invalid_value!r}")
         assert isinstance(exc, ValueError)
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify("d90105a144c0a80064420102"))
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify("d90105a144c0a80064420102"))
         invalid_value = {b"\xc0\xa8\x00d": b"\x01\x02"}
         assert str(exc.value).endswith(f"invalid ipnetwork value {invalid_value}")
         assert isinstance(exc, ValueError)
 
 
-def test_bad_shared_reference(impl):
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify("d81d05"))
+def test_bad_shared_reference() -> None:
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify("d81d05"))
         assert str(exc.value).endswith("shared reference 5 not found")
         assert isinstance(exc, ValueError)
 
 
-def test_uninitialized_shared_reference(impl):
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify("D81CA1D81D014161"))
+def test_uninitialized_shared_reference() -> None:
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify("D81CA1D81D014161"))
         assert str(exc.value).endswith("shared value 0 has not been initialized")
         assert isinstance(exc, ValueError)
 
 
-def test_immutable_shared_reference(impl):
+def test_immutable_shared_reference() -> None:
     # a = (1, 2, 3)
     # b = ((a, a), a)
     # data = dumps(set(b))
-    decoded = impl.loads(unhexlify("d90102d81c82d81c82d81c83010203d81d02d81d02"))
+    decoded = loads(unhexlify("d90102d81c82d81c82d81c83010203d81d02d81d02"))
     a = [item for item in decoded if len(item) == 3][0]
     b = [item for item in decoded if len(item) == 2][0]
     assert decoded == {(a, a), a}
@@ -768,24 +777,24 @@ def test_immutable_shared_reference(impl):
     assert b[1] is a
 
 
-def test_cyclic_array(impl):
-    decoded = impl.loads(unhexlify("d81c81d81d00"))
+def test_cyclic_array() -> None:
+    decoded = loads(unhexlify("d81c81d81d00"))
     assert decoded == [decoded]
 
 
-def test_cyclic_map(impl):
-    decoded = impl.loads(unhexlify("d81ca100d81d00"))
+def test_cyclic_map() -> None:
+    decoded = loads(unhexlify("d81ca100d81d00"))
     assert decoded == {0: decoded}
 
 
-def test_nested_shareable_in_array(impl):
-    decoded = impl.loads(unhexlify("82d81c82d81c61616162d81d00"))
+def test_nested_shareable_in_array() -> None:
+    decoded = loads(unhexlify("82d81c82d81c61616162d81d00"))
     assert decoded == [["a", "b"], ["a", "b"]]
     assert decoded[0] is decoded[1]
 
 
-def test_string_ref(impl):
-    decoded = impl.loads(unhexlify("d9010085656669727374d81900667365636f6e64d81900d81901"))
+def test_string_ref() -> None:
+    decoded = loads(unhexlify("d9010085656669727374d81900667365636f6e64d81900d81901"))
     assert isinstance(decoded, list)
     assert decoded[0] == "first"
     assert decoded[1] == "first"
@@ -794,16 +803,16 @@ def test_string_ref(impl):
     assert decoded[4] == "second"
 
 
-def test_outside_string_ref_namespace(impl):
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify("85656669727374d81900667365636f6e64d81900d81901"))
+def test_outside_string_ref_namespace() -> None:
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify("85656669727374d81900667365636f6e64d81900d81901"))
         assert str(exc.value).endswith("string reference outside of namespace")
         assert isinstance(exc, ValueError)
 
 
-def test_invalid_string_ref(impl):
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify("d9010086656669727374d81900667365636f6e64d81900d81901d81903"))
+def test_invalid_string_ref() -> None:
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify("d9010086656669727374d81900667365636f6e64d81900d81901d81903"))
         assert str(exc.value).endswith("string reference 3 not found")
         assert isinstance(exc, ValueError)
 
@@ -816,40 +825,40 @@ def test_invalid_string_ref(impl):
     ],
     ids=["self_describe_cbor+int", "self_describe_cbor+positive_bignum"],
 )
-def test_self_describe_cbor(impl, payload, expected):
-    assert impl.loads(unhexlify(payload)) == expected
+def test_self_describe_cbor(payload, expected):
+    assert loads(unhexlify(payload)) == expected
 
 
-def test_unhandled_tag(impl):
+def test_unhandled_tag() -> None:
     """
     Test that a tag is simply ignored and its associated value returned if there is no special
     handling available for it.
 
     """
-    decoded = impl.loads(unhexlify("d917706548656c6c6f"))
-    assert decoded == impl.CBORTag(6000, "Hello")
+    decoded = loads(unhexlify("d917706548656c6c6f"))
+    assert decoded == CBORTag(6000, "Hello")
 
 
-def test_premature_end_of_stream(impl):
+def test_premature_end_of_stream() -> None:
     """
     Test that the decoder detects a situation where read() returned fewer than expected bytes.
 
     """
-    with pytest.raises(impl.CBORDecodeError) as exc:
-        impl.loads(unhexlify("437879"))
+    with pytest.raises(CBORDecodeError) as exc:
+        loads(unhexlify("437879"))
         exc.match(r"premature end of stream \(expected to read 3 bytes, got 2 instead\)")
         assert isinstance(exc, EOFError)
 
 
-def test_tag_hook(impl):
+def test_tag_hook() -> None:
     def reverse(decoder, tag):
         return tag.value[::-1]
 
-    decoded = impl.loads(unhexlify("d917706548656c6c6f"), tag_hook=reverse)
+    decoded = loads(unhexlify("d917706548656c6c6f"), tag_hook=reverse)
     assert decoded == "olleH"
 
 
-def test_tag_hook_cyclic(impl):
+def test_tag_hook_cyclic() -> None:
     class DummyType:
         def __init__(self, value):
             self.value = value
@@ -860,49 +869,49 @@ def test_tag_hook_cyclic(impl):
         instance.value = decoder.decode_from_bytes(tag.value)
         return instance
 
-    decoded = impl.loads(unhexlify("D81CD90BB849D81CD90BB843D81D00"), tag_hook=unmarshal_dummy)
+    decoded = loads(unhexlify("D81CD90BB849D81CD90BB843D81D00"), tag_hook=unmarshal_dummy)
     assert isinstance(decoded, DummyType)
     assert decoded.value.value is decoded
 
 
-def test_object_hook(impl):
+def test_object_hook() -> None:
     class DummyType:
         def __init__(self, state):
             self.state = state
 
     payload = unhexlify("A2616103616205")
-    decoded = impl.loads(payload, object_hook=lambda decoder, value: DummyType(value))
+    decoded = loads(payload, object_hook=lambda decoder, value: DummyType(value))
     assert isinstance(decoded, DummyType)
     assert decoded.state == {"a": 3, "b": 5}
 
 
-def test_object_hook_exception(impl):
+def test_object_hook_exception() -> None:
     def object_hook(decoder, data):
         raise RuntimeError("foo")
 
     payload = unhexlify("A2616103616205")
     with pytest.raises(RuntimeError, match="foo"):
-        impl.loads(payload, object_hook=object_hook)
+        loads(payload, object_hook=object_hook)
 
 
-def test_load_from_file(impl, tmpdir):
+def test_load_from_file(tmpdir):
     path = tmpdir.join("testdata.cbor")
     path.write_binary(b"\x82\x01\x0a")
     with path.open("rb") as fp:
-        obj = impl.load(fp)
+        obj = load(fp)
 
     assert obj == [1, 10]
 
 
-def test_nested_dict(impl):
-    value = impl.loads(unhexlify("A1D9177082010201"))
+def test_nested_dict() -> None:
+    value = loads(unhexlify("A1D9177082010201"))
     assert type(value) is dict
-    assert value == {impl.CBORTag(6000, (1, 2)): 1}
+    assert value == {CBORTag(6000, (1, 2)): 1}
 
 
-def test_set(impl):
+def test_set() -> None:
     payload = unhexlify("d9010283616361626161")
-    value = impl.loads(payload)
+    value = loads(payload)
     assert type(value) is set
     assert value == {"a", "b", "c"}
 
@@ -921,48 +930,48 @@ def test_set(impl):
         ("d9010282d90102820102d90102820304", {frozenset({1, 2}), frozenset({3, 4})}),
     ],
 )
-def test_immutable_keys(impl, payload, expected):
-    value = impl.loads(unhexlify(payload))
+def test_immutable_keys(payload, expected):
+    value = loads(unhexlify(payload))
     assert value == expected
 
 
 # Corrupted or invalid data checks
 
 
-def test_huge_truncated_array(impl, will_overflow):
-    with pytest.raises(impl.CBORDecodeError):
-        impl.loads(unhexlify("9b") + will_overflow)
+def test_huge_truncated_array(will_overflow):
+    with pytest.raises(CBORDecodeError):
+        loads(unhexlify("9b") + will_overflow)
 
 
-def test_huge_truncated_string(impl):
+def test_huge_truncated_string() -> None:
     huge_index = struct.pack("Q", sys.maxsize + 1)
-    with pytest.raises((impl.CBORDecodeError, MemoryError)):
-        impl.loads(unhexlify("7b") + huge_index + unhexlify("70717273"))
+    with pytest.raises((CBORDecodeError, MemoryError)):
+        loads(unhexlify("7b") + huge_index + unhexlify("70717273"))
 
 
 @pytest.mark.parametrize("dtype_prefix", ["7B", "5b"], ids=["string", "bytes"])
-def test_huge_truncated_data(impl, dtype_prefix, will_overflow):
-    with pytest.raises((impl.CBORDecodeError, MemoryError)):
-        impl.loads(unhexlify(dtype_prefix) + will_overflow)
+def test_huge_truncated_data(dtype_prefix, will_overflow):
+    with pytest.raises((CBORDecodeError, MemoryError)):
+        loads(unhexlify(dtype_prefix) + will_overflow)
 
 
 @pytest.mark.parametrize("tag_dtype", ["7F7B", "5f5B"], ids=["string", "bytes"])
-def test_huge_truncated_indefinite_data(impl, tag_dtype, will_overflow):
+def test_huge_truncated_indefinite_data(tag_dtype, will_overflow):
     huge_index = struct.pack("Q", sys.maxsize + 1)
-    with pytest.raises((impl.CBORDecodeError, MemoryError)):
-        impl.loads(unhexlify(tag_dtype) + huge_index + unhexlify("70717273ff"))
+    with pytest.raises((CBORDecodeError, MemoryError)):
+        loads(unhexlify(tag_dtype) + huge_index + unhexlify("70717273ff"))
 
 
 @pytest.mark.parametrize("data", ["7f61777f6177ffff", "5f41775f4177ffff"], ids=["string", "bytes"])
-def test_embedded_indefinite_data(impl, data):
-    with pytest.raises(impl.CBORDecodeValueError):
-        impl.loads(unhexlify(data))
+def test_embedded_indefinite_data(data):
+    with pytest.raises(CBORDecodeValueError):
+        loads(unhexlify(data))
 
 
 @pytest.mark.parametrize("data", ["7f01ff", "5f01ff"], ids=["string", "bytes"])
-def test_invalid_indefinite_data_item(impl, data):
-    with pytest.raises(impl.CBORDecodeValueError):
-        impl.loads(unhexlify(data))
+def test_invalid_indefinite_data_item(data):
+    with pytest.raises(CBORDecodeValueError):
+        loads(unhexlify(data))
 
 
 @pytest.mark.parametrize(
@@ -970,14 +979,14 @@ def test_invalid_indefinite_data_item(impl, data):
     ["7f7bff0000000000000471717272ff", "5f5bff0000000000000471717272ff"],
     ids=["string", "bytes"],
 )
-def test_indefinite_overflow(impl, data):
-    with pytest.raises(impl.CBORDecodeValueError):
-        impl.loads(unhexlify(data))
+def test_indefinite_overflow(data):
+    with pytest.raises(CBORDecodeValueError):
+        loads(unhexlify(data))
 
 
-def test_invalid_cbor(impl):
-    with pytest.raises(impl.CBORDecodeError):
-        impl.loads(
+def test_invalid_cbor() -> None:
+    with pytest.raises(CBORDecodeError):
+        loads(
             unhexlify(
                 "c788370016b8965bdb2074bff82e5a20e09bec21f8406e86442b87ec3ff245b70a47624dc9cdc682"
                 "4b2a4c52e95ec9d6b0534b71c2b49e4bf9031500cee6869979c297bb5a8b381e98db714108415e5c"
@@ -990,9 +999,9 @@ def test_invalid_cbor(impl):
     "data, expected",
     [("fc", "1c"), ("fd", "1d"), ("fe", "1e")],
 )
-def test_reserved_special_tags(impl, data, expected):
-    with pytest.raises(impl.CBORDecodeValueError) as exc_info:
-        impl.loads(unhexlify(data))
+def test_reserved_special_tags(data, expected):
+    with pytest.raises(CBORDecodeValueError) as exc_info:
+        loads(unhexlify(data))
     assert exc_info.value.args[0] == "Undefined Reserved major type 7 subtype 0x" + expected
 
 
@@ -1000,9 +1009,9 @@ def test_reserved_special_tags(impl, data, expected):
     "data, expected",
     [("c400", "4"), ("c500", "5")],
 )
-def test_decimal_payload_unpacking(impl, data, expected):
-    with pytest.raises(impl.CBORDecodeValueError) as exc_info:
-        impl.loads(unhexlify(data))
+def test_decimal_payload_unpacking(data, expected):
+    with pytest.raises(CBORDecodeValueError) as exc_info:
+        loads(unhexlify(data))
     assert exc_info.value.args[0] == f"Incorrect tag {expected} payload"
 
 
@@ -1019,13 +1028,12 @@ def test_decimal_payload_unpacking(impl, data, expected):
         ),
     ],
 )
-def test_oversized_read(impl, payload: bytes, tmp_path: Path) -> None:
-    CBORDecodeEOF = cast(type[Exception], getattr(impl, "CBORDecodeEOF"))
+def test_oversized_read(payload: bytes, tmp_path: Path) -> None:
     with pytest.raises(CBORDecodeEOF, match="premature end of stream"):
         dummy_path = tmp_path / "testdata"
         dummy_path.write_bytes(payload)
         with dummy_path.open("rb") as f:
-            impl.load(f)
+            load(f)
 
 
 class TestDecoderReuse:
@@ -1039,32 +1047,32 @@ class TestDecoderReuse:
         not persist across multiple decodes on the same decoder instance.
         """
         # Message with shareable tag (28)
-        msg1 = impl.dumps(impl.CBORTag(28, "first_value"))
+        msg1 = dumps(CBORTag(28, "first_value"))
 
         # Message with sharedref tag (29) referencing index 0
-        msg2 = impl.dumps(impl.CBORTag(29, 0))
+        msg2 = dumps(CBORTag(29, 0))
 
         # Reuse decoder across messages
-        decoder = impl.CBORDecoder(BytesIO(msg1))
+        decoder = CBORDecoder(BytesIO(msg1))
         result1 = decoder.decode()
         assert result1 == "first_value"
 
         # Second decode should fail - sharedref(0) doesn't exist in this context
         decoder.fp = BytesIO(msg2)
-        with pytest.raises(impl.CBORDecodeValueError, match="shared reference"):
+        with pytest.raises(CBORDecodeValueError, match="shared reference"):
             decoder.decode()
 
     def test_decode_from_bytes_resets_shared_refs(self, impl):
         """
         decode_from_bytes should also reset shared references between calls.
         """
-        msg1 = impl.dumps(impl.CBORTag(28, "value"))
-        msg2 = impl.dumps(impl.CBORTag(29, 0))
+        msg1 = dumps(CBORTag(28, "value"))
+        msg2 = dumps(CBORTag(29, 0))
 
-        decoder = impl.CBORDecoder(BytesIO(b""))
+        decoder = CBORDecoder(BytesIO(b""))
         decoder.decode_from_bytes(msg1)
 
-        with pytest.raises(impl.CBORDecodeValueError, match="shared reference"):
+        with pytest.raises(CBORDecodeValueError, match="shared reference"):
             decoder.decode_from_bytes(msg2)
 
     def test_shared_refs_within_single_decode(self, impl):
@@ -1085,12 +1093,12 @@ class TestDecoderReuse:
             "00"  # unsigned(0)
         )
 
-        result = impl.loads(data)
+        result = loads(data)
         assert result == ["hello", "hello"]
         assert result[0] is result[1]  # Same object reference
 
 
-def test_decode_from_bytes_in_hook_preserves_buffer(impl):
+def test_decode_from_bytes_in_hook_preserves_buffer() -> None:
     """Test that calling decode_from_bytes from a hook preserves stream buffer state.
 
     This is a documented use case from docs/customizing.rst where hooks decode
@@ -1119,7 +1127,7 @@ def test_decode_from_bytes_in_hook_preserves_buffer(impl):
 
     # Decode from stream (not bytes) to use readahead buffer
     stream = BytesIO(data)
-    decoder = impl.CBORDecoder(stream, tag_hook=tag_hook)
+    decoder = CBORDecoder(stream, tag_hook=tag_hook)
     result = decoder.decode()
 
     # Verify all values decoded correctly
@@ -1133,7 +1141,7 @@ def test_decode_from_bytes_in_hook_preserves_buffer(impl):
     assert result[2] == "final"
 
 
-def test_decode_from_bytes_deeply_nested_in_hook(impl):
+def test_decode_from_bytes_deeply_nested_in_hook() -> None:
     """Test deeply nested decode_from_bytes calls preserve buffer state.
 
     This tests tag(999, tag(888, tag(777, [1,2,3]))) where each tag value
@@ -1165,7 +1173,7 @@ def test_decode_from_bytes_deeply_nested_in_hook(impl):
 
     # Decode from stream to use readahead buffer
     stream = BytesIO(data)
-    decoder = impl.CBORDecoder(stream, tag_hook=tag_hook)
+    decoder = CBORDecoder(stream, tag_hook=tag_hook)
     result = decoder.decode()
 
     # With the fix: all three levels of nesting work correctly
@@ -1176,10 +1184,10 @@ def test_decode_from_bytes_deeply_nested_in_hook(impl):
     assert result[2] == "final"
 
 
-def test_str_errors_valid_utf8_unchanged(impl):
+def test_str_errors_valid_utf8_unchanged() -> None:
     payload = b"\x78\x19Hello \xc3\xbcnicode \xe6\xb0\xb4 world!"
-    result_strict = impl.loads(payload, str_errors="strict")
-    result_replace = impl.loads(payload, str_errors="replace")
+    result_strict = loads(payload, str_errors="strict")
+    result_replace = loads(payload, str_errors="replace")
     assert result_strict == result_replace
     assert result_strict == "Hello \u00fcnicode \u6c34 world!"
 
@@ -1195,4 +1203,4 @@ def test_string_stack_threshold_boundary(impl, length):
     else:
         payload = b"\x79" + struct.pack(">H", length)
     payload += test_string.encode("utf-8")
-    assert impl.loads(payload) == test_string
+    assert loads(payload) == test_string

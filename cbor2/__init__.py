@@ -9,6 +9,7 @@ from ._cbor2 import dumps as dumps
 from ._cbor2 import encoders as encoders
 from ._cbor2 import load as load
 from ._cbor2 import loads as loads
+from ._cbor2 import major_decoders as major_decoders
 from ._cbor2 import semantic_decoders as semantic_decoders
 from ._cbor2 import undefined as undefined
 from ._encoder import shareable_encoder as shareable_encoder

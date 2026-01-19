@@ -10,6 +10,7 @@ use pyo3::types::{
 };
 use pyo3::{intern, pyclass, IntoPyObjectExt, Py, PyAny};
 use std::collections::HashMap;
+use crate::utils::raise_cbor_error;
 
 #[pyclass(module = "cbor2")]
 pub struct CBOREncoder {
@@ -73,14 +74,6 @@ pub fn with(
             }
         }
     }
-}
-
-fn raise_cbor_error(py: Python<'_>, class_name: &str, msg: &str) -> PyResult<()> {
-    let exc = py
-        .import("cbor2._types")?
-        .getattr(class_name)?
-        .call1((msg,))?;
-    Err(PyErr::from_value(exc))
 }
 
 impl CBOREncoder {

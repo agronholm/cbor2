@@ -1,6 +1,7 @@
 mod decoder;
 mod encoder;
 mod types;
+mod utils;
 
 use pyo3::prelude::pymodule;
 
@@ -56,15 +57,16 @@ mod _cbor2 {
         object_hook: "collections.abc.Callable | None" = None,
         str_errors: "str" = "strict",
     ))]
-    fn load(
-        py: Python<'_>,
-        fp: &Bound<'_, PyAny>,
-        tag_hook: Option<&Bound<'_, PyAny>>,
-        object_hook: Option<&Bound<'_, PyAny>>,
+    fn load<'py>(
+        py: Python<'py>,
+        fp: &Bound<'py, PyAny>,
+        tag_hook: Option<&Bound<'py, PyAny>>,
+        object_hook: Option<&Bound<'py, PyAny>>,
         str_errors: &str,
-    ) -> PyResult<Py<PyAny>> {
-        let decoder = CBORDecoder::new(Some(fp), tag_hook, object_hook, str_errors)?;
-        decoder.decode(py)
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let decoder = CBORDecoder::new(py, Some(fp), tag_hook, object_hook, str_errors, 4096)?;
+        let instance = Bound::new(py, decoder)?;
+        CBORDecoder::decode(&instance)
     }
 
     ///  Deserialize an object from a bytestring.
@@ -94,13 +96,13 @@ mod _cbor2 {
         object_hook: "collections.abc.Callable | None" = None,
         str_errors: "str" = "strict"
     ))]
-    fn loads(
-        py: Python<'_>,
+    fn loads<'py>(
+        py: Python<'py>,
         data: Vec<u8>,
-        tag_hook: Option<&Bound<'_, PyAny>>,
-        object_hook: Option<&Bound<'_, PyAny>>,
+        tag_hook: Option<&Bound<'py, PyAny>>,
+        object_hook: Option<&Bound<'py, PyAny>>,
         str_errors: &str,
-    ) -> PyResult<Py<PyAny>> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let fp = py.import("io")?.getattr("BytesIO")?.call1((data,))?;
         load(py, &fp, tag_hook, object_hook, str_errors)
     }
@@ -272,6 +274,7 @@ mod _cbor2 {
         let cbor_encoder_type = py.get_type::<CBOREncoder>();
         let cbor_decoder_type = py.get_type::<CBORDecoder>();
         let encoders = PyDict::new(py);
+        let major_decoders = PyDict::new(py);
         let semantic_decoders = PyDict::new(py);
 
         let register_encoder = |class_name: &str, encoder_func_name: &str| -> PyResult<()> {
@@ -285,7 +288,11 @@ mod _cbor2 {
             encoders.set_item(py_type, cbor_encoder_type.getattr(encoder_func_name)?)
         };
 
-        let register_semantic_decoder = |tag: u32, decoder_func_name: &str| -> PyResult<()> {
+        let register_major_decoder = |tag: u8, decoder_func_name: &str| -> PyResult<()> {
+            major_decoders.set_item(tag, cbor_decoder_type.getattr(decoder_func_name)?)
+        };
+
+        let register_semantic_decoder = |tag: u64, decoder_func_name: &str| -> PyResult<()> {
             semantic_decoders.set_item(tag, cbor_decoder_type.getattr(decoder_func_name)?)
         };
 
@@ -313,6 +320,12 @@ mod _cbor2 {
         register_encoder("ipaddress.IPv4Interface", "encode_ipv4_interface")?;
         register_encoder("ipaddress.IPv6Interface", "encode_ipv6_interface")?;
         m.add("encoders", encoders)?;
+
+        // Register decoder callbacks for major tags
+        register_major_decoder(0, "decode_uint")?;
+        register_major_decoder(1, "decode_negint")?;
+        register_major_decoder(3, "decode_string")?;
+        m.add("major_decoders", major_decoders)?;
 
         // Register decoder callbacks for semantic tags
         // register_semantic_decoder(0, "decode_datetime_from_string")?;
