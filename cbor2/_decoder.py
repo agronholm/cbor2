@@ -71,6 +71,7 @@ class CBORDecoder:
         tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
         object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
         str_errors: Literal["strict", "error", "replace"] = "strict",
+        read_size: int = 1,
     ):
         """
         :param fp:
@@ -89,6 +90,13 @@ class CBORDecoder:
         :param str_errors:
             determines how to handle unicode decoding errors (see the `Error Handlers`_
             section in the standard library documentation for details)
+        :param read_size:
+            the minimum number of bytes to read at a time.
+            Setting this to a higher value like 4096 improves performance,
+            but is likely to read past the end of the CBOR value, advancing the stream
+            position beyond the decoded data. This only matters if you need to reuse the
+            stream after decoding.
+            Ignored in the pure Python implementation, but included for API compatibility.
 
         .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
 
@@ -828,6 +836,7 @@ def loads(
     tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
     object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
+    read_size: int = 1,
 ) -> Any:
     """
     Deserialize an object from a bytestring.
@@ -846,6 +855,10 @@ def loads(
     :param str_errors:
         determines how to handle unicode decoding errors (see the `Error Handlers`_
         section in the standard library documentation for details)
+    :param read_size:
+        the minimum number of bytes to read at a time.
+        Setting this to a higher value like 4096 improves performance.
+        Ignored in the pure Python implementation, but included for API compatibility.
     :return:
         the deserialized object
 
@@ -854,7 +867,11 @@ def loads(
     """
     with BytesIO(s) as fp:
         return CBORDecoder(
-            fp, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors
+            fp,
+            tag_hook=tag_hook,
+            object_hook=object_hook,
+            str_errors=str_errors,
+            read_size=read_size,
         ).decode()
 
 
@@ -863,6 +880,7 @@ def load(
     tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
     object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
+    read_size: int = 1,
 ) -> Any:
     """
     Deserialize an object from an open file.
@@ -881,6 +899,13 @@ def load(
     :param str_errors:
         determines how to handle unicode decoding errors (see the `Error Handlers`_
         section in the standard library documentation for details)
+    :param read_size:
+        the minimum number of bytes to read at a time.
+        Setting this to a higher value like 4096 improves performance,
+        but is likely to read past the end of the CBOR value, advancing the stream
+        position beyond the decoded data. This only matters if you need to reuse the
+        stream after decoding.
+        Ignored in the pure Python implementation, but included for API compatibility.
     :return:
         the deserialized object
 
@@ -888,5 +913,9 @@ def load(
 
     """
     return CBORDecoder(
-        fp, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors
+        fp,
+        tag_hook=tag_hook,
+        object_hook=object_hook,
+        str_errors=str_errors,
+        read_size=read_size,
     ).decode()
