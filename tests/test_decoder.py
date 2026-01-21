@@ -13,6 +13,8 @@ from fractions import Fraction
 from io import BytesIO
 from ipaddress import ip_address, ip_network
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -32,65 +34,69 @@ from cbor2 import (
 )
 
 
-def test_fp_attr() -> None:
-    with pytest.raises(ValueError):
-        CBORDecoder(None)
-    with pytest.raises(ValueError):
+class TestFpAttribute:
+    def test_none(self) -> None:
+        with pytest.raises(
+            ValueError, match=r"fp must be a file-like object with a read\(\) method"
+        ):
+            CBORDecoder(None)
 
-        class A:
-            pass
+    def test_no_read_method(self) -> None:
+        # Test for fp having a non-callable "read" attribute
+        with pytest.raises(ValueError):
+            CBORDecoder(SimpleNamespace(read=None))
 
-        foo = A()
-        foo.read = None
-        CBORDecoder(foo)
-    with BytesIO(b"foobar") as stream:
-        decoder = CBORDecoder(stream)
-        assert decoder.fp is stream
+    def test_delete(self) -> None:
+        decoder = CBORDecoder(BytesIO())
         with pytest.raises(AttributeError):
             del decoder.fp
 
 
-def test_tag_hook_attr() -> None:
-    with BytesIO(b"foobar") as stream:
-        with pytest.raises(ValueError):
-            CBORDecoder(stream, tag_hook="foo")
-        decoder = CBORDecoder(stream)
+class TestTagHookAttribute:
+    def test_callable(self) -> None:
+        def tag_hook(decoder: CBORDecoder, tag: CBORTag) -> object:
+            return tag.value
 
-        def tag_hook(decoder, tag):
-            return None
-
-        decoder.tag_hook = tag_hook
+        decoder = CBORDecoder(BytesIO(), tag_hook=tag_hook)
         assert decoder.tag_hook is tag_hook
+
+    def test_not_callable(self) -> None:
+        with pytest.raises(TypeError, match="object_hook must be callable or None"):
+            CBORDecoder(BytesIO(), object_hook="foo")
+
+    def test_delete(self) -> None:
+        decoder = CBORDecoder(BytesIO())
         with pytest.raises(AttributeError):
             del decoder.tag_hook
 
 
-def test_object_hook_attr() -> None:
-    with BytesIO(b"foobar") as stream:
-        with pytest.raises(ValueError):
-            CBORDecoder(stream, object_hook="foo")
-        decoder = CBORDecoder(stream)
+class TestObjectHookAttribute:
+    def test_success(self) -> None:
+        def object_hook(decoder: CBORDecoder, value: dict[Any, Any]) -> dict[Any, Any]:
+            return value
 
-        def object_hook(decoder, data):
-            return None
-
-        decoder.object_hook = object_hook
+        decoder = CBORDecoder(BytesIO(), object_hook=object_hook)
         assert decoder.object_hook is object_hook
+
+    def test_not_callable(self) -> None:
+        with pytest.raises(TypeError, match="object_hook must be callable or None"):
+            CBORDecoder(BytesIO(), object_hook="foo")
+
+    def test_delete(self) -> None:
+        decoder = CBORDecoder(BytesIO())
         with pytest.raises(AttributeError):
             del decoder.object_hook
 
 
-def test_str_errors_attr() -> None:
-    with BytesIO(b"foobar") as stream:
-        with pytest.raises(ValueError):
-            CBORDecoder(stream, str_errors=False)
-        with pytest.raises(ValueError):
-            CBORDecoder(stream, str_errors="foo")
-        decoder = CBORDecoder(stream)
-        decoder.str_errors = "replace"
-        assert decoder.str_errors == "replace"
-        with pytest.raises(AttributeError):
-            del decoder.str_errors
+class TestStrErrorsAttribute:
+    @pytest.mark.parametrize("str_errors", ["strict", "replace", "ignore"])
+    def test_success(self, str_errors: str) -> None:
+        decoder = CBORDecoder(BytesIO(), str_errors=str_errors)
+        assert decoder.str_errors == str_errors
+
+    def test_invalid(self) -> None:
+        with pytest.raises(ValueError, match="invalid str_errors value: 'foo'"):
+            CBORDecoder(BytesIO(), str_errors="foo")
 
 
 def test_read() -> None:
@@ -129,7 +135,7 @@ def test_load() -> None:
         load()
     with pytest.raises(TypeError):
         loads()
-    assert loads(s=b"\x01") == 1
+    assert loads(b"\x01") == 1
     with BytesIO(b"\x01") as stream:
         assert load(fp=stream) == 1
 
@@ -457,21 +463,41 @@ def test_datetime(payload, expected):
     assert decoded == expected
 
 
-def test_datetime_secfrac() -> None:
-    decoded = loads(b"\xc0\x78\x162018-08-02T07:00:59.1Z")
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100000, tzinfo=timezone.utc)
-    decoded = loads(b"\xc0\x78\x172018-08-02T07:00:59.01Z")
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 10000, tzinfo=timezone.utc)
-    decoded = loads(b"\xc0\x78\x182018-08-02T07:00:59.001Z")
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 1000, tzinfo=timezone.utc)
-    decoded = loads(b"\xc0\x78\x192018-08-02T07:00:59.0001Z")
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100, tzinfo=timezone.utc)
-    decoded = loads(b"\xc0\x78\x1a2018-08-02T07:00:59.00001Z")
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 10, tzinfo=timezone.utc)
-    decoded = loads(b"\xc0\x78\x1b2018-08-02T07:00:59.000001Z")
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 1, tzinfo=timezone.utc)
-    decoded = loads(b"\xc0\x78\x1c2018-08-02T07:00:59.0000001Z")
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 0, tzinfo=timezone.utc)
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        (
+            b"\xc0\x78\x162018-08-02T07:00:59.1Z",
+            datetime(2018, 8, 2, 7, 0, 59, 100000, tzinfo=timezone.utc),
+        ),
+        (
+            b"\xc0\x78\x172018-08-02T07:00:59.01Z",
+            datetime(2018, 8, 2, 7, 0, 59, 10000, tzinfo=timezone.utc),
+        ),
+        (
+            b"\xc0\x78\x182018-08-02T07:00:59.001Z",
+            datetime(2018, 8, 2, 7, 0, 59, 1000, tzinfo=timezone.utc),
+        ),
+        (
+            b"\xc0\x78\x192018-08-02T07:00:59.0001Z",
+            datetime(2018, 8, 2, 7, 0, 59, 100, tzinfo=timezone.utc),
+        ),
+        (
+            b"\xc0\x78\x1a2018-08-02T07:00:59.00001Z",
+            datetime(2018, 8, 2, 7, 0, 59, 10, tzinfo=timezone.utc),
+        ),
+        (
+            b"\xc0\x78\x1b2018-08-02T07:00:59.000001Z",
+            datetime(2018, 8, 2, 7, 0, 59, 1, tzinfo=timezone.utc),
+        ),
+        (
+            b"\xc0\x78\x1c2018-08-02T07:00:59.0000001Z",
+            datetime(2018, 8, 2, 7, 0, 59, 0, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_datetime_secfrac(payload: bytes, expected: datetime) -> None:
+    assert loads(payload) == expected
 
 
 def test_datetime_secfrac_naive_float_to_int_cast() -> None:
@@ -1002,7 +1028,7 @@ def test_invalid_cbor() -> None:
 def test_reserved_special_tags(data, expected):
     with pytest.raises(CBORDecodeValueError) as exc_info:
         loads(unhexlify(data))
-    assert exc_info.value.args[0] == "Undefined Reserved major type 7 subtype 0x" + expected
+    assert exc_info.value.args[0] == "undefined reserved major type 7 subtype 0x" + expected
 
 
 @pytest.mark.parametrize(

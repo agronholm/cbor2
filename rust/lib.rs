@@ -52,7 +52,8 @@ mod _cbor2 {
     ///  .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
     #[pyfunction]
     #[pyo3(signature = (
-        fp: "typing.IO[bytes]", /, *,
+        fp: "typing.IO[bytes]",
+        /, *,
         tag_hook: "collections.abc.Callable | None" = None,
         object_hook: "collections.abc.Callable | None" = None,
         str_errors: "str" = "strict",
@@ -64,14 +65,14 @@ mod _cbor2 {
         object_hook: Option<&Bound<'py, PyAny>>,
         str_errors: &str,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let decoder = CBORDecoder::new(py, Some(fp), tag_hook, object_hook, str_errors, 4096)?;
+        let decoder = CBORDecoder::new(py, fp, tag_hook, object_hook, str_errors, 4096)?;
         let instance = Bound::new(py, decoder)?;
         CBORDecoder::decode(&instance)
     }
 
     ///  Deserialize an object from a bytestring.
     ///
-    ///  :param bytes s:
+    ///  :param bytes data:
     ///      the bytestring to deserialize
     ///  :param tag_hook:
     ///      callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
@@ -91,7 +92,8 @@ mod _cbor2 {
     ///  .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
     #[pyfunction]
     #[pyo3(signature = (
-        data: "bytes", /, *,
+        data: "bytes",
+        /, *,
         tag_hook: "collections.abc.Callable | None" = None,
         object_hook: "collections.abc.Callable | None" = None,
         str_errors: "str" = "strict"
@@ -103,8 +105,10 @@ mod _cbor2 {
         object_hook: Option<&Bound<'py, PyAny>>,
         str_errors: &str,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let fp = py.import("io")?.getattr("BytesIO")?.call1((data,))?;
-        load(py, &fp, tag_hook, object_hook, str_errors)
+        let decoder =
+            CBORDecoder::new_internal(py, None, data, tag_hook, object_hook, str_errors, 4096)?;
+        let instance = Bound::new(py, decoder)?;
+        CBORDecoder::decode(&instance)
     }
 
     ///  Serialize an object to a file.
@@ -218,7 +222,8 @@ mod _cbor2 {
     ///  :return: the serialized output
     #[pyfunction]
     #[pyo3(signature = (
-        obj, /, *,
+        obj,
+        /, *,
         datetime_as_timestamp: "bool" = false,
         timezone: "datetime.tzinfo | None" = None,
         value_sharing: "bool" = false,
@@ -279,10 +284,7 @@ mod _cbor2 {
 
         let register_encoder = |class_name: &str, encoder_func_name: &str| -> PyResult<()> {
             let (module_name, class_name) = class_name.rsplit_once('.').ok_or_else(|| {
-                PyValueError::new_err(format!(
-                    "Invalid fully qualified type name: {}",
-                    class_name
-                ))
+                PyValueError::new_err(format!("Invalid fully qualified type name: {}", class_name))
             })?;
             let py_type = py.import(module_name)?.getattr(class_name)?;
             encoders.set_item(py_type, cbor_encoder_type.getattr(encoder_func_name)?)
@@ -324,22 +326,32 @@ mod _cbor2 {
         // Register decoder callbacks for major tags
         register_major_decoder(0, "decode_uint")?;
         register_major_decoder(1, "decode_negint")?;
+        register_major_decoder(2, "decode_bytestring")?;
         register_major_decoder(3, "decode_string")?;
+        register_major_decoder(4, "decode_array")?;
+        register_major_decoder(5, "decode_map")?;
+        register_major_decoder(6, "decode_semantic")?;
+        register_major_decoder(7, "decode_special")?;
         m.add("major_decoders", major_decoders)?;
 
         // Register decoder callbacks for semantic tags
-        // register_semantic_decoder(0, "decode_datetime_from_string")?;
+        register_semantic_decoder(0, "decode_datetime_string")?;
         // register_semantic_decoder(1, "decode_datetime_from_timestamp")?;
-        // register_semantic_decoder(30, "decode_rational")?;
-        // register_semantic_decoder(35, "decode_regexp")?;
-        // register_semantic_decoder(36, "decode_mime")?;
-        // register_semantic_decoder(37, "decode_uuid")?;
+        register_semantic_decoder(28, "decode_shareable")?;
+        register_semantic_decoder(29, "decode_sharedref")?;
+        register_semantic_decoder(30, "decode_rational")?;
+        register_semantic_decoder(35, "decode_regexp")?;
+        register_semantic_decoder(36, "decode_mime")?;
+        register_semantic_decoder(37, "decode_uuid")?;
         // register_semantic_decoder(52, "decode_ipv4")?;
         // register_semantic_decoder(54, "decode_ipv6")?;
-        // register_semantic_decoder(100, "decode_date_from_epoch")?;
+        register_semantic_decoder(100, "decode_epoch_date")?;
+        register_semantic_decoder(256, "decode_stringref_namespace")?;
+        register_semantic_decoder(258, "decode_set")?;
         // register_semantic_decoder(260, "decode_ipaddress")?;
         // register_semantic_decoder(261, "decode_ipnetwork")?;
-        // register_semantic_decoder(1004, "decode_date_from_string")?;
+        register_semantic_decoder(1004, "decode_date_string")?;
+        register_semantic_decoder(43000, "decode_complex")?;
         m.add("semantic_decoders", semantic_decoders)?;
         Ok(())
     }

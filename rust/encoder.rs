@@ -1,4 +1,5 @@
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, UndefinedType};
+use crate::utils::raise_cbor_error;
 use bigdecimal::BigDecimal;
 use half::f16;
 use num_bigint::BigInt;
@@ -8,43 +9,42 @@ use pyo3::types::{
     PyByteArray, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyMapping,
     PyNone, PySequence, PySet, PyString, PyTuple,
 };
-use pyo3::{intern, pyclass, IntoPyObjectExt, Py, PyAny};
+use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::collections::HashMap;
-use crate::utils::raise_cbor_error;
 
 #[pyclass(module = "cbor2")]
 pub struct CBOREncoder {
-    pub fp: Py<PyAny>,
+    fp: Py<PyAny>,
 
     #[pyo3(get)]
-    pub datetime_as_timestamp: bool,
+    datetime_as_timestamp: bool,
 
-    pub timezone: Option<Py<PyAny>>,
-
-    #[pyo3(get)]
-    pub value_sharing: bool,
-
-    pub default: Option<Py<PyAny>>,
+    timezone: Option<Py<PyAny>>,
 
     #[pyo3(get)]
-    pub canonical: bool,
+    value_sharing: bool,
+
+    default: Option<Py<PyAny>>,
 
     #[pyo3(get)]
-    pub date_as_datetime: bool,
+    canonical: bool,
 
     #[pyo3(get)]
-    pub string_referencing: bool,
+    date_as_datetime: bool,
 
     #[pyo3(get)]
-    pub string_namespacing: bool,
+    string_referencing: bool,
 
     #[pyo3(get)]
-    pub indefinite_containers: bool,
+    string_namespacing: bool,
 
     #[pyo3(get)]
-    pub encoders: Py<PyDict>,
+    indefinite_containers: bool,
 
-    buffer: Box<Vec<u8>>,
+    #[pyo3(get)]
+    encoders: Py<PyDict>,
+
+    buffer: Vec<u8>,
     shared_containers: HashMap<usize, (Py<PyAny>, Option<Py<PyInt>>)>,
     string_references: HashMap<String, u64>,
     bytes_references: HashMap<String, u64>,
@@ -215,7 +215,7 @@ impl CBOREncoder {
             string_namespacing: string_referencing,
             indefinite_containers,
             encoders: encoders.copy()?.unbind(),
-            buffer: Box::new(Vec::new()),
+            buffer: Vec::new(),
             shared_containers: HashMap::new(),
             string_references: HashMap::new(),
             bytes_references: HashMap::new(),
