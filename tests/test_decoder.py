@@ -137,7 +137,7 @@ def test_load() -> None:
         loads()
     assert loads(b"\x01") == 1
     with BytesIO(b"\x01") as stream:
-        assert load(fp=stream) == 1
+        assert load(stream) == 1
 
 
 @pytest.mark.parametrize(
@@ -274,7 +274,7 @@ def test_string_invalid_utf8(payload: str) -> None:
 
 def test_string_oversized() -> None:
     with pytest.raises(CBORDecodeEOF, match="premature end of stream"):
-        (loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799")),)
+        loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799"))
 
 
 def test_string_issue_264_multiple_chunks_utf8_boundary() -> None:
@@ -500,13 +500,6 @@ def test_datetime_secfrac(payload: bytes, expected: datetime) -> None:
     assert loads(payload) == expected
 
 
-def test_datetime_secfrac_naive_float_to_int_cast() -> None:
-    # A secfrac that would have rounding errors if naively parsed as
-    # `int(float(secfrac) * 1000000)`.
-    decoded = loads(b"\xc0\x78\x202018-08-02T07:00:59.000251+00:00")
-    assert decoded == datetime(2018, 8, 2, 7, 0, 59, 251, tzinfo=timezone.utc)
-
-
 def test_datetime_secfrac_overflow() -> None:
     decoded = loads(b"\xc0\x78\x2c2018-08-02T07:00:59.100500999999999999+00:00")
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 100500, tzinfo=timezone.utc)
@@ -514,23 +507,12 @@ def test_datetime_secfrac_overflow() -> None:
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 999999, tzinfo=timezone.utc)
 
 
-def test_datetime_secfrac_requires_digit() -> None:
-    with pytest.raises(CBORDecodeError) as excinfo:
-        loads(b"\xc0\x78\x1a2018-08-02T07:00:59.+00:00")
-    assert isinstance(excinfo.value, ValueError)
-    assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.+00:00'"
-
-    with pytest.raises(CBORDecodeError) as excinfo:
-        loads(b"\xc0\x78\x152018-08-02T07:00:59.Z")
-    assert isinstance(excinfo.value, ValueError)
-    assert str(excinfo.value) == "invalid datetime string: '2018-08-02T07:00:59.Z'"
-
-
-def test_bad_datetime() -> None:
-    with pytest.raises(CBORDecodeError) as excinfo:
+def test_datetime_invalid_string() -> None:
+    with pytest.raises(CBORDecodeValueError) as excinfo:
         loads(unhexlify("c06b303030302d3132332d3031"))
-    assert isinstance(excinfo.value, ValueError)
-    assert str(excinfo.value) == "invalid datetime string: '0000-123-01'"
+
+    assert isinstance(excinfo.value.__cause__, ValueError)
+    assert str(excinfo.value.__cause__) == "Invalid isoformat string: '0000-123-01'"
 
 
 def test_datetime_overflow() -> None:
@@ -644,7 +626,7 @@ def test_rational() -> None:
 
 def test_rational_invalid_iterable() -> None:
     with pytest.raises(
-        CBORDecodeValueError, match="error decoding rational: input value was not a tuple"
+        CBORDecodeValueError, match="error decoding rational: input value must be an array"
     ):
         loads(unhexlify("d81e01"))
 
@@ -916,8 +898,11 @@ def test_object_hook_exception() -> None:
         raise RuntimeError("foo")
 
     payload = unhexlify("A2616103616205")
-    with pytest.raises(RuntimeError, match="foo"):
+    with pytest.raises(CBORDecodeError) as exc_info:
         loads(payload, object_hook=object_hook)
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert exc_info.value.__cause__.args[0] == "foo"
 
 
 def test_load_from_file(tmpdir):

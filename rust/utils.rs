@@ -31,3 +31,12 @@ pub fn raise_cbor_error_from<T>(
 ) -> PyResult<T> {
     Err(create_cbor_error(py, class_name, msg, Some(cause)))
 }
+
+pub fn wrap_cbor_error<T>(
+    py: Python<'_>,
+    class_name: &str,
+    msg: &str,
+    f: impl FnOnce() -> PyResult<T>
+) -> PyResult<T> {
+    f().map_err(|e| create_cbor_error(py, class_name, msg, Some(e)))
+}

@@ -1,9 +1,11 @@
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, FrozenDict};
-use crate::utils::{create_cbor_error, raise_cbor_error, raise_cbor_error_from};
+use crate::utils::{create_cbor_error, raise_cbor_error, raise_cbor_error_from, wrap_cbor_error};
 use half::f16;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyComplex, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
+use pyo3::types::{
+    PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple,
+};
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::cmp::{max, min};
 use std::collections::HashMap;
@@ -102,7 +104,7 @@ impl CBORDecoder {
         if num_read_bytes < minimum_amount {
             return raise_cbor_error(
                 py,
-                "CBORDecodeError",
+                "CBORDecodeEOF",
                 format!(
                     "premature end of stream (expected to read at least {minimum_amount} \
                      bytes, got {num_read_bytes} instead)"
@@ -187,10 +189,10 @@ impl CBORDecoder {
     #[pyo3(signature = (
         fp: "typing.IO[bytes]",
         *,
-        tag_hook: "collections.abc.Callable | None" = None,
-        object_hook: "collections.abc.Callable | None" = None,
+        tag_hook: "collections.abc.Callable[[CBORDecoder, CBORTag], Any]] | None" = None,
+        object_hook: "collections.abc.Callable[[CBORDecoder, dict[typing.Any, typing.Any], Any]]] | None" = None,
         str_errors: "str" = "strict",
-        read_size: "int" = 4096,
+        read_size: "int" = 1,
     ))]
     pub fn new(
         py: Python<'_>,
@@ -612,9 +614,9 @@ impl CBORDecoder {
         // If an object hook was specified, call it now with the constructed dictionary and use its
         // return value as the final dictionary
         if let Some(object_hook) = &slf.borrow().object_hook {
-            match object_hook.bind_borrowed(py).call1((&dict,)) {
-                Ok(new_dict) => {
-                    dict = new_dict.cast_into()?;
+            match object_hook.bind_borrowed(py).call1((&slf, &dict)) {
+                Ok(retval) => {
+                    return Ok(retval);
                 }
                 Err(e) => {
                     raise_cbor_error_from(py, "CBORDecodeError", "error calling object hook", e)?;
@@ -646,8 +648,11 @@ impl CBORDecoder {
                 slf.borrow_mut();
                 decoder.bind(py).call1((slf,))
             }
-            None => CBORTag::new(tagnum.into_bound_py_any(py)?, py.None().into_bound(py))?
-                .into_bound_py_any(py),
+            None => {
+                drop(this);
+                let value = Self::decode(slf)?;
+                CBORTag::new(tagnum.into_bound_py_any(py)?, value)?.into_bound_py_any(py)
+            }
         }
     }
 
@@ -798,21 +803,125 @@ impl CBORDecoder {
         Ok(Self::set_shareable(slf, datetime))
     }
 
-    fn decode_complex<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyComplex>> {
-        // Semantic tag 43000
-        let py = slf.py();
-        let value = Self::with_immutable(slf, || Self::decode(slf))?;
-        let tuple = match value.cast::<PyTuple>() {
-            Ok(t) => t,
-            Err(e) => {
-                return raise_cbor_error_from(
-                    py,
+    fn decode_epoch_datetime<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        // Semantic tag 1
+        let value = Self::decode(slf)?;
+        let datetime_class = slf.py().import("datetime")?.getattr("datetime")?;
+        let utc = slf
+            .py()
+            .import("datetime")?
+            .getattr("timezone")?
+            .getattr("utc")?;
+        datetime_class
+            .call_method1("fromtimestamp", (value, utc))
+            .map_err(|e| {
+                create_cbor_error(
+                    slf.py(),
                     "CBORDecodeValueError",
-                    "error decoding rational: input value must be an array",
-                    PyErr::from(e),
-                );
-            }
-        };
+                    "error decoding datetime from epoch",
+                    Some(e),
+                )
+            })
+    }
+
+    fn decode_positive_bignum<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        // Semantic tag 2
+        let py = slf.py();
+        let int_type = py.get_type::<PyInt>();
+        let value = Self::decode(slf)?;
+        let int = int_type.call_method1("from_bytes", (value, intern!(py, "big")))?;
+        Ok(Self::set_shareable(slf, int))
+    }
+
+    fn decode_negative_bignum<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        // Semantic tag 3
+        let py = slf.py();
+        let int_type = py.get_type::<PyInt>();
+        let value = Self::decode(slf)?;
+        let mut int = int_type.call_method1("from_bytes", (value, intern!(py, "big")))?;
+        int = int.neg()?.add(-1)?;
+        Ok(Self::set_shareable_internal(slf, int))
+    }
+
+    fn decode_fraction<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        // Semantic tag 4
+        let py = slf.py();
+        let decimal_class = py.import("decimal")?.getattr("Decimal")?;
+        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let tuple = value.cast::<PyTuple>().map_err(|e| {
+            create_cbor_error(
+                py,
+                "CBORDecodeValueError",
+                "error decoding decimal fraction: input value must be an array",
+                Some(PyErr::from(e)),
+            )
+        })?;
+
+        if tuple.len() != 2 {
+            return raise_cbor_error(
+                py,
+                "CBORDecodeValueError",
+                "error decoding decimal fraction: array must have exactly two elements",
+            );
+        }
+
+        let decimal =
+            wrap_cbor_error(py, "CBORDecodeValueError", "error decoding decimal fraction", || {
+                let exp = tuple.get_item(0)?;
+                let sig_tuple = decimal_class.call1((tuple.get_item(1)?,))?.call_method0("as_tuple")?.cast_into::<PyTuple>()?;
+                let sign = sig_tuple.get_item(0)?;
+                let digits = sig_tuple.get_item(1)?;
+                let args_tuple = PyTuple::new(py, [sign, digits, exp])?;
+                decimal_class.call1((args_tuple,))
+            })?;
+        Ok(Self::set_shareable(slf, decimal))
+    }
+
+    fn decode_bigfloat<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        // Semantic tag 5
+        let py = slf.py();
+        let decimal_class = py.import("decimal")?.getattr("Decimal")?;
+        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let tuple = value.cast::<PyTuple>().map_err(|e| {
+            create_cbor_error(
+                py,
+                "CBORDecodeValueError",
+                "error decoding bigfloat: input value must be an array",
+                Some(PyErr::from(e)),
+            )
+        })?;
+
+        if tuple.len() != 2 {
+            return raise_cbor_error(
+                py,
+                "CBORDecodeValueError",
+                "error decoding bigfloat: array must have exactly two elements",
+            );
+        }
+
+        let decimal =
+            wrap_cbor_error(py, "CBORDecodeValueError", "error decoding bigfloat", || {
+                let exp = decimal_class.call1((tuple.get_item(0)?,))?;
+                let sig = decimal_class.call1((tuple.get_item(1)?,))?;
+                let exp = PyInt::new(py, 2).pow(exp, py.None())?;
+                sig.mul(exp)
+            })?;
+        Ok(Self::set_shareable(slf, decimal))
+    }
+
+    fn decode_rational<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        // Semantic tag 30
+        let py = slf.py();
+        let fraction_class = py.import("fractions")?.getattr("Fraction")?;
+        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let tuple = value.cast_into::<PyTuple>().map_err(|e| {
+            create_cbor_error(
+                py,
+                "CBORDecodeValueError",
+                "error decoding rational: input value must be an array",
+                Some(PyErr::from(e)),
+            )
+        })?;
 
         if tuple.len() != 2 {
             return raise_cbor_error(
@@ -822,54 +931,23 @@ impl CBORDecoder {
             );
         }
 
-        let real: f64 = tuple.get_item(0)?.extract()?;
-        let imag: f64 = tuple.get_item(1)?.extract()?;
-        Ok(PyComplex::from_doubles(py, real, imag))
-    }
-
-    fn decode_rational<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
-        // Semantic tag 30
-        let fraction_class = slf.py().import("fractions")?.getattr("Fraction")?;
-        let value = Self::with_immutable(slf, || Self::decode(slf))?;
-        let tuple = match value.cast::<PyTuple>() {
-            Ok(t) => t,
-            Err(e) => {
-                return raise_cbor_error_from(
-                    slf.py(),
-                    "CBORDecodeValueError",
-                    "error decoding rational: input value must be an array",
-                    PyErr::from(e),
-                );
-            }
-        };
-
-        if tuple.len() != 2 {
-            return raise_cbor_error(
-                slf.py(),
-                "CBORDecodeValueError",
-                "error decoding rational: array must have exactly two elements",
-            );
-        }
-
         match fraction_class.call1(tuple) {
             Ok(fraction) => Ok(Self::set_shareable(slf, fraction)),
-            Err(e) => raise_cbor_error_from(
-                slf.py(),
-                "CBORDecodeValueError",
-                "error decoding rational",
-                e,
-            ),
+            Err(e) => {
+                raise_cbor_error_from(py, "CBORDecodeValueError", "error decoding rational", e)
+            }
         }
     }
 
     fn decode_regexp<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 35
+        let py = slf.py();
         let value = Self::decode(slf)?;
-        let re_compile_func = slf.py().import("re")?.getattr("compile")?;
+        let re_compile_func = py.import("re")?.getattr("compile")?;
         match re_compile_func.call1((value,)) {
             Ok(regexp) => Ok(Self::set_shareable(slf, regexp)),
             Err(e) => raise_cbor_error_from(
-                slf.py(),
+                py,
                 "CBORDecodeValueError",
                 "error decoding regular expression",
                 e,
@@ -895,12 +973,15 @@ impl CBORDecoder {
 
     fn decode_uuid<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 37
+        let py = slf.py();
         let value = Self::decode(slf)?;
-        let uuid_class = slf.py().import("uuid")?.getattr("UUID")?;
-        match uuid_class.call1((value,)) {
+        let uuid_class = py.import("uuid")?.getattr("UUID")?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("bytes", value)?;
+        match uuid_class.call((), Some(&kwargs)) {
             Ok(uuid) => Ok(Self::set_shareable(slf, uuid)),
             Err(e) => raise_cbor_error_from(
-                slf.py(),
+                py,
                 "CBORDecodeValueError",
                 "error decoding UUID value",
                 e,
@@ -930,5 +1011,33 @@ impl CBORDecoder {
             PySet::new(py, tuple.iter())?.into_any()
         };
         Ok(Self::set_shareable(slf, set))
+    }
+
+    fn decode_complex<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyComplex>> {
+        // Semantic tag 43000
+        let py = slf.py();
+        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let tuple = value.cast_into::<PyTuple>().map_err(|e| {
+            create_cbor_error(
+                py,
+                "CBORDecodeValueError",
+                "error decoding complex: input value must be an array",
+                Some(PyErr::from(e)),
+            )
+        })?;
+
+        if tuple.len() != 2 {
+            return raise_cbor_error(
+                py,
+                "CBORDecodeValueError",
+                "error decoding complex: array must have exactly two elements",
+            );
+        }
+
+        wrap_cbor_error(py, "CBORDecodeValueError", "error decoding complex", || {
+            let real: f64 = tuple.get_item(0)?.extract()?;
+            let imag: f64 = tuple.get_item(1)?.extract()?;
+            Ok(PyComplex::from_doubles(py, real, imag))
+        })
     }
 }

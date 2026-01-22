@@ -336,7 +336,11 @@ mod _cbor2 {
 
         // Register decoder callbacks for semantic tags
         register_semantic_decoder(0, "decode_datetime_string")?;
-        // register_semantic_decoder(1, "decode_datetime_from_timestamp")?;
+        register_semantic_decoder(1, "decode_epoch_datetime")?;
+        register_semantic_decoder(2, "decode_positive_bignum")?;
+        register_semantic_decoder(3, "decode_negative_bignum")?;
+        register_semantic_decoder(4, "decode_fraction")?;
+        register_semantic_decoder(5, "decode_bigfloat")?;
         register_semantic_decoder(28, "decode_shareable")?;
         register_semantic_decoder(29, "decode_sharedref")?;
         register_semantic_decoder(30, "decode_rational")?;
