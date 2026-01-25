@@ -2,11 +2,10 @@ import sys
 
 import atheris
 
-# _cbor2 ensures the C library is imported
-from _cbor2 import loads
+from cbor2 import loads
 
 
-def test_one_input(data: bytes):
+def test_one_input(data: bytes) -> None:
     try:
         loads(data)
     except Exception:

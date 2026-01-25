@@ -11,13 +11,24 @@ from decimal import Decimal
 from email.message import Message
 from fractions import Fraction
 from io import BytesIO
-from ipaddress import ip_address, ip_network
+from ipaddress import (
+    IPv4Address,
+    IPv4Interface,
+    IPv4Network,
+    IPv6Address,
+    IPv6Interface,
+    IPv6Network,
+    ip_address,
+    ip_interface,
+    ip_network,
+)
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, NoReturn
 from uuid import UUID
 
 import pytest
+from _pytest.fixtures import FixtureRequest
 
 from cbor2 import (
     CBORDecodeEOF,
@@ -32,6 +43,17 @@ from cbor2 import (
     loads,
     undefined,
 )
+
+
+@pytest.fixture
+def will_overflow() -> bytes:
+    """
+    Construct an array/string/bytes length which would cause a memory error
+    on decode. This should be less than sys.maxsize (the max integer index)
+    """
+    bit_size = struct.calcsize("P") * 8
+    huge_length = 1 << (bit_size - 8)
+    return struct.pack("Q", huge_length)
 
 
 class TestFpAttribute:
@@ -214,14 +236,15 @@ def test_float_nan(payload):
     params=[("f4", False), ("f5", True), ("f6", None), ("f7", "undefined")],
     ids=["false", "true", "null", "undefined"],
 )
-def special_values(request, impl):
+def special_values(request: FixtureRequest) -> tuple[str, Any]:
     payload, expected = request.param
     if expected == "undefined":
         expected = undefined
+
     return payload, expected
 
 
-def test_special(impl, special_values):
+def test_special(special_values: tuple[str, Any]) -> None:
     payload, expected = special_values
     decoded = loads(unhexlify(payload))
     assert decoded is expected
@@ -235,7 +258,7 @@ def test_special(impl, special_values):
         pytest.param("5a00011170" + "12" * 70000, b"\x12" * 70000, id="long"),
     ],
 )
-def test_binary(payload, expected):
+def test_binary(payload: str, expected: bytes) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -252,7 +275,7 @@ def test_binary(payload, expected):
         pytest.param("7a00010001" + "61" * 65535 + "c3b6", "a" * 65535 + "ö", id="split_unicode"),
     ],
 )
-def test_string(payload, expected):
+def test_string(payload: str, expected: str) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -693,136 +716,144 @@ def test_uuid_invalid_type() -> None:
 @pytest.mark.parametrize(
     "payload, expected",
     [
-        ("d9010444c00a0a01", ip_address("192.10.10.1")),
-        (
-            "d901045020010db885a3000000008a2e03707334",
-            ip_address("2001:db8:85a3::8a2e:370:7334"),
+        pytest.param("d83444c0000201", IPv4Address("192.0.2.1"), id="ipv4addr"),
+        pytest.param("d83482181843c00002", IPv4Network("192.0.2.0/24"), id="ipv4net"),
+        pytest.param("d8348244c00002011818", IPv4Interface("192.0.2.1/24"), id="ipv4if"),
+        pytest.param(
+            "d8365020010db81234deedbeefcafefacefeed",
+            IPv6Address("2001:0db8:1234:deed:beef:cafe:face:feed"),
+            id="ipv6addr",
         ),
-        ("d9010446010203040506", (260, b"\x01\x02\x03\x04\x05\x06")),
-    ],
-    ids=[
-        "ipv4",
-        "ipv6",
-        "mac",
-    ],
-)
-def test_ipaddress(payload, expected):
-    if isinstance(expected, tuple):
-        expected = CBORTag(*expected)
-    payload = unhexlify(payload)
-    assert loads(payload) == expected
-
-
-def test_bad_ipaddress() -> None:
-    with pytest.raises(CBORDecodeError) as exc:
-        loads(unhexlify("d9010443c00a0a"))
-        assert str(exc.value).endswith("invalid ipaddress value {!r}".format(b"\xc0\x0a\x0a"))
-        assert isinstance(exc, ValueError)
-    with pytest.raises(CBORDecodeError) as exc:
-        loads(unhexlify("d9010401"))
-        assert str(exc.value).endswith("invalid ipaddress value 1")
-        assert isinstance(exc, ValueError)
-
-
-@pytest.mark.parametrize(
-    "payload, expected",
-    [
-        ("d90105a144c0a800641818", ip_network("192.168.0.100/24", False)),
-        (
-            "d90105a15020010db885a3000000008a2e000000001860",
-            ip_network("2001:db8:85a3:0:0:8a2e::/96", False),
+        pytest.param(
+            "d8368218304620010db81234",
+            IPv6Network("2001:db8:1234::/48"),
+            id="ipv6net",
+        ),
+        pytest.param(
+            "d8368350fe8000000000020202fffffffe03030318404465746830",
+            IPv6Interface("fe80::202:2ff:ffff:fe03:303%eth0/64"),
+            id="ipv6if_str_zoneid",
+        ),
+        pytest.param(
+            "d8368350fe8000000000020202fffffffe030303184002",
+            IPv6Interface("fe80::202:2ff:ffff:fe03:303%2/64"),
+            id="ipv6if_num_zoneid",
         ),
     ],
-    ids=[
-        "ipv4",
-        "ipv6",
-    ],
 )
-def test_ipnetwork(payload, expected):
-    # XXX The following pytest.skip is only included to work-around a bug in
-    # pytest under python 3.3 (which prevents the decorator above from skipping
-    # correctly); remove when 3.3 support is dropped
-    payload = unhexlify(payload)
-    assert loads(payload) == expected
+def test_ipaddress(payload: bytes, expected: Any) -> None:
+    assert loads(unhexlify(payload)) == expected
 
 
-def test_bad_ipnetwork() -> None:
-    with pytest.raises(CBORDecodeError) as exc:
-        loads(unhexlify("d90105a244c0a80064181844c0a800001818"))
-        invalid_value = {b"\xc0\xa8\x00d": 24, b"\xc0\xa8\x00\x00": 24}
-        assert str(exc.value).endswith(f"invalid ipnetwork value {invalid_value!r}")
-        assert isinstance(exc, ValueError)
-    with pytest.raises(CBORDecodeError) as exc:
-        loads(unhexlify("d90105a144c0a80064420102"))
-        invalid_value = {b"\xc0\xa8\x00d": b"\x01\x02"}
-        assert str(exc.value).endswith(f"invalid ipnetwork value {invalid_value}")
-        assert isinstance(exc, ValueError)
+class TestDeprecatedIPAddress:
+    @pytest.mark.parametrize(
+        "payload, expected",
+        [
+            pytest.param("d9010444c00a0a01", ip_address("192.10.10.1"), id="ipv4"),
+            pytest.param(
+                "d901045020010db885a3000000008a2e03707334",
+                ip_address("2001:db8:85a3::8a2e:370:7334"),
+                id="ipv6",
+            ),
+            pytest.param(
+                "d9010446010203040506", CBORTag(260, b"\x01\x02\x03\x04\x05\x06"), id="mac"
+            ),
+        ],
+    )
+    def test_valid(self, payload: str, expected: Any) -> None:
+        payload = unhexlify(payload)
+        assert loads(payload) == expected
+
+    @pytest.mark.parametrize("payload", ["d9010443c00a0a", "d9010401"])
+    def test_invalid(self, payload: str) -> None:
+        with pytest.raises(CBORDecodeError, match="invalid ipaddress value "):
+            loads(unhexlify(payload))
 
 
-def test_bad_shared_reference() -> None:
-    with pytest.raises(CBORDecodeError) as exc:
-        loads(unhexlify("d81d05"))
-        assert str(exc.value).endswith("shared reference 5 not found")
-        assert isinstance(exc, ValueError)
+class TestDeprecatedIPNetwork:
+    @pytest.mark.parametrize(
+        "payload, expected",
+        [
+            pytest.param("D90105A144C0A800001818", ip_network("192.168.0.0/24"), id="ipv4_net"),
+            pytest.param("d90105a144c0a800641818", ip_interface("192.168.0.100/24"), id="ipv4_if"),
+            pytest.param(
+                "d90105a15020010db885a3000000008a2e000000001860",
+                ip_network("2001:db8:85a3:0:0:8a2e::/96"),
+                id="ipv6_net",
+            ),
+        ],
+    )
+    def test_valid(self, payload: str, expected: Any) -> None:
+        payload = unhexlify(payload)
+        assert loads(payload) == expected
+
+    @pytest.mark.parametrize(
+        "payload, pattern",
+        [
+            pytest.param(
+                "d90105a244c0a80064181844c0a800001818",
+                "invalid input map length for IP network: 2",
+                id="length",
+            ),
+            pytest.param("d90105a144c0a80064420102", "invalid ipnetwork value"),
+        ],
+    )
+    def test_invalid(self, payload: str, pattern: str) -> None:
+        with pytest.raises(CBORDecodeValueError, match=pattern):
+            loads(unhexlify(payload))
 
 
-def test_uninitialized_shared_reference() -> None:
-    with pytest.raises(CBORDecodeError) as exc:
-        loads(unhexlify("D81CA1D81D014161"))
-        assert str(exc.value).endswith("shared value 0 has not been initialized")
-        assert isinstance(exc, ValueError)
+class TestSharedReference:
+    def test_bad_reference(self) -> None:
+        with pytest.raises(CBORDecodeError) as exc:
+            loads(unhexlify("d81d05"))
+            assert str(exc.value).endswith("shared reference 5 not found")
+            assert isinstance(exc, ValueError)
+
+    def test_uninitialized(self) -> None:
+        with pytest.raises(CBORDecodeError) as exc:
+            loads(unhexlify("D81CA1D81D014161"))
+            assert str(exc.value).endswith("shared value 0 has not been initialized")
+            assert isinstance(exc, ValueError)
+
+    def test_immutable(self) -> None:
+        # a = (1, 2, 3)
+        # b = ((a, a), a)
+        # data = dumps(set(b))
+        decoded = loads(unhexlify("d90102d81c82d81c82d81c83010203d81d02d81d02"))
+        a = [item for item in decoded if len(item) == 3][0]
+        b = [item for item in decoded if len(item) == 2][0]
+        assert decoded == {(a, a), a}
+        assert b[0] is a
+        assert b[1] is a
+
+    def test_cyclic_array(self) -> None:
+        decoded = loads(unhexlify("d81c81d81d00"))
+        assert decoded == [decoded]
+
+    def test_cyclic_map(self) -> None:
+        decoded = loads(unhexlify("d81ca100d81d00"))
+        assert decoded == {0: decoded}
+
+    def test_nested_shareable_in_array(self) -> None:
+        decoded = loads(unhexlify("82d81c82d81c61616162d81d00"))
+        assert decoded == [["a", "b"], ["a", "b"]]
+        assert decoded[0] is decoded[1]
 
 
-def test_immutable_shared_reference() -> None:
-    # a = (1, 2, 3)
-    # b = ((a, a), a)
-    # data = dumps(set(b))
-    decoded = loads(unhexlify("d90102d81c82d81c82d81c83010203d81d02d81d02"))
-    a = [item for item in decoded if len(item) == 3][0]
-    b = [item for item in decoded if len(item) == 2][0]
-    assert decoded == {(a, a), a}
-    assert b[0] is a
-    assert b[1] is a
+class TestStringReference:
+    def test_string_ref(self) -> None:
+        decoded = loads(unhexlify("d9010085656669727374d81900667365636f6e64d81900d81901"))
+        assert isinstance(decoded, list)
+        assert decoded == ["first", "first", "second", "first", "second"]
 
+    def test_ref_outside_of_namespace(self) -> None:
+        with pytest.raises(CBORDecodeValueError, match="string reference outside of namespace$"):
+            loads(unhexlify("85656669727374d81900667365636f6e64d81900d81901"))
 
-def test_cyclic_array() -> None:
-    decoded = loads(unhexlify("d81c81d81d00"))
-    assert decoded == [decoded]
-
-
-def test_cyclic_map() -> None:
-    decoded = loads(unhexlify("d81ca100d81d00"))
-    assert decoded == {0: decoded}
-
-
-def test_nested_shareable_in_array() -> None:
-    decoded = loads(unhexlify("82d81c82d81c61616162d81d00"))
-    assert decoded == [["a", "b"], ["a", "b"]]
-    assert decoded[0] is decoded[1]
-
-
-def test_string_ref() -> None:
-    decoded = loads(unhexlify("d9010085656669727374d81900667365636f6e64d81900d81901"))
-    assert isinstance(decoded, list)
-    assert decoded[0] == "first"
-    assert decoded[1] == "first"
-    assert decoded[2] == "second"
-    assert decoded[3] == "first"
-    assert decoded[4] == "second"
-
-
-def test_outside_string_ref_namespace() -> None:
-    with pytest.raises(CBORDecodeError) as exc:
-        loads(unhexlify("85656669727374d81900667365636f6e64d81900d81901"))
-        assert str(exc.value).endswith("string reference outside of namespace")
-        assert isinstance(exc, ValueError)
-
-
-def test_invalid_string_ref() -> None:
-    with pytest.raises(CBORDecodeError) as exc:
-        loads(unhexlify("d9010086656669727374d81900667365636f6e64d81900d81901d81903"))
-        assert str(exc.value).endswith("string reference 3 not found")
-        assert isinstance(exc, ValueError)
+    def test_invalid_string_ref(self) -> None:
+        with pytest.raises(CBORDecodeValueError, match="string reference 3 not found$"):
+            loads(unhexlify("d9010086656669727374d81900667365636f6e64d81900d81901d81903"))
 
 
 @pytest.mark.parametrize(
@@ -833,7 +864,7 @@ def test_invalid_string_ref() -> None:
     ],
     ids=["self_describe_cbor+int", "self_describe_cbor+positive_bignum"],
 )
-def test_self_describe_cbor(payload, expected):
+def test_self_describe_cbor(payload: str, expected: object) -> None:
     assert loads(unhexlify(payload)) == expected
 
 
@@ -859,7 +890,7 @@ def test_premature_end_of_stream() -> None:
 
 
 def test_tag_hook() -> None:
-    def reverse(decoder, tag):
+    def reverse(decoder: CBORDecoder, tag: CBORTag) -> Any:
         return tag.value[::-1]
 
     decoded = loads(unhexlify("d917706548656c6c6f"), tag_hook=reverse)
@@ -868,10 +899,10 @@ def test_tag_hook() -> None:
 
 def test_tag_hook_cyclic() -> None:
     class DummyType:
-        def __init__(self, value):
+        def __init__(self, value: object):
             self.value = value
 
-    def unmarshal_dummy(decoder, tag):
+    def unmarshal_dummy(decoder: CBORDecoder, tag: CBORTag) -> DummyType:
         instance = DummyType.__new__(DummyType)
         decoder.set_shareable(instance)
         instance.value = decoder.decode_from_bytes(tag.value)
@@ -884,7 +915,7 @@ def test_tag_hook_cyclic() -> None:
 
 def test_object_hook() -> None:
     class DummyType:
-        def __init__(self, state):
+        def __init__(self, state: object):
             self.state = state
 
     payload = unhexlify("A2616103616205")
@@ -894,7 +925,7 @@ def test_object_hook() -> None:
 
 
 def test_object_hook_exception() -> None:
-    def object_hook(decoder, data):
+    def object_hook(decoder: CBORDecoder, data) -> NoReturn:
         raise RuntimeError("foo")
 
     payload = unhexlify("A2616103616205")
@@ -905,9 +936,9 @@ def test_object_hook_exception() -> None:
     assert exc_info.value.__cause__.args[0] == "foo"
 
 
-def test_load_from_file(tmpdir):
-    path = tmpdir.join("testdata.cbor")
-    path.write_binary(b"\x82\x01\x0a")
+def test_load_from_file(tmp_path: Path) -> None:
+    path = tmp_path / "testdata.cbor"
+    path.write_bytes(b"\x82\x01\x0a")
     with path.open("rb") as fp:
         obj = load(fp)
 
@@ -941,7 +972,7 @@ def test_set() -> None:
         ("d9010282d90102820102d90102820304", {frozenset({1, 2}), frozenset({3, 4})}),
     ],
 )
-def test_immutable_keys(payload, expected):
+def test_immutable_keys(payload: str, expected: object):
     value = loads(unhexlify(payload))
     assert value == expected
 
@@ -949,7 +980,7 @@ def test_immutable_keys(payload, expected):
 # Corrupted or invalid data checks
 
 
-def test_huge_truncated_array(will_overflow):
+def test_huge_truncated_array(will_overflow: bytes) -> None:
     with pytest.raises(CBORDecodeError):
         loads(unhexlify("9b") + will_overflow)
 
@@ -960,35 +991,41 @@ def test_huge_truncated_string() -> None:
         loads(unhexlify("7b") + huge_index + unhexlify("70717273"))
 
 
-@pytest.mark.parametrize("dtype_prefix", ["7B", "5b"], ids=["string", "bytes"])
-def test_huge_truncated_data(dtype_prefix, will_overflow):
+@pytest.mark.parametrize(
+    "dtype_prefix", [pytest.param("7B", id="string"), pytest.param("5b", id="bytes")]
+)
+def test_huge_truncated_data(dtype_prefix: str, will_overflow: bytes) -> None:
     with pytest.raises((CBORDecodeError, MemoryError)):
         loads(unhexlify(dtype_prefix) + will_overflow)
 
 
 @pytest.mark.parametrize("tag_dtype", ["7F7B", "5f5B"], ids=["string", "bytes"])
-def test_huge_truncated_indefinite_data(tag_dtype, will_overflow):
+def test_huge_truncated_indefinite_data(tag_dtype: str, will_overflow: bytes) -> None:
     huge_index = struct.pack("Q", sys.maxsize + 1)
     with pytest.raises((CBORDecodeError, MemoryError)):
         loads(unhexlify(tag_dtype) + huge_index + unhexlify("70717273ff"))
 
 
 @pytest.mark.parametrize("data", ["7f61777f6177ffff", "5f41775f4177ffff"], ids=["string", "bytes"])
-def test_embedded_indefinite_data(data):
+def test_embedded_indefinite_data(data: str) -> None:
     with pytest.raises(CBORDecodeValueError):
         loads(unhexlify(data))
 
 
-@pytest.mark.parametrize("data", ["7f01ff", "5f01ff"], ids=["string", "bytes"])
-def test_invalid_indefinite_data_item(data):
+@pytest.mark.parametrize(
+    "data", [pytest.param("7f01ff", id="string"), pytest.param("5f01ff", id="bytes")]
+)
+def test_invalid_indefinite_data_item(data: str) -> None:
     with pytest.raises(CBORDecodeValueError):
         loads(unhexlify(data))
 
 
 @pytest.mark.parametrize(
     "data",
-    ["7f7bff0000000000000471717272ff", "5f5bff0000000000000471717272ff"],
-    ids=["string", "bytes"],
+    [
+        pytest.param("7f7bff0000000000000471717272ff", id="string"),
+        pytest.param("5f5bff0000000000000471717272ff", id="bytes"),
+    ],
 )
 def test_indefinite_overflow(data):
     with pytest.raises(CBORDecodeValueError):
@@ -1010,20 +1047,22 @@ def test_invalid_cbor() -> None:
     "data, expected",
     [("fc", "1c"), ("fd", "1d"), ("fe", "1e")],
 )
-def test_reserved_special_tags(data, expected):
-    with pytest.raises(CBORDecodeValueError) as exc_info:
+def test_reserved_special_tags(data: str, expected: str) -> None:
+    with pytest.raises(
+        CBORDecodeValueError, match=f"undefined reserved major type 7 subtype 0x{expected}"
+    ):
         loads(unhexlify(data))
-    assert exc_info.value.args[0] == "undefined reserved major type 7 subtype 0x" + expected
 
 
 @pytest.mark.parametrize(
-    "data, expected",
-    [("c400", "4"), ("c500", "5")],
+    "data, expected, typename",
+    [("c400", "4", "decimal fraction"), ("c500", "5", "bigfloat")],
 )
-def test_decimal_payload_unpacking(data, expected):
-    with pytest.raises(CBORDecodeValueError) as exc_info:
+def test_decimal_payload_unpacking(data: str, expected: str, typename: str) -> None:
+    with pytest.raises(
+        CBORDecodeValueError, match=f"error decoding {typename}: input value must be an array"
+    ):
         loads(unhexlify(data))
-    assert exc_info.value.args[0] == f"Incorrect tag {expected} payload"
 
 
 @pytest.mark.parametrize(
@@ -1052,7 +1091,7 @@ class TestDecoderReuse:
     Tests for correct behavior when reusing CBORDecoder instances.
     """
 
-    def test_decoder_reuse_resets_shared_refs(self, impl):
+    def test_decoder_reuse_resets_shared_refs(self) -> None:
         """
         Shared references should be scoped to a single decode operation,
         not persist across multiple decodes on the same decoder instance.
@@ -1073,7 +1112,7 @@ class TestDecoderReuse:
         with pytest.raises(CBORDecodeValueError, match="shared reference"):
             decoder.decode()
 
-    def test_decode_from_bytes_resets_shared_refs(self, impl):
+    def test_decode_from_bytes_resets_shared_refs(self) -> None:
         """
         decode_from_bytes should also reset shared references between calls.
         """
@@ -1086,7 +1125,7 @@ class TestDecoderReuse:
         with pytest.raises(CBORDecodeValueError, match="shared reference"):
             decoder.decode_from_bytes(msg2)
 
-    def test_shared_refs_within_single_decode(self, impl):
+    def test_shared_refs_within_single_decode(self) -> None:
         """
         Shared references must work correctly within a single decode operation.
 
@@ -1117,7 +1156,7 @@ def test_decode_from_bytes_in_hook_preserves_buffer() -> None:
     corrupted, causing subsequent reads to fail or return wrong data.
     """
 
-    def tag_hook(decoder, tag):
+    def tag_hook(decoder: CBORDecoder, tag: CBORTag):
         if tag.tag == 999:
             # Decode embedded CBOR (documented pattern)
             return decoder.decode_from_bytes(tag.value)
@@ -1163,7 +1202,7 @@ def test_decode_from_bytes_deeply_nested_in_hook() -> None:
     BytesIO objects and the original stream.
     """
 
-    def tag_hook(decoder, tag):
+    def tag_hook(decoder: CBORDecoder, tag: CBORTag):
         if tag.tag in [999, 888, 777]:
             # Recursively decode embedded CBOR
             return decoder.decode_from_bytes(tag.value)
@@ -1204,7 +1243,7 @@ def test_str_errors_valid_utf8_unchanged() -> None:
 
 
 @pytest.mark.parametrize("length", [255, 256, 257])
-def test_string_stack_threshold_boundary(impl, length):
+def test_string_stack_threshold_boundary(length: int) -> None:
     """Test stack (<=256) vs heap (>256) allocation boundary."""
     test_string = "a" * length
     if length < 24:
@@ -1213,5 +1252,6 @@ def test_string_stack_threshold_boundary(impl, length):
         payload = b"\x78" + bytes([length])
     else:
         payload = b"\x79" + struct.pack(">H", length)
+
     payload += test_string.encode("utf-8")
     assert loads(payload) == test_string

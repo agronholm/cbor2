@@ -71,46 +71,109 @@ When ``string_referencing=True`` is passed to
 it has previously encoded and where a reference would be shorter than the encoded string, it
 instead encodes a reference to the nth sufficiently long string already encoded.
 
-.. warning:: Support for string referencing is rare in other CBOR implementations, so think carefully
-    whether you want to enable it.
+.. warning:: Support for string referencing is rare in other CBOR implementations, so think
+    carefully whether you want to enable it.
 
-Tag support
------------
+Decoder support for semantic tags
+---------------------------------
 
-In addition to all standard CBOR tags, this library supports many extended tags:
+Below is a list of supported semantic tags for decoding.
 
 ===== ======================================== ====================================================
 Tag   Semantics                                Python type(s)
 ===== ======================================== ====================================================
-0     Standard date/time string                datetime.date / datetime.datetime
-1     Epoch-based date/time                    datetime.date / datetime.datetime
-2     Positive bignum                          int / long
-3     Negative bignum                          int / long
-4     Decimal fraction                         decimal.Decimal
-5     Bigfloat                                 decimal.Decimal
-25    String reference                         str / bytes
+0     Standard datetime string                 :class:`datetime.datetime`
+1     Epoch-based datetime                     :class:`datetime.datetime`
+2     Positive bignum                          :class:`int`
+3     Negative bignum                          :class:`int`
+4     Decimal fraction                         :class:`decimal.Decimal`
+5     Bigfloat                                 :class:`decimal.Decimal`
+25    String reference                         :class:`str` / :class:`bytes`
 28    Mark shared value                        N/A
 29    Reference shared value                   N/A
-30    Rational number                          fractions.Fraction
-35    Regular expression                       re.Pattern (result of ``re.compile(...)``)
-36    MIME message                             email.message.Message
-37    Binary UUID                              uuid.UUID
+30    Rational number                          :class:`fractions.Fraction`
+35    Regular expression                       :class:`re.Pattern` (result of ``re.compile(...)``)
+36    MIME message                             :class:`email.message.Message`
+37    Binary UUID                              :class:`uuid.UUID`
 52    IPv4 address/network                     :class:`ipaddress.IPv4Address` or
                                                :class:`ipaddress.IPv4Network`
 54    IPv6 address/network                     :class:`ipaddress.IPv6Address` or
                                                :class:`ipaddress.IPv6Network`
+100   Epoch-based date                         :class:`datetime.date`
 256   String reference namespace               N/A
-258   Set of unique items                      set
-260   Network address (**decode only**)        :class:`ipaddress.IPv4Address` (or IPv6)
-261   Network prefix (**decode only**)         :class:`ipaddress.IPv4Network` (or IPv6)
-43000 Single complex number                    complex
+258   Set of unique items                      :class:`set`
+260   Network address (**DEPRECATED**)         :class:`ipaddress.IPv4Address` or
+                                               :class:`ipaddress.IPv4Address`
+261   Network prefix (**DEPRECATED)**)         :class:`ipaddress.IPv4Network`,
+                                               :class:`ipaddress.IPv4Interface`,
+                                               :class:`ipaddress.IPv6Network` or
+                                               :class:`ipaddress.IPv6Interface`
+1004  ISO formatted date string                :class:`datetime.date`
+43000 Single complex number                    :class:`complex`
 55799 Self-Described CBOR                      object
 ===== ======================================== ====================================================
 
-Arbitary tags can be represented with the :class:`CBORTag` class.
+Any unsupported semantic tags encountered by the decoder will be decoded as :class:`CBORTag`
+objects.
 
-If you want to write a file that is detected as CBOR by the Unix ``file`` utility, wrap your data in
-a :class:`CBORTag` object like so::
+Encoder support for built-in CBOR types
+---------------------------------------
+
+Below is the list of Python types encoded as various major CBOR tags or special
+values.
+
+================================= ========= ===============================
+Python type                       Major tag Subtype
+================================= ========= ===============================
+:class:`int`                      0 or 1
+:class:`bytes`                    2
+:class:`bytearray`                2
+:class:`str`                      3
+:class:`list`                     4
+:class:`tuple`                    4
+:class:`collections.abc.Sequence` 4
+:class:`dict`                     5
+:class:`collections.abc.Mapping`  5
+:class:`bool`                     7         20 (``False``) or 21 (``True``)
+:data:`None`                      7         22
+:data:`undefined`                 7         23
+:class:`float`                    7         27
+:data:`break_marker`              7         31
+================================= ========= ===============================
+
+Encoder semantic tag support
+----------------------------
+
+Below is the list of Python types and the semantic tags they're encoded as.
+
+================================= =========================================
+Python type                       Semantic tag
+================================= =========================================
+:class:`complex`                  43000
+:class:`datetime.datetime`        0 or 1, depending on the
+                                  ``datetime_as_timestamp`` setting
+:class:`datetime.date`            1004, 100, 1 or 0, depending on the
+                                  ``date_as_datetime`` and
+                                  ``datetime_as_timestamp`` settings
+:class:`decimal.Decimal`          4 (unless NaN or infinities, which are
+                                  encoded as floats)
+:class:`fractions.Fraction`       30
+:class:`frozenset`                258
+:class:`re.Pattern`               35
+:class:`email.mime.text.MIMEText` 35
+:class:`ipaddress.IPv4Address`    52
+:class:`ipaddress.IPv4Interface`  52
+:class:`ipaddress.IPv4Network`    52
+:class:`ipaddress.IPv6Address`    54
+:class:`ipaddress.IPv6Interface`  54
+:class:`ipaddress.IPv6Network`    54
+:class:`set`                      258
+:class:`uuid.UUID`                37
+================================= =========================================
+
+
+If you want to write a file that is detected as CBOR by the Unix ``file`` utility, wrap your data
+in a :class:`CBORTag` object like so::
 
     from cbor2 import dump, CBORTag
 

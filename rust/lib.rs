@@ -37,7 +37,7 @@ mod _cbor2 {
     ///  :param tag_hook:
     ///      callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
     ///      to be decoded. This callback is invoked for any tags for which there is no
-    ///      built-in decoder. The return value is substituted for the :class:`.CBORTag`
+    ///      specific decoder. The return value is substituted for the :class:`.CBORTag`
     ///      object in the deserialized output
     ///  :param object_hook:
     ///      callable that takes 2 arguments: the decoder instance, and a dictionary. This
@@ -341,19 +341,20 @@ mod _cbor2 {
         register_semantic_decoder(3, "decode_negative_bignum")?;
         register_semantic_decoder(4, "decode_fraction")?;
         register_semantic_decoder(5, "decode_bigfloat")?;
+        register_semantic_decoder(25, "decode_stringref")?;
         register_semantic_decoder(28, "decode_shareable")?;
         register_semantic_decoder(29, "decode_sharedref")?;
         register_semantic_decoder(30, "decode_rational")?;
         register_semantic_decoder(35, "decode_regexp")?;
         register_semantic_decoder(36, "decode_mime")?;
         register_semantic_decoder(37, "decode_uuid")?;
-        // register_semantic_decoder(52, "decode_ipv4")?;
-        // register_semantic_decoder(54, "decode_ipv6")?;
+        register_semantic_decoder(52, "decode_ipv4")?;
+        register_semantic_decoder(54, "decode_ipv6")?;
         register_semantic_decoder(100, "decode_epoch_date")?;
         register_semantic_decoder(256, "decode_stringref_namespace")?;
         register_semantic_decoder(258, "decode_set")?;
-        // register_semantic_decoder(260, "decode_ipaddress")?;
-        // register_semantic_decoder(261, "decode_ipnetwork")?;
+        register_semantic_decoder(260, "decode_ipaddress")?;
+        register_semantic_decoder(261, "decode_ipnetwork")?;
         register_semantic_decoder(1004, "decode_date_string")?;
         register_semantic_decoder(43000, "decode_complex")?;
         m.add("semantic_decoders", semantic_decoders)?;

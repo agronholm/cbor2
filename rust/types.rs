@@ -21,6 +21,12 @@ pub struct CBORTag {
     pub value: Py<PyAny>,
 }
 
+impl CBORTag {
+    pub fn new_internal(tag: u64, value: Bound<'_, PyAny>) -> Self {
+        Self { tag, value: value.unbind() }
+    }
+}
+
 #[pymethods]
 impl CBORTag {
     #[new]
@@ -28,10 +34,7 @@ impl CBORTag {
         let tag: u64 = tag.extract().map_err(|_| {
             PyTypeError::new_err("CBORTag tags must be positive integers less than 2**64")
         })?;
-        Ok(Self {
-            tag,
-            value: value.unbind(),
-        })
+        Ok(Self::new_internal(tag, value))
     }
 
     fn __richcmp__<'py>(

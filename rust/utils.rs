@@ -1,5 +1,10 @@
 use pyo3::prelude::*;
-use pyo3::{PyErr, PyResult, Python};
+use pyo3::{import_exception, PyErr, PyResult, Python};
+use pyo3::exceptions::{PyException, PyTypeError, PyUnicodeDecodeError, PyValueError};
+
+import_exception!(cbor2._types, CBORDecodeError);
+import_exception!(cbor2._types, CBORDecodeValueError);
+import_exception!(cbor2._types, CBORDecodeTypeError);
 
 pub fn create_cbor_error(
     py: Python<'_>,
