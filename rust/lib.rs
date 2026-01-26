@@ -357,6 +357,7 @@ mod _cbor2 {
         register_semantic_decoder(261, "decode_ipnetwork")?;
         register_semantic_decoder(1004, "decode_date_string")?;
         register_semantic_decoder(43000, "decode_complex")?;
+        register_semantic_decoder(55799, "decode_self_describe_cbor")?;
         m.add("semantic_decoders", semantic_decoders)?;
         Ok(())
     }

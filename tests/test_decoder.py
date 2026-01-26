@@ -1027,7 +1027,7 @@ def test_invalid_indefinite_data_item(data: str) -> None:
         pytest.param("5f5bff0000000000000471717272ff", id="bytes"),
     ],
 )
-def test_indefinite_overflow(data):
+def test_indefinite_overflow(data: str) -> None:
     with pytest.raises(CBORDecodeValueError):
         loads(unhexlify(data))
 

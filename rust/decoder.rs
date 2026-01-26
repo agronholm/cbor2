@@ -159,6 +159,7 @@ impl CBORDecoder {
         let mut this = slf.borrow_mut();
         if let Some(index) = this.share_index {
             this.shareables[index] = Some(value.clone().unbind().into_any());
+            this.share_index = None;
         }
         value
     }
@@ -351,11 +352,7 @@ impl CBORDecoder {
     /// :param value: the shared value
     /// :returns: the shared value to permit chaining
     fn set_shareable<'py>(slf: &Bound<'_, Self>, value: Bound<'py, PyAny>) -> Bound<'py, PyAny> {
-        let mut this = slf.borrow_mut();
-        if let Some(index) = this.share_index {
-            this.shareables[index] = Some(value.clone().unbind().into_any())
-        }
-        value
+        Self::set_shareable_internal(slf, value)
     }
 
     /// Decode the next value from the stream.
@@ -611,43 +608,47 @@ impl CBORDecoder {
         // Major tag 4
         let py = slf.py();
         let immutable = slf.borrow().immutable;
-        match Self::decode_length(slf, subtype)? {
-            None => {
-                // Indefinite length
+        let length = Self::decode_length(slf, subtype)?;
+        match (length, immutable) {
+            (None, true) => {
+                // Tuple of indefinite length
                 let mut items = Vec::<Bound<'_, PyAny>>::new();
-                if immutable {
-                    // Construct a tuple (not shareable)
-                    loop {
-                        let obj = Self::decode(slf)?;
-                        if obj.is_exact_instance_of::<BreakMarkerType>() {
-                            let tuple = PyTuple::new(py, items)?;
-                            break Ok(tuple.into_any());
-                        }
-                        items.push(obj);
+                loop {
+                    let obj = Self::decode(slf)?;
+                    if obj.is_exact_instance_of::<BreakMarkerType>() {
+                        let tuple = PyTuple::new(py, items)?;
+                        break Ok(tuple.into_any());
                     }
-                } else {
-                    // Construct a list (shareable)
-                    let list = Self::set_shareable_internal(slf, PyList::empty(py));
-                    loop {
-                        let obj = Self::decode(slf)?;
-                        if obj.is_exact_instance_of::<BreakMarkerType>() {
-                            break Ok(list.into_any());
-                        } else {
-                            list.append(obj)?;
-                        }
+                    items.push(obj);
+                }
+            }
+            (None, false) => {
+                // Indefinite length list (shareable)
+                let list = Self::set_shareable_internal(slf, PyList::empty(py));
+                loop {
+                    let obj = Self::decode(slf)?;
+                    if obj.is_exact_instance_of::<BreakMarkerType>() {
+                        break Ok(list.into_any());
+                    } else {
+                        list.append(obj)?;
                     }
                 }
             }
-            Some(length) => {
-                let mut items = Vec::<Bound<'_, PyAny>>::with_capacity(length as usize);
+            (Some(length), true) => {
+                // Fixed-length tuple
+                let mut items = Vec::<Bound<'_, PyAny>>::with_capacity(length);
                 for _ in 0..length {
                     items.push(Self::decode(slf)?);
                 }
-
-                match immutable {
-                    true => Ok(PyTuple::new(py, items)?.into_any()),
-                    false => Ok(PyList::new(py, items)?.into_any()),
+                Ok(PyTuple::new(py, items)?.into_any())
+            }
+            (Some(length), false) => {
+                // Fixed-length list (shareable)
+                let list = Self::set_shareable_internal(slf, PyList::empty(py));
+                for _ in 0..length {
+                    list.append(Self::decode(slf)?)?;
                 }
+                Ok(list.into_any())
             }
         }
     }
@@ -693,7 +694,7 @@ impl CBORDecoder {
 
         // If we're constructing an immutable map, wrap the dict in a FrozenDict
         if slf.borrow().immutable {
-            let args = PyTuple::new(py, (&dict,).into_pyobject(py))?;
+            let args = PyTuple::new(py, [dict])?;
             FrozenDict::new(&args)?.into_bound_py_any(py)
         } else {
             Ok(dict.into_any())
@@ -991,7 +992,7 @@ impl CBORDecoder {
     fn decode_sharedref<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 29
         let py = slf.py();
-        let index: usize = Self::with_unshared(slf, || Self::decode(slf))?.extract()?;
+        let index: usize = Self::decode(slf)?.extract()?;
         match slf.borrow().shareables.get(index) {
             None => raise_cbor_error(
                 slf.py(),
@@ -1317,5 +1318,10 @@ impl CBORDecoder {
             let imag: f64 = tuple.get_item(1)?.extract()?;
             Ok(PyComplex::from_doubles(py, real, imag))
         })
+    }
+
+    fn decode_self_describe_cbor<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        // Semantic tag 55799
+        Self::decode(slf)
     }
 }

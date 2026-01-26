@@ -18,6 +18,7 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
+from _pytest.fixtures import FixtureRequest, SubRequest
 from hypothesis import given
 
 from cbor2 import (
@@ -136,7 +137,7 @@ def test_canonical_attr():
         assert enc.canonical
 
 
-def test_dump():
+def test_dump() -> None:
     with pytest.raises(TypeError):
         dump()
     with pytest.raises(TypeError):
@@ -169,7 +170,7 @@ def test_dump():
         (-1000, "3903e7"),
     ],
 )
-def test_integer(value, expected):
+def test_integer(value: int, expected: str) -> None:
     expected = unhexlify(expected)
     assert dumps(value) == expected
 
@@ -185,7 +186,7 @@ def test_integer(value, expected):
         (float("-inf"), "f9fc00"),
     ],
 )
-def test_float(value, expected):
+def test_float(value: float, expected: str) -> None:
     expected = unhexlify(expected)
     assert dumps(value) == expected
 
@@ -197,12 +198,12 @@ def test_float(value, expected):
         (b"\x01\x02\x03\x04", "4401020304"),
     ],
 )
-def test_bytestring(value, expected):
+def test_bytestring(value: bytes, expected: str) -> None:
     expected = unhexlify(expected)
     assert dumps(value) == expected
 
 
-def test_bytearray():
+def test_bytearray() -> None:
     expected = unhexlify("4401020304")
     assert dumps(bytearray(b"\x01\x02\x03\x04")) == expected
 
@@ -218,41 +219,46 @@ def test_bytearray():
         ("\u6c34", "63e6b0b4"),
     ],
 )
-def test_string(value, expected):
+def test_string(value: str, expected: str) -> None:
     expected = unhexlify(expected)
     assert dumps(value) == expected
 
 
 @pytest.fixture(
-    params=[(False, "f4"), (True, "f5"), (None, "f6"), ("undefined", "f7")],
-    ids=["false", "true", "null", "undefined"],
+    params=[
+        pytest.param((False, "f4"), id="false"),
+        pytest.param((True, "f5"), id="true"),
+        pytest.param((None, "f6"), id="null"),
+        pytest.param((undefined, "f7"), id="undefined"),
+    ]
 )
-def special_values(request, impl):
+def special_values(request: FixtureRequest) -> tuple[object, str]:
     value, expected = request.param
     if value == "undefined":
         value = undefined
+
     return value, expected
 
 
-def test_special(special_values):
+def test_special(special_values: tuple[object, str]) -> None:
     value, expected = special_values
     expected = unhexlify(expected)
     assert dumps(value) == expected
 
 
 @pytest.fixture(params=[(0, "e0"), (2, "e2"), (23, "f7"), (32, "f820")])
-def simple_values(request, impl):
+def simple_values(request: SubRequest) -> CBORSimpleValue:
     value, expected = request.param
     return CBORSimpleValue(value), expected
 
 
-def test_simple_value(simple_values):
+def test_simple_value(simple_values: CBORSimpleValue) -> None:
     value, expected = simple_values
     expected = unhexlify(expected)
     assert dumps(value) == expected
 
 
-def test_simple_val_as_key():
+def test_simple_val_as_key() -> None:
     payload = {CBORSimpleValue(99): 1}
     result = dumps(payload)
     assert result == unhexlify("A1F86301")
@@ -718,7 +724,7 @@ class TestEncoderReuse:
     Tests for correct behavior when reusing CBOREncoder instances.
     """
 
-    def test_encoder_reuse_resets_shared_containers(self, impl):
+    def test_encoder_reuse_resets_shared_containers(self) -> None:
         """
         Shared container tracking should be scoped to a single encode operation,
         not persist across multiple encodes on the same encoder instance.
@@ -740,7 +746,7 @@ class TestEncoderReuse:
         result = loads(second_output)
         assert result == ["hello"]
 
-    def test_encode_to_bytes_resets_shared_containers(self, impl):
+    def test_encode_to_bytes_resets_shared_containers(self) -> None:
         """
         encode_to_bytes should also reset shared container tracking between calls.
         """
@@ -756,7 +762,7 @@ class TestEncoderReuse:
         result = loads(result_bytes)
         assert result == ["hello"]
 
-    def test_encoder_hook_does_not_reset_state(self, impl):
+    def test_encoder_hook_does_not_reset_state(self) -> None:
         """
         When a custom encoder hook calls encode(), the shared container
         tracking should be preserved (not reset mid-operation).

@@ -25,7 +25,6 @@ basic_immutable_strategy = strategies.one_of(
     strategies.floats(allow_nan=False),
     strategies.decimals(allow_nan=False),
     strategies.datetimes(timezones=timezones),
-    # TODO: this needs to be fetched from impl fixture instead of imported
     # strategies.just(undefined),
     strategies.fractions(),
     strategies.uuids(),
