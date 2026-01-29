@@ -254,7 +254,6 @@ impl CBOREncoder {
     #[setter]
     fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
         if !fp.is_none() && fp.is(&self.fp) {
-            println!("assigned existing value as fp: {fp}");
             return Ok(())
         }
 
@@ -601,7 +600,6 @@ impl CBOREncoder {
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("key", slf.getattr("encode_sortable_item")?)?;
                 iterator = sorted_func.call((iterator,), Some(&kwargs))?.try_iter()?;
-                println!("encoding canonical map")
             }
             for item in iterator {
                 let (key, value): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;

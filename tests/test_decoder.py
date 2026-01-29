@@ -234,10 +234,10 @@ def test_float_nan(payload):
 
 @pytest.fixture(
     params=[
-        pytest.param("f4", False, id="false"),
-        pytest.param("f5", True, id="true"),
-        pytest.param("f6", None, id="null"),
-        pytest.param("f7", "undefined", id="undefined"),
+        pytest.param(("f4", False), id="false"),
+        pytest.param(("f5", True), id="true"),
+        pytest.param(("f6", None), id="null"),
+        pytest.param(("f7", "undefined"), id="undefined"),
     ],
 )
 def special_values(request: FixtureRequest) -> tuple[str, Any]:
