@@ -11,6 +11,7 @@ use pyo3::types::{
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::collections::HashMap;
+use std::mem::take;
 
 #[pyclass(module = "cbor2")]
 pub struct CBOREncoder {
@@ -46,35 +47,12 @@ pub struct CBOREncoder {
 
     buffer: Vec<u8>,
     shared_containers: HashMap<usize, (Py<PyAny>, Option<Py<PyInt>>)>,
-    string_references: HashMap<String, u64>,
-    bytes_references: HashMap<String, u64>,
+    string_references: HashMap<String, usize>,
+    bytes_references: HashMap<Vec<u8>, usize>,
+    encode_depth: usize,
 }
 
 const MAX_BUFFER_SIZE: usize = 4096;
-
-pub fn with(
-    cm: &Bound<'_, PyAny>,
-    f: impl FnOnce(Bound<'_, PyAny>) -> PyResult<()>,
-) -> PyResult<()> {
-    let py = cm.py();
-    let enter_fn = cm.getattr("__enter__")?;
-    let exit_fn = cm.getattr("__exit__")?;
-    let managed = enter_fn.call0()?;
-    match f(managed) {
-        Ok(_) => {
-            let none = py.None();
-            exit_fn.call1((&none, &none, &none)).map(|_| ())
-        }
-        Err(exc) => {
-            let exit_result =
-                exit_fn.call1((exc.get_type(py), exc.value(py), exc.traceback(py)))?;
-            match exit_result.is_truthy()? {
-                true => Ok(()),
-                false => Err(exc),
-            }
-        }
-    }
-}
 
 impl CBOREncoder {
     fn encode_shared_internal(
@@ -173,6 +151,46 @@ impl CBOREncoder {
 
         Self::disable_string_namespacing(slf, || Self::encode_shared_internal(slf, obj, f))
     }
+
+    fn maybe_stringref(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let py = slf.py();
+        let mut this = slf.borrow_mut();
+        let (index, is_string) = if let Ok(py_string) = value.cast::<PyString>() {
+            let string: String = py_string.extract()?;
+            (this.string_references.get(&string).copied(), true)
+        } else {
+            let bytes: Vec<u8> = value.cast::<PyBytes>()?.extract()?;
+            (this.bytes_references.get(&bytes).copied(), false)
+        };
+        match index {
+            Some(index) => {
+                drop(this);
+                Self::encode_semantic(slf, 25, PyInt::new(py, index).as_any())?;
+                Ok(true)
+            }
+            None => {
+                let length = value.len()?;
+                let next_index = this.string_references.len() + this.bytes_references.len();
+                let is_referenced = match next_index {
+                    ..24 => length >= 3,
+                    24..256 => length >= 4,
+                    256..65536 => length >= 5,
+                    65536..4294967296 => length >= 7,
+                    _ => length >= 11,
+                };
+
+                if is_referenced {
+                    if is_string {
+                        this.string_references.insert(value.extract()?, next_index);
+                    } else {
+                        this.bytes_references.insert(value.extract()?, next_index);
+                    }
+                }
+
+                Ok(false)
+            }
+        }
+    }
 }
 
 #[pymethods]
@@ -201,14 +219,15 @@ impl CBOREncoder {
         string_referencing: bool,
         indefinite_containers: bool,
     ) -> PyResult<Self> {
+        let py = fp.py();
         let encoders: Bound<'_, PyDict> =
-            fp.py().import("cbor2")?.getattr("encoders")?.cast_into()?;
+            py.import("cbor2")?.getattr("encoders")?.cast_into()?;
         let mut instance = Self {
-            fp: fp.clone().unbind(),
+            fp: py.None(),
             datetime_as_timestamp,
-            timezone: timezone.map(|tz| tz.clone().unbind()),
+            timezone: None,
             value_sharing,
-            default: default.map(|dflt| dflt.clone().unbind()),
+            default: None,
             canonical,
             date_as_datetime,
             string_referencing,
@@ -219,6 +238,7 @@ impl CBOREncoder {
             shared_containers: HashMap::new(),
             string_references: HashMap::new(),
             bytes_references: HashMap::new(),
+            encode_depth: 0,
         };
         instance.set_fp(fp)?;
         instance.set_timezone(timezone)?;
@@ -233,10 +253,22 @@ impl CBOREncoder {
 
     #[setter]
     fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
+        if !fp.is_none() && fp.is(&self.fp) {
+            println!("assigned existing value as fp: {fp}");
+            return Ok(())
+        }
+
         let result = fp.getattr("write");
         if let Ok(write) = result
             && write.is_callable()
         {
+            if !self.fp.is_none(fp.py()) {
+                // Flush any pending writes before replacing the file pointer
+                self.flush(fp.py())?;
+                self.shared_containers.clear();
+                self.string_references.clear();
+                self.bytes_references.clear();
+            }
             self.fp = fp.clone().unbind();
             Ok(())
         } else {
@@ -359,8 +391,19 @@ impl CBOREncoder {
     }
 
     pub fn encode(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
+        slf.borrow_mut().encode_depth += 1;
+
         Self::encode_value(slf, obj)?;
-        slf.borrow_mut().flush(slf.py())
+
+        let mut this = slf.borrow_mut();
+        this.encode_depth -= 1;
+        if this.encode_depth == 0 {
+            this.flush(slf.py())?;
+            this.shared_containers.clear();
+            this.string_references.clear();
+            this.bytes_references.clear();
+        }
+        Ok(())
     }
 
     /// Encode the given object to a byte buffer and return its value as bytes.
@@ -375,20 +418,26 @@ impl CBOREncoder {
         let py = slf.py();
         let mut this = slf.borrow_mut();
         let old_fp = this.fp.clone_ref(py);
-        let old_buffer = this.buffer.clone();
+        let old_buffer = take(&mut this.buffer);
         let fp = slf.py().import("io")?.getattr("BytesIO")?.call0()?;
         this.fp = fp.unbind();
         drop(this);
+
         let result = Self::encode(slf, obj);
+
         this = slf.borrow_mut();
-        this.fp = old_fp;
+        this.flush(py)?;
         this.buffer = old_buffer;
         match result {
             Ok(()) => {
                 let py_buffer = this.fp.call_method0(py, "getvalue")?;
+                this.fp = old_fp;
                 Ok(py_buffer.clone_ref(py).into_bound(py).cast_into()?)
             }
-            Err(err) => Err(err),
+            Err(err) => {
+                this.fp = old_fp;
+                Err(err)
+            },
         }
     }
 
@@ -409,12 +458,23 @@ impl CBOREncoder {
     /// This is used as the sorting key in CBOR's canonical representations.
     pub fn encode_sortable_key<'py>(
         slf: &Bound<'py, Self>,
-        value: &Bound<'py, PyAny>,
+        key: &Bound<'py, PyAny>,
     ) -> PyResult<(usize, Bound<'py, PyAny>)> {
         Self::disable_string_referencing(slf, || {
-            let encoded = Self::encode_to_bytes(slf, value)?;
+            let encoded = Self::encode_to_bytes(slf, &key)?;
             Ok((encoded.len()?, encoded.cast_into()?))
         })
+    }
+
+    /// Takes a (key, value) tuple and calculates the length of its optimal byte
+    /// representation, along with the representation itself.
+    /// This is used as the sorting key in CBOR's canonical representations.
+    pub fn encode_sortable_item<'py>(
+        slf: &Bound<'py, Self>,
+        item: &Bound<'py, PyTuple>,
+    ) -> PyResult<(usize, Bound<'py, PyAny>)> {
+        let key = item.get_item(0)?;
+        Self::encode_sortable_key(slf, &key)
     }
 
     #[pyo3(signature = (major_tag: "int", length: "int | None" = None))]
@@ -454,25 +514,45 @@ impl CBOREncoder {
 
     pub fn encode_string(slf: &Bound<'_, Self>, obj: &Bound<'_, PyString>) -> PyResult<()> {
         let py = slf.py();
+        let string_referencing = slf.borrow().string_referencing;
+
+        // If string referencing is enabled, check if this string already has an index,
+        // and emit a string reference instead if it does
+        if string_referencing {
+            if Self::maybe_stringref(slf, obj)? {
+                return Ok(())
+            }
+        }
+
+        let mut this = slf.borrow_mut();
         let encoded = obj.to_str()?.as_bytes();
-        slf.borrow_mut()
-            .encode_length(py, 3, Some(encoded.len() as u64))?;
-        slf.borrow_mut().fp_write(py, encoded.to_vec())
+        this.encode_length(py, 3, Some(encoded.len() as u64))?;
+        this.fp_write(py, encoded.to_vec())
     }
 
     pub fn encode_bytes(slf: &Bound<'_, Self>, obj: &Bound<'_, PyBytes>) -> PyResult<()> {
         let py = slf.py();
+        let string_referencing = slf.borrow().string_referencing;
+
+        // If string referencing is enabled, check if this string already has an index,
+        // and emit a string reference instead if it does
+        if string_referencing {
+            if Self::maybe_stringref(slf, obj)? {
+                return Ok(())
+            }
+        }
+
+        let mut this = slf.borrow_mut();
         let bytes = obj.as_bytes();
-        slf.borrow_mut()
-            .encode_length(py, 2, Some(bytes.len() as u64))?;
-        slf.borrow_mut().fp_write(py, bytes.to_vec())
+        this.encode_length(py, 2, Some(bytes.len() as u64))?;
+        this.fp_write(py, bytes.to_vec())
     }
 
     pub fn encode_bytearray(slf: &Bound<'_, Self>, obj: &Bound<'_, PyByteArray>) -> PyResult<()> {
         let py = slf.py();
-        slf.borrow_mut()
-            .encode_length(py, 2, Some(obj.len() as u64))?;
-        slf.borrow_mut().fp_write(py, obj.to_vec())
+        let mut this = slf.borrow_mut();
+        this.encode_length(py, 2, Some(obj.len() as u64))?;
+        this.fp_write(py, obj.to_vec())
     }
 
     fn encode_array(slf: &Bound<'_, Self>, obj: &Bound<'_, PySequence>) -> PyResult<()> {
@@ -515,8 +595,13 @@ impl CBOREncoder {
 
             let mut iterator = obj.call_method0("items")?.try_iter()?;
             if slf.borrow().canonical {
+                // Reorder keys according to Canonical CBOR specification where they're sorted
+                // by the length of the CBOR encoded value first, and only then by the lexical order
                 let sorted_func = py.import("builtins")?.getattr("sorted")?;
-                iterator = sorted_func.call1((iterator,))?.try_iter()?;
+                let kwargs = PyDict::new(py);
+                kwargs.set_item("key", slf.getattr("encode_sortable_item")?)?;
+                iterator = sorted_func.call((iterator,), Some(&kwargs))?.try_iter()?;
+                println!("encoding canonical map")
             }
             for item in iterator {
                 let (key, value): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
@@ -593,12 +678,32 @@ impl CBOREncoder {
 
     pub fn encode_set(slf: &Bound<'_, Self>, value: &Bound<'_, PySet>) -> PyResult<()> {
         // Semantic tag 258
-        Self::encode_semantic(slf, 258, PyTuple::new(slf.py(), value)?.as_any())
+        if slf.borrow().canonical {
+            let py = slf.py();
+            let sorted_func = py.import("builtins")?.getattr("sorted")?;
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("key", slf.getattr("encode_sortable_key")?)?;
+            let list = sorted_func.call((value,), Some(&kwargs))?;
+            Self::encode_semantic(slf, 258, list.as_any())
+        } else {
+            let tuple = PyTuple::new(slf.py(), value)?;
+            Self::encode_semantic(slf, 258, tuple.as_any())
+        }
     }
 
     pub fn encode_frozenset(slf: &Bound<'_, Self>, value: &Bound<'_, PyFrozenSet>) -> PyResult<()> {
         // Semantic tag 258
-        Self::encode_semantic(slf, 258, PyTuple::new(slf.py(), value)?.as_any())
+        if slf.borrow().canonical {
+            let py = slf.py();
+            let sorted_func = py.import("builtins")?.getattr("sorted")?;
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("key", slf.getattr("encode_sortable_key")?)?;
+            let list = sorted_func.call((value,), Some(&kwargs))?;
+            Self::encode_semantic(slf, 258, list.as_any())
+        } else {
+            let tuple = PyTuple::new(slf.py(), value)?;
+            Self::encode_semantic(slf, 258, tuple.as_any())
+        }
     }
 
     //

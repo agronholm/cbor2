@@ -233,8 +233,12 @@ def test_float_nan(payload):
 
 
 @pytest.fixture(
-    params=[("f4", False), ("f5", True), ("f6", None), ("f7", "undefined")],
-    ids=["false", "true", "null", "undefined"],
+    params=[
+        pytest.param("f4", False, id="false"),
+        pytest.param("f5", True, id="true"),
+        pytest.param("f6", None, id="null"),
+        pytest.param("f7", "undefined", id="undefined"),
+    ],
 )
 def special_values(request: FixtureRequest) -> tuple[str, Any]:
     payload, expected = request.param
@@ -433,18 +437,16 @@ def test_simple_val_as_key() -> None:
 @pytest.mark.parametrize(
     "payload, expected",
     [
-        (
+        pytest.param(
             "d903ec6a323031332d30332d3231",
             date(2013, 3, 21),
+            id="date/string",
         ),
-        (
+        pytest.param(
             "d8641945e8",
             date(2018, 12, 31),
+            id="date/timestamp",
         ),
-    ],
-    ids=[
-        "date/string",
-        "date/timestamp",
     ],
 )
 def test_date(payload, expected):
@@ -455,30 +457,31 @@ def test_date(payload, expected):
 @pytest.mark.parametrize(
     "payload, expected",
     [
-        (
+        pytest.param(
             "c074323031332d30332d32315432303a30343a30305a",
             datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc),
+            id="datetime/utc",
         ),
-        (
+        pytest.param(
             "c0781b323031332d30332d32315432303a30343a30302e3338303834315a",
             datetime(2013, 3, 21, 20, 4, 0, 380841, tzinfo=timezone.utc),
+            id="datetime+micro/utc",
         ),
-        (
+        pytest.param(
             "c07819323031332d30332d32315432323a30343a30302b30323a3030",
             datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))),
+            id="datetime/eet",
         ),
-        ("c11a514b67b0", datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)),
-        (
+        pytest.param(
+            "c11a514b67b0",
+            datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc),
+            id="timestamp/utc",
+        ),
+        pytest.param(
             "c11a514b67b0",
             datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))),
+            id="timestamp/eet",
         ),
-    ],
-    ids=[
-        "datetime/utc",
-        "datetime+micro/utc",
-        "datetime/eet",
-        "timestamp/utc",
-        "timestamp/eet",
     ],
 )
 def test_datetime(payload, expected):
@@ -859,10 +862,13 @@ class TestStringReference:
 @pytest.mark.parametrize(
     "payload, expected",
     [
-        ("d9d9f71903e8", 1000),
-        ("d9d9f7c249010000000000000000", 18446744073709551616),
+        pytest.param("d9d9f71903e8", 1000, id="self_describe_cbor+int"),
+        pytest.param(
+            "d9d9f7c249010000000000000000",
+            18446744073709551616,
+            id="self_describe_cbor+positive_bignum",
+        ),
     ],
-    ids=["self_describe_cbor+int", "self_describe_cbor+positive_bignum"],
 )
 def test_self_describe_cbor(payload: str, expected: object) -> None:
     assert loads(unhexlify(payload)) == expected
@@ -999,14 +1005,22 @@ def test_huge_truncated_data(dtype_prefix: str, will_overflow: bytes) -> None:
         loads(unhexlify(dtype_prefix) + will_overflow)
 
 
-@pytest.mark.parametrize("tag_dtype", ["7F7B", "5f5B"], ids=["string", "bytes"])
+@pytest.mark.parametrize(
+    "tag_dtype", [pytest.param("7F7B", id="string"), pytest.param("5f5B", id="bytes")]
+)
 def test_huge_truncated_indefinite_data(tag_dtype: str, will_overflow: bytes) -> None:
     huge_index = struct.pack("Q", sys.maxsize + 1)
     with pytest.raises((CBORDecodeError, MemoryError)):
         loads(unhexlify(tag_dtype) + huge_index + unhexlify("70717273ff"))
 
 
-@pytest.mark.parametrize("data", ["7f61777f6177ffff", "5f41775f4177ffff"], ids=["string", "bytes"])
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param("7f61777f6177ffff", id="string"),
+        pytest.param("5f41775f4177ffff", id="bytes"),
+    ],
+)
 def test_embedded_indefinite_data(data: str) -> None:
     with pytest.raises(CBORDecodeValueError):
         loads(unhexlify(data))

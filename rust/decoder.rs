@@ -404,6 +404,9 @@ impl CBORDecoder {
         let mut this = slf.borrow_mut();
         let old_fp = this.fp.as_ref().map(|fp| fp.clone_ref(py));
         let old_buffer = take(&mut this.buffer);
+        let shareables = take(&mut this.shareables);
+        let share_index = this.share_index;
+        let stringref_namespace = take(&mut this.stringref_namespace);
         this.fp = None;
         this.buffer = buf;
         drop(this);
@@ -413,6 +416,9 @@ impl CBORDecoder {
         this = slf.borrow_mut();
         this.fp = old_fp;
         this.buffer = old_buffer;
+        this.shareables = shareables;
+        this.share_index = share_index;
+        this.stringref_namespace = stringref_namespace;
         result
     }
 
@@ -616,7 +622,7 @@ impl CBORDecoder {
                 loop {
                     let obj = Self::decode(slf)?;
                     if obj.is_exact_instance_of::<BreakMarkerType>() {
-                        let tuple = PyTuple::new(py, items)?;
+                        let tuple = Self::set_shareable_internal(slf, PyTuple::new(py, items)?);
                         break Ok(tuple.into_any());
                     }
                     items.push(obj);
@@ -640,7 +646,8 @@ impl CBORDecoder {
                 for _ in 0..length {
                     items.push(Self::decode(slf)?);
                 }
-                Ok(PyTuple::new(py, items)?.into_any())
+                let tuple = Self::set_shareable_internal(slf, PyTuple::new(py, items)?);
+                Ok(tuple.into_any())
             }
             (Some(length), false) => {
                 // Fixed-length list (shareable)

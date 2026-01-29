@@ -11,11 +11,10 @@ import cbor2.tool
 @pytest.mark.parametrize(
     "value, expected",
     [
-        ((1, 2, 3), [1, 2, 3]),
-        ({b"\x01\x02\x03": "b"}, {"\x01\x02\x03": "b"}),
-        ({"dict": {"b": 17}}, {"dict": {"b": 17}}),
+        pytest.param((1, 2, 3), [1, 2, 3], id="tuple"),
+        pytest.param({b"\x01\x02\x03": "b"}, {"\x01\x02\x03": "b"}, id="byte_key"),
+        pytest.param({"dict": {"b": 17}}, {"dict": {"b": 17}}, id="recursion"),
     ],
-    ids=["tuple", "byte_key", "recursion"],
 )
 def test_key_to_str(value, expected):
     assert cbor2.tool.key_to_str(value) == expected
@@ -28,8 +27,10 @@ def test_default():
 
 @pytest.mark.parametrize(
     "payload",
-    ["D81CA16162D81CA16161D81D00", "d81c81d81c830102d81d00"],
-    ids=["dict", "list"],
+    [
+        pytest.param("D81CA16162D81CA16161D81D00", id="dict"),
+        pytest.param("d81c81d81c830102d81d00", id="list"),
+    ],
 )
 def test_self_referencing(payload):
     decoded = cbor2.loads(binascii.unhexlify(payload))

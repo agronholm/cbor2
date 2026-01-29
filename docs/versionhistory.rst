@@ -12,8 +12,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   Rust-based implementation in the interest of maintainability and memory safety
 - **BACKWARD INCOMPATIBLE** Changed the decoding of semantic tag 261 to yield an ``IPv4Interface``
   or ``IPv6Interface`` if the address contains host bits
-- Changed the encoding of IP addresses to use the semantic tags 52 and 54 instead of the deprecated
-  260 and 261 (`#232 <https://github.com/agronholm/cbor2/issues/232>`_)
+- **BACKWARD INCOMPATIBLE** Changed the encoding of IP addresses to use the semantic tags 52 and 54
+  instead of the deprecated 260 and 261 (`#232 <https://github.com/agronholm/cbor2/issues/232>`_)
 - Fixed string references to work with indefinite-length (byte/unicode) strings too
 
 **5.8.0** (2025-12-30)
