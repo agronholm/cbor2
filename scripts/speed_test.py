@@ -125,6 +125,8 @@ def color_time(t, lim):
     time_str = format_time(t)
     if isinstance(t, Exception):
         return RED + time_str + RESET
+    elif isinstance(lim, Exception):
+        return time_str
     elif t.time <= lim.time * 0.8:
         return GREEN + time_str + RESET
     elif t.time > lim.time * 1.05:
@@ -163,9 +165,9 @@ def output_table(results):
                 "  ",
                 " " * col_widths[0],
                 " +-",
-                "-" * (sum(col_widths[1:4]) + 6),
+                "-" * (sum(col_widths[1:3]) + 3),
                 "-+-",
-                "-" * (sum(col_widths[4:7]) + 6),
+                "-" * (sum(col_widths[3:5]) + 3),
                 "-+",
             )
         )
@@ -176,9 +178,9 @@ def output_table(results):
                 "  ",
                 " " * col_widths[0],
                 " | ",
-                "{value:^{width}}".format(value="Encoding", width=sum(col_widths[1:4]) + 6),
+                "{value:^{width}}".format(value="Encoding", width=sum(col_widths[1:3]) + 3),
                 " | ",
-                "{value:^{width}}".format(value="Decoding", width=sum(col_widths[4:7]) + 6),
+                "{value:^{width}}".format(value="Decoding", width=sum(col_widths[3:5]) + 3),
                 " |",
             )
         )
