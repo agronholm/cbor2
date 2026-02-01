@@ -745,11 +745,11 @@ class CBORDecoder:
 
         net_map = self.decode()
         if isinstance(net_map, Mapping) and len(net_map) == 1:
-            for net in net_map.items():
-                try:
+            try:
+                for net in net_map.items():
                     return self.set_shareable(ip_network(net, strict=False))
-                except (TypeError, ValueError):
-                    break
+            except (TypeError, ValueError):
+                pass
 
         raise CBORDecodeValueError(f"invalid ipnetwork value {net_map!r}")
 

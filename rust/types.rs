@@ -15,7 +15,7 @@ use std::hash::{Hash, Hasher};
 ///
 /// :param int tag: tag number
 /// :param value: encapsulated value (any object)
-#[pyclass(get_all, frozen, module = "cbor2")]
+#[pyclass(get_all, module = "cbor2")]
 pub struct CBORTag {
     pub tag: u64,
     pub value: Py<PyAny>,
@@ -71,7 +71,7 @@ impl CBORTag {
         hasher.write_u64(self.tag);
         match self.value.call_method0(py, "__hash__") {
             Ok(value_hash) => {
-                hasher.write_u64(value_hash.extract(py)?);
+                hasher.write_isize(value_hash.extract(py)?);
                 Ok(hasher.finish())
             },
             Err(cause) => {

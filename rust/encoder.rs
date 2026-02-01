@@ -369,7 +369,7 @@ impl CBOREncoder {
         } else if let Ok(simple_value) = obj.cast::<CBORSimpleValue>() {
             Self::encode_simple_value(slf, simple_value)
         } else if let Ok(tag) = obj.cast::<CBORTag>() {
-            let tag = tag.get();
+            let tag = tag.borrow();
             Self::encode_semantic(slf, tag.tag, tag.value.bind(py))
         } else if let Ok(map) = obj.cast::<PyMapping>() {
             Self::encode_map(slf, map)

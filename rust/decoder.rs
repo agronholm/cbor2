@@ -22,6 +22,7 @@ pub struct CBORDecoder {
     object_hook: Option<Py<PyAny>>,
     str_errors: Py<PyAny>,
     read_size: u32,
+    sys_maxsize: usize,
 
     major_decoders: HashMap<u8, Py<PyAny>>,
     semantic_decoders: HashMap<usize, Py<PyAny>>,
@@ -65,6 +66,7 @@ impl CBORDecoder {
 
         let undefined = py.import("cbor2")?.getattr("undefined")?;
         let break_marker = py.import("cbor2")?.getattr("break_marker")?;
+        let sys_maxsize: usize = py.import("sys")?.getattr("maxsize")?.extract()?;
 
         let mut this = Self {
             fp: None,
@@ -72,6 +74,7 @@ impl CBORDecoder {
             object_hook: None,
             str_errors: PyString::new(py, "strict").into_py_any(py)?,
             read_size,
+            sys_maxsize,
             major_decoders: major_decoders_map,
             semantic_decoders: semantic_decoders_map,
             undefined: undefined.unbind(),
@@ -152,16 +155,12 @@ impl CBORDecoder {
         }
     }
 
-    fn set_shareable_internal<'py, T>(
-        slf: &Bound<'_, Self>,
-        value: Bound<'py, T>,
-    ) -> Bound<'py, T> {
+    fn set_shareable_internal<'py, T>(slf: &Bound<'_, Self>, value: &Bound<'py, T>) {
         let mut this = slf.borrow_mut();
         if let Some(index) = this.share_index {
             this.shareables[index] = Some(value.clone().unbind().into_any());
             this.share_index = None;
         }
-        value
     }
 
     fn with_immutable<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
@@ -185,22 +184,6 @@ impl CBORDecoder {
         let result = f();
 
         slf.borrow_mut().share_index = old_share_index;
-        result
-    }
-
-    /// Increment the decoding depth, and if it drops to 0 after calling the given function,
-    /// reset any value sharing state.
-    fn decoding_context<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
-        slf.borrow_mut().decode_depth += 1;
-
-        let result = f();
-
-        let mut this = slf.borrow_mut();
-        this.decode_depth -= 1;
-        if this.decode_depth == 0 {
-            this.shareables.clear();
-            this.share_index = None;
-        }
         result
     }
 
@@ -351,7 +334,7 @@ impl CBORDecoder {
     ///
     /// :param value: the shared value
     /// :returns: the shared value to permit chaining
-    fn set_shareable<'py>(slf: &Bound<'_, Self>, value: Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+    fn set_shareable<'py>(slf: &Bound<'_, Self>, value: &Bound<'py, PyAny>) {
         Self::set_shareable_internal(slf, value)
     }
 
@@ -361,7 +344,8 @@ impl CBORDecoder {
     pub fn decode<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         let py = slf.py();
         let (major_type, subtype) = Self::read_major_and_subtype(slf)?;
-        let decoder = match slf.borrow().major_decoders.get(&major_type) {
+        let mut this = slf.borrow_mut();
+        let decoder = match this.major_decoders.get(&major_type) {
             Some(decoder) => decoder.clone_ref(py).into_bound(py),
             None => {
                 return raise_cbor_error(
@@ -371,7 +355,21 @@ impl CBORDecoder {
                 );
             }
         };
-        Self::decoding_context(slf, || decoder.call1((slf, subtype))).map_err(|err| {
+        this.decode_depth += 1;
+        drop(this);
+
+        let result = decoder.call1((slf, subtype));
+
+        // Clear shareables and string references to prevent any leaks
+        this = slf.borrow_mut();
+        this.decode_depth -= 1;
+        if this.decode_depth == 0 {
+            this.shareables.clear();
+            this.stringref_namespace = None;
+            this.share_index = None;
+        }
+
+        result.map_err(|err| {
             if err.is_instance_of::<CBORDecodeError>(py) {
                 err
             } else if err.is_instance_of::<PyValueError>(py) {
@@ -404,9 +402,6 @@ impl CBORDecoder {
         let mut this = slf.borrow_mut();
         let old_fp = this.fp.as_ref().map(|fp| fp.clone_ref(py));
         let old_buffer = take(&mut this.buffer);
-        let shareables = take(&mut this.shareables);
-        let share_index = this.share_index;
-        let stringref_namespace = take(&mut this.stringref_namespace);
         this.fp = None;
         this.buffer = buf;
         drop(this);
@@ -416,9 +411,6 @@ impl CBORDecoder {
         this = slf.borrow_mut();
         this.fp = old_fp;
         this.buffer = old_buffer;
-        this.shareables = shareables;
-        this.share_index = share_index;
-        this.stringref_namespace = stringref_namespace;
         result
     }
 
@@ -447,7 +439,7 @@ impl CBORDecoder {
         // Major tag 0
         let uint = Self::decode_length_finite(slf, subtype)?;
         let py_int = uint.into_bound_py_any(slf.py())?;
-        Ok(Self::set_shareable(slf, py_int))
+        Ok(py_int)
     }
 
     #[pyo3(signature = (subtype: "int"))]
@@ -456,7 +448,7 @@ impl CBORDecoder {
         let uint = Self::decode_length_finite(slf, subtype)?;
         let signed_int = -(uint as i128) - 1;
         let py_int = signed_int.into_bound_py_any(slf.py())?;
-        Ok(Self::set_shareable(slf, py_int))
+        Ok(py_int)
     }
 
     #[pyo3(signature = (subtype: "int"))]
@@ -476,19 +468,32 @@ impl CBORDecoder {
                     match (major_type, subtype) {
                         (2, _) => {
                             let length = Self::decode_length_finite(slf, subtype)?;
+                            if length > slf.borrow().sys_maxsize {
+                                return raise_cbor_error(
+                                    py,
+                                    "CBORDecodeValueError",
+                                    format!(
+                                        "chunk too long in an indefinite bytestring chunk: {length}"
+                                    )
+                                    .as_str(),
+                                );
+                            }
                             total_length += length;
                             let chunk = Self::read(slf, length)?;
                             bytes = bytes.add(chunk)?.cast_into()?;
                         }
                         (7, 31) => break (bytes, total_length), // break marker
-                        _ => return raise_cbor_error(
-                            py,
-                            "CBORDecodeValueError",
-                            format!(
-                                "invalid major type in indefinite length bytestring: {major_type}"
-                            )
-                            .as_str(),
-                        ),
+                        _ => {
+                            return raise_cbor_error(
+                                py,
+                                "CBORDecodeValueError",
+                                format!(
+                                    "non-bytestring (major type {major_type}) found in indefinite \
+                                    length bytestring"
+                                )
+                                .as_str(),
+                            );
+                        }
                     }
                 }
             }
@@ -510,7 +515,7 @@ impl CBORDecoder {
             }
         };
         slf.borrow_mut().add_string_to_namespace(&decoded, length);
-        Ok(Self::set_shareable_internal(slf, decoded))
+        Ok(decoded)
     }
 
     #[pyo3(signature = (subtype: "int"))]
@@ -522,91 +527,103 @@ impl CBORDecoder {
             let bytes = Self::read(slf, length)?;
             let py_bytes = bytes.into_bound_py_any(py)?;
             py_bytes
-                .call_method1(intern!(py, "decode"), (intern!(py, "utf-8"), str_errors))?
+                .call_method1(intern!(py, "decode"), (intern!(py, "utf-8"), str_errors))
+                .map_err(|e| create_cbor_error(py, "CBORDecodeValueError", "error decoding text string", Some(e)))?
                 .cast_into()
                 .map_err(|e| PyErr::from(e))
         };
 
         // Major tag 3
-        let (decoded, length) =
-            match Self::decode_length(slf, subtype)? {
-                None => {
-                    // Indefinite length
-                    let mut string = PyString::new(py, "");
-                    let mut total_length: usize = 0;
-                    loop {
-                        let (major_type, subtype) = Self::read_major_and_subtype(slf)?;
-                        match (major_type, subtype) {
-                            (3, _) => {
-                                let length = Self::decode_length_finite(slf, subtype)?;
-                                total_length += length;
-                                string = string.add(read_string(length)?)?.cast_into()?;
+        let (decoded, length) = match Self::decode_length(slf, subtype)? {
+            None => {
+                // Indefinite length
+                let mut string = PyString::new(py, "");
+                let mut total_length: usize = 0;
+                loop {
+                    let (major_type, subtype) = Self::read_major_and_subtype(slf)?;
+                    match (major_type, subtype) {
+                        (3, _) => {
+                            let length = Self::decode_length_finite(slf, subtype)?;
+                            if length > slf.borrow().sys_maxsize {
+                                return raise_cbor_error(
+                                    py,
+                                    "CBORDecodeValueError",
+                                    format!(
+                                        "chunk too long in an indefinite text string chunk: {length}"
+                                    ).as_str(),
+                                );
                             }
-                            (7, 31) => break (string, total_length), // break marker
-                            _ => return raise_cbor_error(
+                            total_length += length;
+                            string = string.add(read_string(length)?)?.cast_into()?;
+                        }
+                        (7, 31) => break (string, total_length), // break marker
+                        _ => {
+                            return raise_cbor_error(
                                 py,
                                 "CBORDecodeValueError",
                                 format!(
-                                    "invalid major type in indefinite length string: {major_type}"
+                                    "non-bytestring (major type {major_type}) found in indefinite \
+                                    length text string"
                                 )
                                 .as_str(),
-                            ),
+                            );
                         }
                     }
                 }
-                Some(length) if length <= 65536 => {
-                    let bytes = Self::read(slf, length)?;
-                    let py_bytes = bytes.into_bound_py_any(py)?;
-                    let str_errors = &slf.borrow().str_errors.clone_ref(py);
-                    let decode_result = py_bytes
-                        .call_method1(intern!(py, "decode"), (intern!(py, "utf-8"), str_errors));
-                    if let Ok(decoded_bytes) = decode_result {
-                        (decoded_bytes.cast_into().map_err(PyErr::from)?, length)
-                    } else {
-                        return raise_cbor_error_from(
-                            py,
-                            "CBORDecodeValueError",
-                            "error decoding unicode string",
-                            decode_result.unwrap_err(),
-                        );
-                    }
+            }
+            Some(length) if length <= 65536 => {
+                let bytes = Self::read(slf, length)?;
+                let py_bytes = bytes.into_bound_py_any(py)?;
+                let str_errors = &slf.borrow().str_errors.clone_ref(py);
+                let decode_result = py_bytes
+                    .call_method1(intern!(py, "decode"), (intern!(py, "utf-8"), str_errors));
+                if let Ok(decoded_bytes) = decode_result {
+                    (decoded_bytes.cast_into().map_err(PyErr::from)?, length)
+                } else {
+                    return raise_cbor_error_from(
+                        py,
+                        "CBORDecodeValueError",
+                        "error decoding text string",
+                        decode_result.unwrap_err(),
+                    );
                 }
-                Some(mut length) => {
-                    // Incrementally decode the string, in chunks of 65536 bytes
-                    let this = slf.borrow();
-                    let decoder = py
-                        .import("codecs")?
-                        .getattr("lookup")?
-                        .call1(("utf-8",))?
-                        .getattr("incrementaldecoder")?
-                        .call1((this.str_errors.bind(py),))?;
-                    drop(this);
-                    let mut string = PyString::new(py, "");
-                    while length > 0 {
-                        let chunk_size = min(length, 65536) as usize;
-                        let chunk = Self::read(slf, chunk_size)?;
-                        length -= chunk_size;
-                        let is_final_chunk = length == 0;
-                        let decode_result =
-                            decoder.call_method1(intern!(py, "decode"), (chunk, is_final_chunk));
-                        let decoded_chunk: Bound<'_, PyString> = match decode_result {
-                            Ok(decoded_chunk) => decoded_chunk.cast_into()?,
-                            Err(e) => {
-                                return raise_cbor_error_from(
-                                    py,
-                                    "CBORDecodeValueError",
-                                    "error decoding unicode string",
-                                    e,
-                                );
-                            }
-                        };
-                        string = string.add(decoded_chunk)?.cast_into()?;
-                    }
-                    (string, length)
+            }
+            Some(mut length) => {
+                // Incrementally decode the string, in chunks of 65536 bytes
+                let this = slf.borrow();
+                let decoder = py
+                    .import("codecs")?
+                    .getattr("lookup")?
+                    .call1(("utf-8",))?
+                    .getattr("incrementaldecoder")?
+                    .call1((this.str_errors.bind(py),))?;
+                drop(this);
+                let mut string = PyString::new(py, "");
+                while length > 0 {
+                    let chunk_size = min(length, 65536) as usize;
+                    let chunk = Self::read(slf, chunk_size)?;
+                    length -= chunk_size;
+                    let is_final_chunk = length == 0;
+                    let decode_result =
+                        decoder.call_method1(intern!(py, "decode"), (chunk, is_final_chunk));
+                    let decoded_chunk: Bound<'_, PyString> = match decode_result {
+                        Ok(decoded_chunk) => decoded_chunk.cast_into()?,
+                        Err(e) => {
+                            return raise_cbor_error_from(
+                                py,
+                                "CBORDecodeValueError",
+                                "error decoding text string",
+                                e,
+                            );
+                        }
+                    };
+                    string = string.add(decoded_chunk)?.cast_into()?;
                 }
-            };
+                (string, length)
+            }
+        };
         slf.borrow_mut().add_string_to_namespace(&decoded, length);
-        Ok(Self::set_shareable_internal(slf, decoded))
+        Ok(decoded)
     }
 
     #[pyo3(signature = (subtype: "int"))]
@@ -622,7 +639,8 @@ impl CBORDecoder {
                 loop {
                     let obj = Self::decode(slf)?;
                     if obj.is_exact_instance_of::<BreakMarkerType>() {
-                        let tuple = Self::set_shareable_internal(slf, PyTuple::new(py, items)?);
+                        let tuple = PyTuple::new(py, items)?;
+                        Self::set_shareable_internal(slf, &tuple);
                         break Ok(tuple.into_any());
                     }
                     items.push(obj);
@@ -630,7 +648,8 @@ impl CBORDecoder {
             }
             (None, false) => {
                 // Indefinite length list (shareable)
-                let list = Self::set_shareable_internal(slf, PyList::empty(py));
+                let list = PyList::empty(py);
+                Self::set_shareable_internal(slf, &list);
                 loop {
                     let obj = Self::decode(slf)?;
                     if obj.is_exact_instance_of::<BreakMarkerType>() {
@@ -646,12 +665,14 @@ impl CBORDecoder {
                 for _ in 0..length {
                     items.push(Self::decode(slf)?);
                 }
-                let tuple = Self::set_shareable_internal(slf, PyTuple::new(py, items)?);
+                let tuple = PyTuple::new(py, items)?;
+                Self::set_shareable_internal(slf, &tuple);
                 Ok(tuple.into_any())
             }
             (Some(length), false) => {
                 // Fixed-length list (shareable)
-                let list = Self::set_shareable_internal(slf, PyList::empty(py));
+                let list = PyList::empty(py);
+                Self::set_shareable_internal(slf, &list);
                 for _ in 0..length {
                     list.append(Self::decode(slf)?)?;
                 }
@@ -664,7 +685,8 @@ impl CBORDecoder {
     fn decode_map<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 5
         let py = slf.py();
-        let dict = Self::set_shareable_internal(slf, PyDict::new(py));
+        let dict = PyDict::new(py);
+        Self::set_shareable_internal(slf, &dict);
         match Self::decode_length(slf, subtype)? {
             None => {
                 // Indefinite length
@@ -720,23 +742,26 @@ impl CBORDecoder {
         {
             Some(decoder) => {
                 drop(this);
-                slf.borrow_mut();
                 decoder.bind(py).call1((slf,))
             }
             None => {
                 // For a tag with no designated decoder, check if we have a tag hook, and call
                 // that with the tag object, using its return value as the decoded value.
-                drop(this);
-                let value = Self::decode(slf)?;
-                let tag = CBORTag::new(tagnum.into_bound_py_any(py)?, value)?.into_bound_py_any(py)?;
-                let this = slf.borrow();
+                let tag = CBORTag::new(tagnum.into_bound_py_any(py)?, py.None().into_bound(py))?;
+                let bound_tag = Bound::new(py, tag)?;
                 match this.tag_hook.as_ref() {
                     Some(tag_hook) => {
                         let tag_hook = tag_hook.clone_ref(py);
                         drop(this);
-                        tag_hook.bind(py).call1((slf, &tag))
-                    },
-                    None => Ok(tag),
+                        bound_tag.borrow_mut().value = Self::decode(slf)?.unbind();
+                        tag_hook.bind(py).call1((slf, bound_tag))
+                    }
+                    None => {
+                        drop(this);
+                        Self::set_shareable_internal(slf, &bound_tag);
+                        bound_tag.borrow_mut().value = Self::decode(slf)?.unbind();
+                        Ok(bound_tag.into_any())
+                    }
                 }
             }
         }
@@ -837,7 +862,7 @@ impl CBORDecoder {
                     Some(e),
                 )
             })?;
-        Ok(Self::set_shareable(slf, datetime))
+        Ok(datetime)
     }
 
     fn decode_epoch_datetime<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -867,7 +892,7 @@ impl CBORDecoder {
         let int_type = py.get_type::<PyInt>();
         let value = Self::decode(slf)?;
         let int = int_type.call_method1("from_bytes", (value, intern!(py, "big")))?;
-        Ok(Self::set_shareable(slf, int))
+        Ok(int)
     }
 
     fn decode_negative_bignum<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -877,7 +902,7 @@ impl CBORDecoder {
         let value = Self::decode(slf)?;
         let mut int = int_type.call_method1("from_bytes", (value, intern!(py, "big")))?;
         int = int.neg()?.add(-1)?;
-        Ok(Self::set_shareable_internal(slf, int))
+        Ok(int)
     }
 
     fn decode_fraction<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -918,7 +943,7 @@ impl CBORDecoder {
                 decimal_class.call1((args_tuple,))
             },
         )?;
-        Ok(Self::set_shareable(slf, decimal))
+        Ok(decimal)
     }
 
     fn decode_bigfloat<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -954,7 +979,7 @@ impl CBORDecoder {
                 sig.mul(exp)
             },
         )?;
-        Ok(Self::set_shareable(slf, decimal))
+        Ok(decimal)
     }
 
     fn decode_stringref<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -990,10 +1015,17 @@ impl CBORDecoder {
         this.shareables.push(None);
         drop(this);
 
-        let result = Self::decode(slf);
-
-        slf.borrow_mut().share_index = old_index;
-        result
+        match Self::decode(slf) {
+            Ok(decoded) => {
+                Self::set_shareable(slf, &decoded);
+                slf.borrow_mut().share_index = old_index;
+                Ok(decoded)
+            }
+            Err(e) => {
+                slf.borrow_mut().share_index = old_index;
+                Err(e)
+            }
+        }
     }
 
     fn decode_sharedref<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1038,7 +1070,7 @@ impl CBORDecoder {
         }
 
         match fraction_class.call1(tuple) {
-            Ok(fraction) => Ok(Self::set_shareable(slf, fraction)),
+            Ok(fraction) => Ok(fraction),
             Err(e) => {
                 raise_cbor_error_from(py, "CBORDecodeValueError", "error decoding rational", e)
             }
@@ -1051,7 +1083,7 @@ impl CBORDecoder {
         let value = Self::decode(slf)?;
         let re_compile_func = py.import("re")?.getattr("compile")?;
         match re_compile_func.call1((value,)) {
-            Ok(regexp) => Ok(Self::set_shareable(slf, regexp)),
+            Ok(regexp) => Ok(regexp),
             Err(e) => raise_cbor_error_from(
                 py,
                 "CBORDecodeValueError",
@@ -1067,7 +1099,7 @@ impl CBORDecoder {
         let email_parser_class = slf.py().import("email.parser")?.getattr("Parser")?;
         let parser = email_parser_class.call0()?;
         match parser.call_method1("parsestr", (value,)) {
-            Ok(message) => Ok(Self::set_shareable(slf, message)),
+            Ok(message) => Ok(message),
             Err(e) => raise_cbor_error_from(
                 slf.py(),
                 "CBORDecodeValueError",
@@ -1085,7 +1117,7 @@ impl CBORDecoder {
         let kwargs = PyDict::new(py);
         kwargs.set_item("bytes", value)?;
         match uuid_class.call((), Some(&kwargs)) {
-            Ok(uuid) => Ok(Self::set_shareable(slf, uuid)),
+            Ok(uuid) => Ok(uuid),
             Err(e) => {
                 raise_cbor_error_from(py, "CBORDecodeValueError", "error decoding UUID value", e)
             }
@@ -1134,7 +1166,7 @@ impl CBORDecoder {
                 "error decoding IPv4: input value must be a bytestring or an array of 2 elements",
             );
         };
-        Ok(Self::set_shareable(slf, addr))
+        Ok(addr)
     }
 
     fn decode_ipv6<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1208,7 +1240,7 @@ impl CBORDecoder {
                 "error decoding IPv6: input value must be a bytestring or an array of 2 elements",
             );
         };
-        Ok(Self::set_shareable(slf, addr))
+        Ok(addr)
     }
 
     fn decode_epoch_date<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1216,7 +1248,7 @@ impl CBORDecoder {
         let value = Self::decode(slf)?.extract::<i32>()? + 719163;
         let date_class = slf.py().import("datetime")?.getattr("date")?;
         let date = date_class.call_method1("fromordinal", (value,))?;
-        Ok(Self::set_shareable(slf, date))
+        Ok(date)
     }
 
     fn decode_stringref_namespace<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1240,13 +1272,14 @@ impl CBORDecoder {
         } else {
             PySet::new(py, tuple.iter())?.into_any()
         };
-        Ok(Self::set_shareable(slf, set))
+        Ok(set)
     }
 
     fn decode_ipaddress<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 260 (deprecated)
         let py = slf.py();
-        let value = Self::decode(slf)?.cast_into::<PyBytes>()?;
+        let value = Self::decode(slf)?.cast_into::<PyBytes>()
+            .map_err(|e| create_cbor_error(py, "CBORDecodeValueError", "invalid IP address", Some(PyErr::from(e))))?;
         let addr_obj = match value.len()? {
             4 | 16 => {
                 let ip_address = py.import("ipaddress")?.getattr("ip_address")?;
@@ -1259,7 +1292,7 @@ impl CBORDecoder {
                 format!("invalid IP address length ({length})").as_str(),
             ),
         }?;
-        Ok(Self::set_shareable(slf, addr_obj))
+        Ok(addr_obj)
     }
 
     fn decode_ipnetwork<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1274,6 +1307,16 @@ impl CBORDecoder {
             );
         }
         let first_item = value.items().get_item(0)?;
+        let key = first_item.get_item(0)?;
+        let mask_length = first_item.get_item(1)?;
+        if !mask_length.is_exact_instance_of::<PyInt>() {
+            return raise_cbor_error(
+                py,
+                "CBORDecodeValueError",
+                format!("invalid mask length for IP network: {mask_length}").as_str(),
+            );
+        }
+
         let ip_network_func = py.import("ipaddress")?.getattr("ip_network")?;
         let addr_obj = match ip_network_func.call1((&first_item,)) {
             Ok(ip_network) => Ok(ip_network),
@@ -1288,7 +1331,7 @@ impl CBORDecoder {
                 }
             }
         }?;
-        Ok(Self::set_shareable(slf, addr_obj))
+        Ok(addr_obj)
     }
 
     fn decode_date_string<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1296,7 +1339,7 @@ impl CBORDecoder {
         let value = Self::decode(slf)?;
         let date_class = slf.py().import("datetime")?.getattr("date")?;
         let date = date_class.call_method1("fromisoformat", (value,))?;
-        Ok(Self::set_shareable(slf, date))
+        Ok(date)
     }
 
     fn decode_complex<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyComplex>> {

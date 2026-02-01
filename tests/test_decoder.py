@@ -293,7 +293,7 @@ def test_string(payload: str, expected: str) -> None:
     ],
 )
 def test_string_invalid_utf8(payload: str) -> None:
-    with pytest.raises(CBORDecodeValueError, match="error decoding unicode string") as exc:
+    with pytest.raises(CBORDecodeValueError, match="error decoding text string") as exc:
         loads(unhexlify(payload))
 
     assert isinstance(exc.value.__cause__, UnicodeDecodeError)
@@ -769,7 +769,7 @@ class TestDeprecatedIPAddress:
 
     @pytest.mark.parametrize("payload", ["d9010443c00a0a", "d9010401"])
     def test_invalid(self, payload: str) -> None:
-        with pytest.raises(CBORDecodeError, match="invalid ipaddress value "):
+        with pytest.raises(CBORDecodeError, match="invalid IP address"):
             loads(unhexlify(payload))
 
 
@@ -798,7 +798,11 @@ class TestDeprecatedIPNetwork:
                 "invalid input map length for IP network: 2",
                 id="length",
             ),
-            pytest.param("d90105a144c0a80064420102", "invalid ipnetwork value"),
+            pytest.param(
+                "d90105a144c0a80064420102",
+                r"invalid mask length for IP network: b'\\x01\\x02'",
+                id="mask",
+            ),
         ],
     )
     def test_invalid(self, payload: str, pattern: str) -> None:
