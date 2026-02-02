@@ -10,7 +10,7 @@ use pyo3::prelude::pymodule;
 mod _cbor2 {
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
-    use pyo3::types::{PyBytes, PyDict};
+    use pyo3::types::PyDict;
     use std::mem::take;
 
     #[pymodule_export]
