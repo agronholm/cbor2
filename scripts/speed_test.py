@@ -96,11 +96,12 @@ def time(op, repeat=3):
         number = autorange(op, limit=0.02)
     except Exception as e:
         return e
+
     t = timeit.Timer(op)
     return Timing(min(t.repeat(repeat, number)) / number, repeat, number)
 
 
-def format_time(t, suffixes=("s", "ms", "µs", "ns"), zero="0s", template="{time:.1f}{suffix}"):
+def format_time(t, suffixes=("s", "ms", "µs", "ns"), zero="0s", template="{time:.1f} {suffix}"):
     if isinstance(t, Exception):
         return "-"
     else:
@@ -205,7 +206,7 @@ def output_table(results):
                 (
                     "| ",
                     " | ".join(
-                        "{value:<{width}}".format(
+                        "{value:>{width}}".format(
                             value=value, width=width + len(value) - print_len(value)
                         )
                         for value, width in zip(row, col_widths)
