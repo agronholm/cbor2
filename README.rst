@@ -18,28 +18,26 @@ About
 =====
 
 This library provides encoding and decoding for the Concise Binary Object Representation (CBOR)
-(`RFC 8949`_) serialization format. The specification is fully compatible with the original RFC 7049.
-`Read the docs <https://cbor2.readthedocs.io/>`_ to learn more.
+(`RFC 8949`_) serialization format. The specification is fully compatible with the original RFC
+7049. `Read the docs <https://cbor2.readthedocs.io/>`_ to learn more.
 
-It is implemented in pure python with an optional C backend.
-
-On PyPy, cbor2 runs with almost identical performance to the C backend.
+It is implemented in Rust.
 
 .. _RFC 8949: https://www.rfc-editor.org/rfc/rfc8949.html
 
 Features
 --------
 
-* Simple api like ``json`` or ``pickle`` modules.
-* Support many `CBOR tags`_ with `stdlib objects`_.
-* Generic tag decoding.
-* `Shared value`_ references including cyclic references.
-* `String references`_ compact encoding with repeated strings replaced with indices.
-* Optional C module backend tested on big- and little-endian architectures.
-* Extensible `tagged value handling`_ using ``tag_hook`` and ``object_hook`` on decode and ``default`` on encode.
+* Simple API like the ``json`` or ``pickle`` modules
+* Support many `CBOR tags`_ with `stdlib objects`_
+* Generic tag decoding
+* `Shared value`_ references including cyclic references
+* `String references`_ compact encoding with repeated strings replaced with indices
+* Extensible `tagged value handling`_ using ``tag_hook`` and ``object_hook`` on decode and
+  ``default`` on encode.
 * Command-line diagnostic tool, converting CBOR file or stream to JSON ``python -m cbor2.tool``
   (This is a lossy conversion, for diagnostics only)
-* Thorough test suite.
+* Thorough test suite (Tested on big- and little-endian architectures)
 
 .. _CBOR tags: https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
 .. _stdlib objects: https://cbor2.readthedocs.io/en/latest/usage.html#tag-support
@@ -50,27 +48,27 @@ Features
 Installation
 ============
 
+The simplest way to install the library is with pip_:
+
 ::
 
     pip install cbor2
 
-Requirements
-------------
+If this fails, see the next section.
 
-* Python >= 3.9 (or `PyPy3`_ 3.9+)
-* C-extension: Any C compiler that can build Python extensions.
-  Any modern libc with the exception of Glibc<2.9
+.. _pip: https://packaging.python.org/en/latest/tutorials/installing-packages/
+
+Build requirements
+------------------
+
+If you wish to compile the code yourself, or are installing on a yet unsupported Python version
+or platform where there are no wheels available, you need the following pre-requisites:
+
+* Python >= 3.10 (or `PyPy3`_ 3.10+)
+* `Rust toolchain`_ (tested with v1.93.0)
 
 .. _PyPy3: https://www.pypy.org/
-
-Building the C-Extension
-------------------------
-
-To force building of the optional C-extension, set OS env ``CBOR2_BUILD_C_EXTENSION=1``.
-To disable building of the optional C-extension, set OS env ``CBOR2_BUILD_C_EXTENSION=0``.
-If this environment variable is unset, setup.py will default to auto detecting a compatible C library and
-attempt to compile the extension.
-
+.. _Rust toolchain: https://rust-lang.org/tools/install/
 
 Usage
 =====
