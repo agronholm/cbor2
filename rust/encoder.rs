@@ -9,9 +9,9 @@ use pyo3::types::{
     PyByteArray, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyMapping,
     PyNone, PySequence, PySet, PyString, PyTuple,
 };
-use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
+use pyo3::{intern, pyclass, IntoPyObjectExt, Py, PyAny};
 use std::collections::HashMap;
-use std::mem::take;
+use std::mem::swap;
 
 #[pyclass(module = "cbor2")]
 pub struct CBOREncoder {
@@ -422,28 +422,19 @@ impl CBOREncoder {
     ) -> PyResult<Vec<u8>> {
         let py = slf.py();
         let mut this = slf.borrow_mut();
-        let old_fp = take(&mut this.fp);
-        let old_buffer = take(&mut this.buffer);
-        this.fp = None;
-        this.buffer = Vec::new();
+        let mut fp: Option<Py<PyAny>> = None;
+        let mut buffer: Vec<u8> = Vec::new();
+        swap(&mut this.fp, &mut fp);
+        swap(&mut this.buffer, &mut buffer);
         drop(this);
 
         let result = Self::encode(slf, obj);
 
         this = slf.borrow_mut();
         this.flush(py)?;
-        let buffer = take(&mut this.buffer);
-        this.buffer = old_buffer;
-        match result {
-            Ok(()) => {
-                this.fp = old_fp;
-                Ok(buffer)
-            }
-            Err(err) => {
-                this.fp = old_fp;
-                Err(err)
-            }
-        }
+        swap(&mut this.fp, &mut fp);
+        swap(&mut this.buffer, &mut buffer);
+        result.map(|_| buffer)
     }
 
     #[pyo3(signature = (

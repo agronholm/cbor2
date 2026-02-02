@@ -1,6 +1,6 @@
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, FrozenDict};
 use crate::utils::{
-    CBORDecodeError, create_cbor_error, raise_cbor_error, raise_cbor_error_from, wrap_cbor_error,
+    create_cbor_error, raise_cbor_error, raise_cbor_error_from, wrap_cbor_error, CBORDecodeError,
 };
 use half::f16;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
@@ -8,10 +8,10 @@ use pyo3::prelude::*;
 use pyo3::types::{
     PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple,
 };
-use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
+use pyo3::{intern, pyclass, IntoPyObjectExt, Py, PyAny};
 use std::cmp::{max, min};
 use std::collections::HashMap;
-use std::mem::take;
+use std::mem::{swap, take};
 
 const VALID_STR_ERRORS: [&str; 3] = ["strict", "ignore", "replace"];
 
@@ -396,21 +396,19 @@ impl CBORDecoder {
     #[pyo3(signature = (buf: "bytes"))]
     pub fn decode_from_bytes<'py>(
         slf: &Bound<'py, Self>,
-        buf: Vec<u8>,
+        mut buf: Vec<u8>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let py = slf.py();
         let mut this = slf.borrow_mut();
-        let old_fp = this.fp.as_ref().map(|fp| fp.clone_ref(py));
-        let old_buffer = take(&mut this.buffer);
-        this.fp = None;
-        this.buffer = buf;
+        let mut fp: Option<Py<PyAny>> = None;
+        swap(&mut fp, &mut this.fp);
+        swap(&mut buf, &mut this.buffer);
         drop(this);
 
         let result = Self::decode(slf);
 
         this = slf.borrow_mut();
-        this.fp = old_fp;
-        this.buffer = old_buffer;
+        swap(&mut fp, &mut this.fp);
+        swap(&mut buf, &mut this.buffer);
         result
     }
 
@@ -1257,7 +1255,9 @@ impl CBORDecoder {
         let old_namespace = take(&mut this.stringref_namespace);
         this.stringref_namespace = Some(Vec::new());
         drop(this);
+
         let value = Self::decode(slf)?;
+
         slf.borrow_mut().stringref_namespace = old_namespace;
         Ok(value)
     }
