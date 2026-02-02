@@ -1,17 +1,25 @@
+use crate::_cbor2::ENCODERS;
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, UndefinedType};
-use crate::utils::raise_cbor_error;
+use crate::utils::{import_once, raise_cbor_error};
 use bigdecimal::BigDecimal;
 use half::f16;
 use num_bigint::BigInt;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{
     PyByteArray, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyMapping,
     PyNone, PySequence, PySet, PyString, PyTuple,
 };
-use pyo3::{intern, pyclass, IntoPyObjectExt, Py, PyAny};
+use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::collections::HashMap;
 use std::mem::swap;
+
+static DATETIME_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static ID_FUNC: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static ZERO_TIME: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static TZINFO_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static SORTED_FUNC: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
 #[pyclass(module = "cbor2")]
 pub struct CBOREncoder {
@@ -62,7 +70,7 @@ impl CBOREncoder {
     ) -> PyResult<()> {
         let py = slf.py();
         let value_sharing = slf.borrow().value_sharing;
-        let id = py.import("builtins")?.getattr("id")?;
+        let id = import_once(py, &ID_FUNC, "builtins", "id")?;
         let value_id = id.call1((obj,))?.extract::<usize>()?;
 
         let mut this = slf.borrow_mut();
@@ -89,11 +97,7 @@ impl CBOREncoder {
                 }
             }
             Some((_, None)) => {
-                let exc = py
-                    .import("cbor2._types")?
-                    .getattr("CBOREncodeValueError")?
-                    .call1(("cyclic data structure detected but value sharing is disabled",))?;
-                Err(PyErr::from_value(exc))
+                raise_cbor_error(py, "CBOREncodeValueError", "cyclic data structure detected")
             }
             Some((_, Some(index))) => {
                 // Generate a reference to the previous index instead of
@@ -220,7 +224,6 @@ impl CBOREncoder {
         string_referencing: bool,
         indefinite_containers: bool,
     ) -> PyResult<Self> {
-        let encoders: Bound<'_, PyDict> = py.import("cbor2")?.getattr("encoders")?.cast_into()?;
         let mut instance = Self {
             fp: None,
             datetime_as_timestamp,
@@ -232,7 +235,7 @@ impl CBOREncoder {
             string_referencing,
             string_namespacing: string_referencing,
             indefinite_containers,
-            encoders: encoders.clone().unbind(),
+            encoders: ENCODERS.get(py).unwrap().clone_ref(py),
             buffer: Vec::new(),
             shared_containers: HashMap::new(),
             string_references: HashMap::new(),
@@ -254,8 +257,11 @@ impl CBOREncoder {
 
     #[setter]
     fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
-        if !fp.is_none() && let Some(existing_fp) = &self.fp && fp.is(existing_fp) {
-            return Ok(())
+        if !fp.is_none()
+            && let Some(existing_fp) = &self.fp
+            && fp.is(existing_fp)
+        {
+            return Ok(());
         }
 
         let result = fp.getattr("write");
@@ -288,8 +294,8 @@ impl CBOREncoder {
     #[setter]
     fn set_timezone(&mut self, timezone: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
         if let Some(timezone) = timezone {
-            let tzinfo = timezone.py().import("datetime")?.getattr("tzinfo")?;
-            if !timezone.is_instance(&tzinfo)? {
+            let tzinfo_class = import_once(timezone.py(), &TZINFO_TYPE, "datetime", "tzinfo")?;
+            if !timezone.is_instance(&tzinfo_class)? {
                 return Err(PyErr::new::<PyTypeError, _>(
                     "timezone must be a tzinfo object",
                 ));
@@ -386,11 +392,11 @@ impl CBOREncoder {
             if let Some(default) = default {
                 default.call1(py, (slf, obj)).map(|_| ())
             } else {
-                let exc = py
-                    .import("cbor2._types")?
-                    .getattr("CBOREncodeError")?
-                    .call1((format!("cannot encode type {obj_type}"),))?;
-                Err(PyErr::from_value(exc))
+                raise_cbor_error(
+                    py,
+                    "CBOREncodeError",
+                    format!("cannot encode type {obj_type}").as_str(),
+                )
             }
         }
     }
@@ -594,7 +600,7 @@ impl CBOREncoder {
             if slf.borrow().canonical {
                 // Reorder keys according to Canonical CBOR specification where they're sorted
                 // by the length of the CBOR encoded value first, and only then by the lexical order
-                let sorted_func = py.import("builtins")?.getattr("sorted")?;
+                let sorted_func = import_once(py, &SORTED_FUNC, "builtins", "sorted")?;
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("key", slf.getattr("encode_sortable_item")?)?;
                 iterator = sorted_func.call((iterator,), Some(&kwargs))?.try_iter()?;
@@ -676,7 +682,7 @@ impl CBOREncoder {
         // Semantic tag 258
         if slf.borrow().canonical {
             let py = slf.py();
-            let sorted_func = py.import("builtins")?.getattr("sorted")?;
+            let sorted_func = import_once(py, &SORTED_FUNC, "builtins", "sorted")?;
             let kwargs = PyDict::new(py);
             kwargs.set_item("key", slf.getattr("encode_sortable_key")?)?;
             let list = sorted_func.call((value,), Some(&kwargs))?;
@@ -691,7 +697,7 @@ impl CBOREncoder {
         // Semantic tag 258
         if slf.borrow().canonical {
             let py = slf.py();
-            let sorted_func = py.import("builtins")?.getattr("sorted")?;
+            let sorted_func = import_once(py, &SORTED_FUNC, "builtins", "sorted")?;
             let kwargs = PyDict::new(py);
             kwargs.set_item("key", slf.getattr("encode_sortable_key")?)?;
             let list = sorted_func.call((value,), Some(&kwargs))?;
@@ -767,9 +773,10 @@ impl CBOREncoder {
         if date_as_datetime {
             // Encode a datetime with a zeroed-out time portion
             let py = slf.py();
-            let datetime_type = py.import("datetime")?.getattr("datetime")?;
-            let time = py.import("datetime")?.getattr("time")?;
-            let time_zero = time.call0()?;
+            let datetime_type = import_once(py, &DATETIME_TYPE, "datetime", "datetime")?;
+            let time_zero = ZERO_TIME.get_or_try_init(py, || {
+                Ok::<_, PyErr>(py.import("datetime")?.getattr("time")?.call0()?.unbind())
+            })?;
             let value = datetime_type.call_method1("combine", (value, time_zero))?;
             Self::encode_datetime(slf, &value)
         } else if datetime_as_timestamp {
@@ -931,15 +938,13 @@ impl CBOREncoder {
                     let value_16 = f16::from_f32(value_32);
                     return if value_16.to_f32() == value_32 {
                         slf.borrow_mut().fp_write_byte(py, 0xf9)?;
-                        slf
-                            .borrow_mut()
+                        slf.borrow_mut()
                             .fp_write(py, value_16.to_be_bytes().to_vec())
                     } else {
                         slf.borrow_mut().fp_write_byte(py, 0xfa)?;
-                        slf
-                            .borrow_mut()
+                        slf.borrow_mut()
                             .fp_write(py, value_32.to_be_bytes().to_vec())
-                    }
+                    };
                 }
             }
             slf.borrow_mut().fp_write_byte(py, 0xfb)?;

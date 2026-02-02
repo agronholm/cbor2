@@ -10,6 +10,7 @@ use pyo3::prelude::pymodule;
 mod _cbor2 {
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
+    use pyo3::sync::PyOnceLock;
     use pyo3::types::PyDict;
     use std::mem::take;
 
@@ -30,6 +31,13 @@ mod _cbor2 {
 
     use crate::types::BreakMarkerType;
     use crate::types::UndefinedType;
+
+    pub static ENCODERS: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+    pub static MAJOR_DECODERS: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+    pub static SEMANTIC_DECODERS: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+    pub static SYS_MAXSIZE: PyOnceLock<usize> = PyOnceLock::new();
+    pub static UNDEFINED: PyOnceLock<Py<UndefinedType>> = PyOnceLock::new();
+    pub static BREAK_MARKER: PyOnceLock<Py<BreakMarkerType>> = PyOnceLock::new();
 
     ///  Deserialize an object from a bytestring.
     ///
@@ -273,10 +281,6 @@ mod _cbor2 {
             .getattr("Mapping")?
             .call_method1("register", (frozen_dict_type,))?;
 
-        // Add the singleton special objects
-        m.add("undefined", UndefinedType)?;
-        m.add("break_marker", BreakMarkerType)?;
-
         let cbor_encoder_type = py.get_type::<CBOREncoder>();
         let cbor_decoder_type = py.get_type::<CBORDecoder>();
         let encoders = PyDict::new(py);
@@ -322,7 +326,8 @@ mod _cbor2 {
         register_encoder("ipaddress.IPv6Network", "encode_ipv6_network")?;
         register_encoder("ipaddress.IPv4Interface", "encode_ipv4_interface")?;
         register_encoder("ipaddress.IPv6Interface", "encode_ipv6_interface")?;
-        m.add("encoders", encoders)?;
+        m.add("encoders", encoders.clone())?;
+        ENCODERS.get_or_init(py, || encoders.unbind());
 
         // Register decoder callbacks for major tags
         register_major_decoder(0, "decode_uint")?;
@@ -333,7 +338,8 @@ mod _cbor2 {
         register_major_decoder(5, "decode_map")?;
         register_major_decoder(6, "decode_semantic")?;
         register_major_decoder(7, "decode_special")?;
-        m.add("major_decoders", major_decoders)?;
+        m.add("major_decoders", major_decoders.clone())?;
+        MAJOR_DECODERS.get_or_init(py, || major_decoders.unbind());
 
         // Register decoder callbacks for semantic tags
         register_semantic_decoder(0, "decode_datetime_string")?;
@@ -359,7 +365,19 @@ mod _cbor2 {
         register_semantic_decoder(1004, "decode_date_string")?;
         register_semantic_decoder(43000, "decode_complex")?;
         register_semantic_decoder(55799, "decode_self_describe_cbor")?;
-        m.add("semantic_decoders", semantic_decoders)?;
+        m.add("semantic_decoders", semantic_decoders.clone())?;
+        SEMANTIC_DECODERS.get_or_init(py, || semantic_decoders.unbind());
+
+        let undefined = Bound::new(py, UndefinedType)?;
+        m.add("undefined", undefined.clone())?;
+        UNDEFINED.get_or_init(py, || undefined.unbind());
+
+        let break_marker = Bound::new(py, BreakMarkerType)?;
+        m.add("break_marker", break_marker.clone())?;
+        BREAK_MARKER.get_or_init(py, || break_marker.unbind());
+
+        SYS_MAXSIZE.get_or_try_init(py, || py.import("sys")?.getattr("maxsize")?.extract())?;
+
         Ok(())
     }
 }

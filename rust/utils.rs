@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::{import_exception, PyErr, PyResult, Python};
-use pyo3::exceptions::{PyException, PyTypeError, PyUnicodeDecodeError, PyValueError};
+use pyo3::sync::PyOnceLock;
 
 import_exception!(cbor2._types, CBORDecodeError);
 import_exception!(cbor2._types, CBORDecodeValueError);
@@ -44,4 +44,20 @@ pub fn wrap_cbor_error<T>(
     f: impl FnOnce() -> PyResult<T>
 ) -> PyResult<T> {
     f().map_err(|e| create_cbor_error(py, class_name, msg, Some(e)))
+}
+
+pub fn import_once<'py>(
+    py: Python<'py>,
+    container: &PyOnceLock<Py<PyAny>>,
+    module: &str,
+    attribute: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let class = container.get_or_try_init(py, || {
+        let mut value = py.import(module)?.into_any();
+        for part in attribute.split('.') {
+            value = value.getattr(part)?;
+        }
+        Ok::<_, PyErr>(value.unbind())
+    })?;
+    Ok(class.clone_ref(py).into_bound(py))
 }
