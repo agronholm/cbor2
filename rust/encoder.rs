@@ -3,7 +3,7 @@ use crate::utils::raise_cbor_error;
 use bigdecimal::BigDecimal;
 use half::f16;
 use num_bigint::BigInt;
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{
     PyByteArray, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyMapping,
@@ -15,7 +15,7 @@ use std::mem::take;
 
 #[pyclass(module = "cbor2")]
 pub struct CBOREncoder {
-    fp: Py<PyAny>,
+    fp: Option<Py<PyAny>>,
 
     #[pyo3(get)]
     datetime_as_timestamp: bool,
@@ -45,7 +45,7 @@ pub struct CBOREncoder {
     #[pyo3(get)]
     encoders: Py<PyDict>,
 
-    buffer: Vec<u8>,
+    pub buffer: Vec<u8>,
     shared_containers: HashMap<usize, (Py<PyAny>, Option<Py<PyInt>>)>,
     string_references: HashMap<String, usize>,
     bytes_references: HashMap<Vec<u8>, usize>,
@@ -209,7 +209,8 @@ impl CBOREncoder {
         indefinite_containers: "bool" = false
     ))]
     pub fn new(
-        fp: &Bound<'_, PyAny>,
+        py: Python<'_>,
+        fp: Option<&Bound<'_, PyAny>>,
         datetime_as_timestamp: bool,
         timezone: Option<&Bound<'_, PyAny>>,
         value_sharing: bool,
@@ -219,11 +220,9 @@ impl CBOREncoder {
         string_referencing: bool,
         indefinite_containers: bool,
     ) -> PyResult<Self> {
-        let py = fp.py();
-        let encoders: Bound<'_, PyDict> =
-            py.import("cbor2")?.getattr("encoders")?.cast_into()?;
+        let encoders: Bound<'_, PyDict> = py.import("cbor2")?.getattr("encoders")?.cast_into()?;
         let mut instance = Self {
-            fp: py.None(),
+            fp: None,
             datetime_as_timestamp,
             timezone: None,
             value_sharing,
@@ -240,20 +239,22 @@ impl CBOREncoder {
             bytes_references: HashMap::new(),
             encode_depth: 0,
         };
-        instance.set_fp(fp)?;
+        if let Some(fp) = fp {
+            instance.set_fp(fp)?;
+        }
         instance.set_timezone(timezone)?;
         instance.set_default(default)?;
         Ok(instance)
     }
 
     #[getter]
-    fn fp(&self, py: Python<'_>) -> Py<PyAny> {
-        self.fp.clone_ref(py)
+    fn fp(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.fp.as_ref().map(|fp| fp.clone_ref(py))
     }
 
     #[setter]
     fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
-        if !fp.is_none() && fp.is(&self.fp) {
+        if !fp.is_none() && let Some(existing_fp) = &self.fp && fp.is(existing_fp) {
             return Ok(())
         }
 
@@ -261,14 +262,14 @@ impl CBOREncoder {
         if let Ok(write) = result
             && write.is_callable()
         {
-            if !self.fp.is_none(fp.py()) {
+            if !self.fp.is_none() {
                 // Flush any pending writes before replacing the file pointer
                 self.flush(fp.py())?;
                 self.shared_containers.clear();
                 self.string_references.clear();
                 self.bytes_references.clear();
             }
-            self.fp = fp.clone().unbind();
+            self.fp = Some(fp.clone().unbind());
             Ok(())
         } else {
             Err(PyValueError::new_err(
@@ -321,13 +322,15 @@ impl CBOREncoder {
     }
 
     fn flush(&mut self, py: Python<'_>) -> PyResult<()> {
-        self.fp.call_method1(py, "write", (&*self.buffer,))?;
-        self.buffer.clear();
+        if let Some(fp) = &self.fp {
+            fp.call_method1(py, "write", (&*self.buffer,))?;
+            self.buffer.clear();
+        }
         Ok(())
     }
 
     fn maybe_flush(&mut self, py: Python<'_>) -> PyResult<()> {
-        if self.buffer.len() >= MAX_BUFFER_SIZE {
+        if !self.fp.is_none() && self.buffer.len() >= MAX_BUFFER_SIZE {
             self.flush(py)
         } else {
             Ok(())
@@ -345,8 +348,11 @@ impl CBOREncoder {
     }
 
     #[pyo3(signature = (bytes: "bytes", /))]
-    pub fn write(&mut self, py: Python<'_>, bytes: Vec<u8>) -> PyResult<()> {
-        self.fp.call_method1(py, "write", (&bytes,)).map(|_| ())
+    pub fn write<'py>(&self, py: Python<'py>, bytes: Vec<u8>) -> PyResult<Bound<'py, PyAny>> {
+        match self.fp.as_ref() {
+            Some(fp) => fp.bind(py).call_method1("write", (&bytes,)),
+            None => Err(PyRuntimeError::new_err("fp not set")),
+        }
     }
 
     pub fn encode_value(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -413,30 +419,30 @@ impl CBOREncoder {
     pub fn encode_to_bytes<'py>(
         slf: &Bound<'py, Self>,
         obj: &Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, PyBytes>> {
+    ) -> PyResult<Vec<u8>> {
         let py = slf.py();
         let mut this = slf.borrow_mut();
-        let old_fp = this.fp.clone_ref(py);
+        let old_fp = take(&mut this.fp);
         let old_buffer = take(&mut this.buffer);
-        let fp = slf.py().import("io")?.getattr("BytesIO")?.call0()?;
-        this.fp = fp.unbind();
+        this.fp = None;
+        this.buffer = Vec::new();
         drop(this);
 
         let result = Self::encode(slf, obj);
 
         this = slf.borrow_mut();
         this.flush(py)?;
+        let buffer = take(&mut this.buffer);
         this.buffer = old_buffer;
         match result {
             Ok(()) => {
-                let py_buffer = this.fp.call_method0(py, "getvalue")?;
                 this.fp = old_fp;
-                Ok(py_buffer.clone_ref(py).into_bound(py).cast_into()?)
+                Ok(buffer)
             }
             Err(err) => {
                 this.fp = old_fp;
                 Err(err)
-            },
+            }
         }
     }
 
@@ -461,7 +467,8 @@ impl CBOREncoder {
     ) -> PyResult<(usize, Bound<'py, PyAny>)> {
         Self::disable_string_referencing(slf, || {
             let encoded = Self::encode_to_bytes(slf, &key)?;
-            Ok((encoded.len()?, encoded.cast_into()?))
+            let py_bytes = PyBytes::new(slf.py(), encoded.as_slice());
+            Ok((encoded.len(), py_bytes.into_any()))
         })
     }
 
@@ -519,7 +526,7 @@ impl CBOREncoder {
         // and emit a string reference instead if it does
         if string_referencing {
             if Self::maybe_stringref(slf, obj)? {
-                return Ok(())
+                return Ok(());
             }
         }
 
@@ -537,7 +544,7 @@ impl CBOREncoder {
         // and emit a string reference instead if it does
         if string_referencing {
             if Self::maybe_stringref(slf, obj)? {
-                return Ok(())
+                return Ok(());
             }
         }
 
@@ -931,16 +938,16 @@ impl CBOREncoder {
                 let value_32 = value as f32;
                 if value_32 as f64 == value {
                     let value_16 = f16::from_f32(value_32);
-                    if value_16.to_f32() == value_32 {
+                    return if value_16.to_f32() == value_32 {
                         slf.borrow_mut().fp_write_byte(py, 0xf9)?;
-                        return slf
+                        slf
                             .borrow_mut()
-                            .fp_write(py, value_16.to_be_bytes().to_vec());
+                            .fp_write(py, value_16.to_be_bytes().to_vec())
                     } else {
                         slf.borrow_mut().fp_write_byte(py, 0xfa)?;
-                        return slf
+                        slf
                             .borrow_mut()
-                            .fp_write(py, value_32.to_be_bytes().to_vec());
+                            .fp_write(py, value_32.to_be_bytes().to_vec())
                     }
                 }
             }

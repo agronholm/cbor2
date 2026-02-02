@@ -39,9 +39,9 @@ from .hypothesis_strategies import compound_types_strategy
 
 
 def test_bad_fp() -> None:
-    # Test for fp=None
+    # Test for no "write" attribute
     with pytest.raises(ValueError):
-        CBOREncoder(None)
+        CBOREncoder(SimpleNamespace())
 
     # Test for fp having a non-callable "write" attribute
     with pytest.raises(ValueError):

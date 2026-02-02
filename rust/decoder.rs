@@ -987,7 +987,7 @@ impl CBORDecoder {
         let py = slf.py();
         let index: usize = Self::decode(slf)?.extract()?;
 
-        let mut this = slf.borrow_mut();
+        let this = slf.borrow();
         let stringref_namespace = this.stringref_namespace.as_ref().ok_or_else(|| {
             create_cbor_error(
                 py,
@@ -1307,7 +1307,6 @@ impl CBORDecoder {
             );
         }
         let first_item = value.items().get_item(0)?;
-        let key = first_item.get_item(0)?;
         let mask_length = first_item.get_item(1)?;
         if !mask_length.is_exact_instance_of::<PyInt>() {
             return raise_cbor_error(

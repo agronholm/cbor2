@@ -11,6 +11,7 @@ mod _cbor2 {
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
     use pyo3::types::{PyBytes, PyDict};
+    use std::mem::take;
 
     #[pymodule_export]
     use crate::encoder::CBOREncoder;
@@ -174,7 +175,8 @@ mod _cbor2 {
         indefinite_containers: bool,
     ) -> PyResult<()> {
         let encoder = CBOREncoder::new(
-            fp,
+            py,
+            Some(fp),
             datetime_as_timestamp,
             timezone,
             value_sharing,
@@ -244,13 +246,10 @@ mod _cbor2 {
         date_as_datetime: bool,
         string_referencing: bool,
         indefinite_containers: bool,
-    ) -> PyResult<Bound<'py, PyBytes>> {
-        let bytesio = py.import("io")?.getattr("BytesIO")?;
-        let fp = bytesio.call0()?;
-        dump(
+    ) -> PyResult<Vec<u8>> {
+        let encoder = CBOREncoder::new(
             py,
-            obj,
-            &fp,
+            None,
             datetime_as_timestamp,
             timezone,
             value_sharing,
@@ -260,7 +259,9 @@ mod _cbor2 {
             string_referencing,
             indefinite_containers,
         )?;
-        Ok(fp.call_method0("getvalue")?.cast_into::<PyBytes>()?)
+        let instance = Bound::new(py, encoder)?;
+        CBOREncoder::encode(&instance, obj)?;
+        Ok(take(&mut instance.borrow_mut().buffer))
     }
 
     #[pymodule_init]
