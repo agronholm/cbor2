@@ -48,24 +48,22 @@ impl CBORDecoder {
         str_errors: &str,
         read_size: u32,
     ) -> PyResult<Self> {
-        let major_decoders: Bound<'_, PyDict> =
-            py.import("cbor2")?.getattr("major_decoders")?.cast_into()?;
+        let module = py.import("cbor2")?;
+        let major_decoders: Bound<'_, PyDict> = module.getattr("major_decoders")?.cast_into()?;
         let mut major_decoders_map: HashMap<u8, Py<PyAny>> = HashMap::new();
         for (key, value) in major_decoders.iter() {
             major_decoders_map.insert(key.extract::<u8>()?, value.clone().unbind());
         }
 
-        let semantic_decoders: Bound<'_, PyDict> = py
-            .import("cbor2")?
-            .getattr("semantic_decoders")?
+        let semantic_decoders: Bound<'_, PyDict> = module.getattr("semantic_decoders")?
             .cast_into()?;
         let mut semantic_decoders_map: HashMap<usize, Py<PyAny>> = HashMap::new();
         for (key, value) in semantic_decoders.iter() {
             semantic_decoders_map.insert(key.extract::<usize>()?, value.clone().unbind());
         }
 
-        let undefined = py.import("cbor2")?.getattr("undefined")?;
-        let break_marker = py.import("cbor2")?.getattr("break_marker")?;
+        let undefined = module.getattr("undefined")?;
+        let break_marker = module.getattr("break_marker")?;
         let sys_maxsize: usize = py.import("sys")?.getattr("maxsize")?.extract()?;
 
         let mut this = Self {
@@ -345,20 +343,32 @@ impl CBORDecoder {
         let py = slf.py();
         let (major_type, subtype) = Self::read_major_and_subtype(slf)?;
         let mut this = slf.borrow_mut();
-        let decoder = match this.major_decoders.get(&major_type) {
-            Some(decoder) => decoder.clone_ref(py).into_bound(py),
-            None => {
-                return raise_cbor_error(
-                    py,
-                    "CBORDecodeError",
-                    format!("invalid major type: {major_type}").as_str(),
-                );
-            }
-        };
+        // let decoder = match this.major_decoders.get(&major_type) {
+        //     Some(decoder) => decoder.clone_ref(py).into_bound(py),
+        //     None => {
+        //         return raise_cbor_error(
+        //             py,
+        //             "CBORDecodeError",
+        //             format!("invalid major type: {major_type}").as_str(),
+        //         );
+        //     }
+        // };
         this.decode_depth += 1;
         drop(this);
 
-        let result = decoder.call1((slf, subtype));
+        let result = match major_type {
+            0 => CBORDecoder::decode_uint(slf, subtype),
+            1 => CBORDecoder::decode_negint(slf, subtype),
+            2 => CBORDecoder::decode_bytestring(slf, subtype).map(|val| val.into_any()),
+            3 => CBORDecoder::decode_string(slf, subtype).map(|val| val.into_any()),
+            4 => CBORDecoder::decode_array(slf, subtype),
+            5 => CBORDecoder::decode_map(slf, subtype),
+            6 => CBORDecoder::decode_semantic(slf, subtype),
+            7 => CBORDecoder::decode_special(slf, subtype),
+            _ => raise_cbor_error(py, "CBORDecodeError", format!("invalid major type: {major_type}").as_str())
+        };
+
+        // let result = decoder.call1((slf, subtype));
 
         // Clear shareables and string references to prevent any leaks
         this = slf.borrow_mut();

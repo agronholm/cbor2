@@ -232,7 +232,7 @@ impl CBOREncoder {
             string_referencing,
             string_namespacing: string_referencing,
             indefinite_containers,
-            encoders: encoders.copy()?.unbind(),
+            encoders: encoders.clone().unbind(),
             buffer: Vec::new(),
             shared_containers: HashMap::new(),
             string_references: HashMap::new(),
