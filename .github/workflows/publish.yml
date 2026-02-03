@@ -70,7 +70,7 @@ jobs:
           maturin build \
             --target wasm32-wasip1 \
             -m rust/Cargo.toml \
-            -i python
+            -i python3.11
             --release \
             --out dist
 
