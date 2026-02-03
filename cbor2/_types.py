@@ -1,14 +1,3 @@
-from __future__ import annotations
-
-import threading
-from typing import TypeVar
-
-KT = TypeVar("KT")
-VT_co = TypeVar("VT_co", covariant=True)
-
-thread_locals = threading.local()
-
-
 class CBORError(Exception):
     """Base class for errors that occur during CBOR encoding or decoding."""
 
