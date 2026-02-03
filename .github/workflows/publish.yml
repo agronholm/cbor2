@@ -2,6 +2,7 @@ name: Publish packages to PyPI
 
 on:
   push:
+    branches: [rust]
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
       - "[0-9]+.[0-9]+.[0-9]+.post[0-9]+"
@@ -23,9 +24,8 @@ jobs:
     steps:
     - uses: actions/checkout@v6
     - name: Build wheels
-      uses: pypa/cibuildwheel@v3.3.0
+      uses: pypa/cibuildwheel@v3.3
       env:
-        CBOR2_BUILD_C_EXTENSION: "1"
         CIBW_SKIP: "*t-*"
         CIBW_ARCHS: "auto64"
         CIBW_TEST_GROUPS: "test"
@@ -35,7 +35,24 @@ jobs:
         name: wheels-${{ matrix.os }}
         path: wheelhouse/*.whl
 
-  sdist-purewheel:
+  pyodide-wheel:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+    - uses: actions/checkout@v6
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v3.3
+      env:
+        CIBW_PLATFORM: "pyodide"
+        CIBW_TEST_GROUPS: "test"
+        CIBW_TEST_COMMAND: "python -m pytest {project}/tests"
+    - uses: actions/upload-artifact@v6
+      with:
+        name: pyodide-wheel
+        path: wheelhouse/*.whl
+    - run: tree
+
+  sdist:
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -46,10 +63,8 @@ jobs:
         python-version: 3.x
     - name: Install dependencies
       run: pip install build
-    - name: Create sdist and pure-Python wheel
-      run: python -m build .
-      env:
-        CBOR2_BUILD_C_EXTENSION: "0"
+    - name: Create the sdist
+      run: python -m build -s .
     - uses: actions/upload-artifact@v6
       with:
         name: sdist
@@ -58,31 +73,41 @@ jobs:
   publish:
     needs:
       - binary-wheels
-      - sdist-purewheel
+      - sdist
     runs-on: ubuntu-latest
     environment: release
     permissions:
       id-token: write
     steps:
-    - name: Download generated packaging artifacts
+    - name: Download the sdist and binary wheels
       uses: actions/download-artifact@v7
+      with:
+        merge-multiple: true
+        path: dist
     - name: Move the packages to dist/
       run: |
         mkdir dist
         mv */*.whl */*.tar.gz dist
-    - name: Upload packages
-      uses: pypa/gh-action-pypi-publish@release/v1
+        tree
+#    - name: Upload packages
+#      uses: pypa/gh-action-pypi-publish@release/v1
 
   release:
     name: Create a GitHub release
     needs:
       - binary-wheels
-      - sdist-purewheel
+      - pyodide-wheel
+      - sdist
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
     - uses: actions/checkout@v6
+    - name: Download the pyodide wheel
+      uses: actions/download-artifact@v7
+      with:
+        name: pyodide-wheel
+        path: dist
     - id: changelog
       uses: agronholm/release-notes@v1
       with:
@@ -90,3 +115,9 @@ jobs:
     - uses: ncipollo/release-action@v1
       with:
         body: ${{ steps.changelog.outputs.changelog }}
+        allowUpdates: true
+        artifacts: dist/*.whl
+        artifactErrorsFailBuild: true
+        draft: true
+        skipIfReleaseExists: true
+        tag: 6.0.0
