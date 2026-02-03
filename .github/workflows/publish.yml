@@ -45,26 +45,37 @@ jobs:
         name: wheels-${{ matrix.os }}
         path: wheelhouse/*.whl
 
-  pyodide-wheel:
+  wasi-wheel:
     runs-on: ubuntu-latest
     environment: release
     steps:
-    - uses: actions/checkout@v6
-    - name: Build wheels
-      uses: pypa/cibuildwheel@v3.3
-      env:
-        CIBW_PLATFORM: "pyodide"
-        CIBW_TEST_GROUPS: "test"
-        CIBW_TEST_COMMAND: "python -m pytest {project}/tests"
-        # Install nightly Rust
-        CIBW_BEFORE_ALL_PYODIDE: |
-          curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
-        CIBW_ENVIRONMENT_PYODIDE: "PATH=$HOME/.cargo/bin:$PATH"
-    - uses: actions/upload-artifact@v6
-      with:
-        name: pyodide-wheel
-        path: wheelhouse/*.whl
-    - run: tree
+      - uses: actions/checkout@v6
+
+      - name: Install Rust with WASI target
+        run: |
+          curl -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          rustup target add wasm32-wasip1
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build WASI wheel
+        run: |
+          maturin build \
+            --target wasm32-wasip1 \
+            --release \
+            --out dist
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wasi-wheel
+          path: dist/*.whl
 
   sdist:
     runs-on: ubuntu-latest
@@ -110,7 +121,7 @@ jobs:
     name: Create a GitHub release
     needs:
       - binary-wheels
-      - pyodide-wheel
+      - wasi-wheel
       - sdist
     runs-on: ubuntu-latest
     permissions:
@@ -120,7 +131,7 @@ jobs:
     - name: Download the pyodide wheel
       uses: actions/download-artifact@v7
       with:
-        name: pyodide-wheel
+        name: wasi-wheel
         path: dist
     - id: changelog
       uses: agronholm/release-notes@v1
