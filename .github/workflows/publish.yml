@@ -32,8 +32,8 @@ jobs:
       uses: pypa/cibuildwheel@v3.3
       env:
         CIBW_ARCHS: "auto64"
-#        CIBW_TEST_GROUPS: "test"
-#        CIBW_TEST_COMMAND: "python -m pytest {project}/tests"
+        CIBW_TEST_GROUPS: "test"
+        CIBW_TEST_COMMAND: "pytest {project}/tests"
         # Install Rust in cibuildwheel environments
         CIBW_BEFORE_ALL_LINUX: curl -sSf https://sh.rustup.rs | sh -s -- -y
         CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
