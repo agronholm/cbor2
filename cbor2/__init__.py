@@ -12,7 +12,6 @@ from ._cbor2 import loads as loads
 from ._cbor2 import major_decoders as major_decoders
 from ._cbor2 import semantic_decoders as semantic_decoders
 from ._cbor2 import undefined as undefined
-from ._encoder import shareable_encoder as shareable_encoder
 from ._types import CBORDecodeEOF as CBORDecodeEOF
 from ._types import CBORDecodeError as CBORDecodeError
 from ._types import CBORDecodeValueError as CBORDecodeValueError
