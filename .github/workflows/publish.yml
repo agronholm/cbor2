@@ -76,11 +76,7 @@ jobs:
       with:
         merge-multiple: true
         path: dist
-    - name: Move the packages to dist/
-      run: |
-        mkdir dist
-        mv */*.whl */*.tar.gz dist
-        tree
+    - run: ls -lR dist
 #    - name: Upload packages
 #      uses: pypa/gh-action-pypi-publish@release/v1
 
