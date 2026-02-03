@@ -3,15 +3,15 @@ use crate::_cbor2::SEMANTIC_DECODERS;
 use crate::_cbor2::SYS_MAXSIZE;
 use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, FrozenDict};
-use crate::utils::{CBORDecodeError, create_cbor_error, raise_cbor_error, raise_cbor_error_from, wrap_cbor_error, import_once};
+use crate::utils::{create_cbor_error, import_once, raise_cbor_error, raise_cbor_error_from, wrap_cbor_error, CBORDecodeError};
 use half::f16;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
+    PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple,
 };
-use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
+use pyo3::{intern, pyclass, IntoPyObjectExt, Py, PyAny};
 use std::cmp::{max, min};
 use std::mem::{swap, take};
 
