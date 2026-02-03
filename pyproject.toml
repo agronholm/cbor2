@@ -17,6 +17,7 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Typing :: Typed",
+    "Programming Language :: Python :: Free Threading :: 2 - Beta",
     "Programming Language :: Rust",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
