@@ -31,7 +31,6 @@ jobs:
     - name: Build wheels
       uses: pypa/cibuildwheel@v3.3
       env:
-        CIBW_SKIP: "*t-*"
         CIBW_ARCHS: "auto64"
         CIBW_TEST_GROUPS: "test"
         CIBW_TEST_COMMAND: "python -m pytest {project}/tests"
@@ -44,40 +43,6 @@ jobs:
       with:
         name: wheels-${{ matrix.os }}
         path: wheelhouse/*.whl
-
-  wasi-wheel:
-    runs-on: ubuntu-latest
-    environment: release
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install Rust with WASI target
-        run: |
-          curl -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          rustup target add wasm32-wasip1
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install maturin
-        run: pip install maturin
-
-      - name: Build WASI wheel
-        run: |
-          maturin build \
-            --target wasm32-wasip1 \
-            -m rust/Cargo.toml \
-            -i python3.11
-            --release \
-            --out dist
-
-      - uses: actions/upload-artifact@v6
-        with:
-          name: wasi-wheel
-          path: dist/*.whl
 
   sdist:
     runs-on: ubuntu-latest
@@ -119,32 +84,26 @@ jobs:
 #    - name: Upload packages
 #      uses: pypa/gh-action-pypi-publish@release/v1
 
-  release:
-    name: Create a GitHub release
-    needs:
-      - binary-wheels
-      - wasi-wheel
-      - sdist
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-    - uses: actions/checkout@v6
-    - name: Download the pyodide wheel
-      uses: actions/download-artifact@v7
-      with:
-        name: wasi-wheel
-        path: dist
-    - id: changelog
-      uses: agronholm/release-notes@v1
-      with:
-        path: docs/versionhistory.rst
-    - uses: ncipollo/release-action@v1
-      with:
-        body: ${{ steps.changelog.outputs.changelog }}
-        allowUpdates: true
-        artifacts: dist/*.whl
-        artifactErrorsFailBuild: true
-        draft: true
-        skipIfReleaseExists: true
-        tag: 6.0.0
+#  release:
+#    name: Create a GitHub release
+#    needs:
+#      - binary-wheels
+#      - sdist
+#    runs-on: ubuntu-latest
+#    permissions:
+#      contents: write
+#    steps:
+#    - uses: actions/checkout@v6
+#    - id: changelog
+#      uses: agronholm/release-notes@v1
+#      with:
+#        path: docs/versionhistory.rst
+#    - uses: ncipollo/release-action@v1
+#      with:
+#        body: ${{ steps.changelog.outputs.changelog }}
+#        allowUpdates: true
+#        artifacts: dist/*.whl
+#        artifactErrorsFailBuild: true
+#        draft: true
+#        skipIfReleaseExists: true
+#        tag: 6.0.0
