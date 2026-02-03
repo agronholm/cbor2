@@ -69,6 +69,7 @@ jobs:
         run: |
           maturin build \
             --target wasm32-wasip1 \
+            -m rust/Cargo.toml \
             --release \
             --out dist
 
