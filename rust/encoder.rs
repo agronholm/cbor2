@@ -416,6 +416,9 @@ impl CBOREncoder {
         }
     }
 
+    /// Encode the given object using CBOR.
+    ///
+    /// :param obj: the object to encode
     pub fn encode(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         slf.borrow_mut().encode_depth += 1;
 

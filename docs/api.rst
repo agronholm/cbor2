@@ -21,6 +21,9 @@ Types
 
 .. autoclass:: cbor2.CBORSimpleValue
 .. autoclass:: cbor2.CBORTag
+.. data:: cbor2.break_marker
+    A singleton representing the CBOR break marker, used for encoding
+    indefinite strings and containers.
 .. data:: cbor2.undefined
     A singleton representing the CBOR "undefined" value.
 
