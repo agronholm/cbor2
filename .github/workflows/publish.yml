@@ -2,7 +2,6 @@ name: Publish packages to PyPI
 
 on:
   push:
-    branches: [rust]
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
       - "[0-9]+.[0-9]+.[0-9]+.post[0-9]+"
@@ -76,30 +75,24 @@ jobs:
       with:
         merge-multiple: true
         path: dist
-    - run: ls -lR dist
-#    - name: Upload packages
-#      uses: pypa/gh-action-pypi-publish@release/v1
+    - name: Upload packages
+      uses: pypa/gh-action-pypi-publish@release/v1
 
-#  release:
-#    name: Create a GitHub release
-#    needs:
-#      - binary-wheels
-#      - sdist
-#    runs-on: ubuntu-latest
-#    permissions:
-#      contents: write
-#    steps:
-#    - uses: actions/checkout@v6
-#    - id: changelog
-#      uses: agronholm/release-notes@v1
-#      with:
-#        path: docs/versionhistory.rst
-#    - uses: ncipollo/release-action@v1
-#      with:
-#        body: ${{ steps.changelog.outputs.changelog }}
-#        allowUpdates: true
-#        artifacts: dist/*.whl
-#        artifactErrorsFailBuild: true
-#        draft: true
-#        skipIfReleaseExists: true
-#        tag: 6.0.0
+  release:
+    name: Create a GitHub release
+    needs:
+      - binary-wheels
+      - sdist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/checkout@v6
+    - id: changelog
+      uses: agronholm/release-notes@v1
+      with:
+        path: docs/versionhistory.rst
+    - uses: ncipollo/release-action@v1
+      with:
+        body: ${{ steps.changelog.outputs.changelog }}
+        skipIfReleaseExists: true
