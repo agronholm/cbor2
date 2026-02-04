@@ -20,8 +20,6 @@ from uuid import UUID
 
 import pytest
 from _pytest.fixtures import FixtureRequest, SubRequest
-from hypothesis import given
-
 from cbor2 import (
     CBOREncodeError,
     CBOREncoder,
@@ -34,6 +32,7 @@ from cbor2 import (
     shareable_encoder,
     undefined,
 )
+from hypothesis import given
 
 from .hypothesis_strategies import compound_types_strategy
 
@@ -248,7 +247,7 @@ def test_special(special_values: tuple[object, str]) -> None:
 
 
 @pytest.fixture(params=[(0, "e0"), (2, "e2"), (23, "f7"), (32, "f820")])
-def simple_values(request: SubRequest) -> CBORSimpleValue:
+def simple_values(request: SubRequest) -> tuple[CBORSimpleValue, str]:
     value, expected = request.param
     return CBORSimpleValue(value), expected
 
