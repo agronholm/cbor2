@@ -64,7 +64,7 @@ Build requirements
 If you wish to compile the code yourself, or are installing on a yet unsupported Python version
 or platform where there are no wheels available, you need the following pre-requisites:
 
-* Python >= 3.10 (or `PyPy3`_ 3.10+)
+* Python >= 3.10 (or `PyPy3`_ 3.11+)
 * `Rust toolchain`_ (tested with v1.93.0)
 
 .. _PyPy3: https://www.pypy.org/
