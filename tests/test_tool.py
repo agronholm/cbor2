@@ -3,9 +3,8 @@ import json
 from io import BytesIO, TextIOWrapper
 from pathlib import Path
 
-import pytest
-
 import cbor2.tool
+import pytest
 
 
 @pytest.mark.parametrize(

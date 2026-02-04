@@ -19,9 +19,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from fractions import Fraction
 
-import objgraph
-
 import cbor2
+import objgraph
 
 UTC = timezone.utc
 

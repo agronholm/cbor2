@@ -1,5 +1,4 @@
 import pytest
-
 from cbor2 import CBORSimpleValue, CBORTag, FrozenDict, break_marker, undefined
 
 
