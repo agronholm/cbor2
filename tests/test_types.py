@@ -1,3 +1,5 @@
+import platform
+
 import pytest
 from cbor2 import CBORSimpleValue, CBORTag, FrozenDict, break_marker, undefined
 
@@ -9,6 +11,9 @@ class TestUndefined:
     def test_repr(self) -> None:
         assert repr(undefined) == "undefined"
 
+    @pytest.mark.skipif(
+        platform.python_implementation() == "PyPy", reason="PyPy does not raise TypeError"
+    )
     def test_singleton(self) -> None:
         with pytest.raises(TypeError, match="cannot create 'cbor2.UndefinedType' instances"):
             type(undefined)()
@@ -21,6 +26,9 @@ class TestBreakMarker:
     def test_repr(self) -> None:
         assert repr(break_marker) == "break_marker"
 
+    @pytest.mark.skipif(
+        platform.python_implementation() == "PyPy", reason="PyPy does not raise TypeError"
+    )
     def test_singleton(self) -> None:
         with pytest.raises(TypeError, match="cannot create 'cbor2.BreakMarkerType' instances"):
             type(break_marker)()
