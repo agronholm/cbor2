@@ -105,7 +105,7 @@ env_list = ["py310", "py311", "py312", "py313", "py314", "py314t", "pypy3"]
 skip_missing_interpreters = true
 requires = ["tox >= 4.22"]
 
-[tool.tox.env.run_base]
+[tool.tox.env_run_base]
 commands = [["pytest", { replace = "posargs", extend = true }]]
 package = "wheel"
 dependency_groups = ["test"]
