@@ -18,6 +18,9 @@ mod _cbor2 {
     use crate::encoder::CBOREncoder;
 
     #[pymodule_export]
+    use crate::encoder::shareable_encoder;
+
+    #[pymodule_export]
     use crate::decoder::CBORDecoder;
 
     #[pymodule_export]

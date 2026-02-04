@@ -7,10 +7,7 @@ use num_bigint::BigInt;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{
-    PyByteArray, PyBytes, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyMapping,
-    PyNone, PySequence, PySet, PyString, PyTuple,
-};
+use pyo3::types::{PyByteArray, PyBytes, PyCFunction, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyMapping, PyNone, PySequence, PySet, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::collections::HashMap;
 use std::mem::swap;
@@ -20,6 +17,24 @@ static ID_FUNC: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static ZERO_TIME: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static TZINFO_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static SORTED_FUNC: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+#[pyfunction]
+#[pyo3(signature = (wraps: "typing.Callable[[CBOREncoder, typing.Any], None]", /))]
+pub fn shareable_encoder<'py>(py: Python<'py>, wraps: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyCFunction>> {
+    // `wraps` is the original Python function
+    let wraps = wraps.clone().unbind();
+    PyCFunction::new_closure(
+        py,
+        None,    // no module
+        None,    // no qualified name override
+        move |args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>| -> PyResult<()> {
+            let py = args.py();
+            let encoder = args.get_item(0)?.cast_into::<CBOREncoder>()?;
+            let value = args.get_item(1)?;
+            CBOREncoder::encode_shared(&encoder, wraps.bind(py), &value)
+        },
+    )
+}
 
 #[pyclass(module = "cbor2")]
 pub struct CBOREncoder {

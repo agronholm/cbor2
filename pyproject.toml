@@ -60,7 +60,7 @@ fuzz = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["cbor2"]
+where = ["python"]
 
 [[tool.setuptools-rust.ext-modules]]
 target = "cbor2._cbor2"
