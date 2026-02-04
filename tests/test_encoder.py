@@ -15,7 +15,6 @@ from ipaddress import (
     IPv6Network,
 )
 from pathlib import Path
-from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -37,22 +36,25 @@ from hypothesis import given
 from .hypothesis_strategies import compound_types_strategy
 
 
-def test_bad_fp() -> None:
-    # Test for no "write" attribute
-    with pytest.raises(ValueError):
-        CBOREncoder(SimpleNamespace())
+class TestFpAttribute:
+    def test_none(self) -> None:
+        with pytest.raises(ValueError, match=r"fp must be a writable file-like object"):
+            CBOREncoder(None)
 
-    # Test for fp having a non-callable "write" attribute
-    with pytest.raises(ValueError):
-        CBOREncoder(SimpleNamespace(write=None))
+    def test_not_writable(self, tmp_path: Path) -> None:
+        # Test for fp not being writable
+        path = tmp_path.joinpath("foo.cbor")
+        path.touch()
+        with (
+            pytest.raises(ValueError, match=r"fp must be a writable file-like object"),
+            path.open("rb") as fp,
+        ):
+            CBOREncoder(fp)
 
-
-def test_del_fp_attr() -> None:
-    with BytesIO() as stream:
-        encoder = CBOREncoder(stream)
-        assert encoder.fp is stream
+    def test_delete(self) -> None:
+        decoder = CBOREncoder(BytesIO())
         with pytest.raises(AttributeError):
-            del encoder.fp
+            del decoder.fp
 
 
 def test_default_attr() -> None:

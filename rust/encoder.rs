@@ -78,6 +78,44 @@ pub struct CBOREncoder {
 const MAX_BUFFER_SIZE: usize = 4096;
 
 impl CBOREncoder {
+    pub fn new_internal(
+        py: Python<'_>,
+        fp: Option<&Bound<'_, PyAny>>,
+        datetime_as_timestamp: bool,
+        timezone: Option<&Bound<'_, PyAny>>,
+        value_sharing: bool,
+        default: Option<&Bound<'_, PyAny>>,
+        canonical: bool,
+        date_as_datetime: bool,
+        string_referencing: bool,
+        indefinite_containers: bool,
+    ) -> PyResult<Self> {
+        let mut instance = Self {
+            fp: None,
+            datetime_as_timestamp,
+            timezone: None,
+            value_sharing,
+            default: None,
+            canonical,
+            date_as_datetime,
+            string_referencing,
+            string_namespacing: string_referencing,
+            indefinite_containers,
+            encoders: ENCODERS.get(py).unwrap().clone_ref(py),
+            buffer: Vec::new(),
+            shared_containers: HashMap::new(),
+            string_references: HashMap::new(),
+            bytes_references: HashMap::new(),
+            encode_depth: 0,
+        };
+        if let Some(fp) = fp {
+            instance.set_fp(fp)?;
+        }
+        instance.set_timezone(timezone)?;
+        instance.set_default(default)?;
+        Ok(instance)
+    }
+
     fn encode_shared_internal(
         slf: &Bound<'_, Self>,
         obj: &Bound<'_, PyAny>,
@@ -229,7 +267,7 @@ impl CBOREncoder {
     ))]
     pub fn new(
         py: Python<'_>,
-        fp: Option<&Bound<'_, PyAny>>,
+        fp: &Bound<'_, PyAny>,
         datetime_as_timestamp: bool,
         timezone: Option<&Bound<'_, PyAny>>,
         value_sharing: bool,
@@ -239,30 +277,9 @@ impl CBOREncoder {
         string_referencing: bool,
         indefinite_containers: bool,
     ) -> PyResult<Self> {
-        let mut instance = Self {
-            fp: None,
-            datetime_as_timestamp,
-            timezone: None,
-            value_sharing,
-            default: None,
-            canonical,
-            date_as_datetime,
-            string_referencing,
-            string_namespacing: string_referencing,
-            indefinite_containers,
-            encoders: ENCODERS.get(py).unwrap().clone_ref(py),
-            buffer: Vec::new(),
-            shared_containers: HashMap::new(),
-            string_references: HashMap::new(),
-            bytes_references: HashMap::new(),
-            encode_depth: 0,
-        };
-        if let Some(fp) = fp {
-            instance.set_fp(fp)?;
-        }
-        instance.set_timezone(timezone)?;
-        instance.set_default(default)?;
-        Ok(instance)
+        CBOREncoder::new_internal(
+            py, Some(fp), datetime_as_timestamp, timezone, value_sharing, default, canonical, date_as_datetime, string_referencing, indefinite_containers
+        )
     }
 
     #[getter]
@@ -272,30 +289,22 @@ impl CBOREncoder {
 
     #[setter]
     fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
-        if !fp.is_none()
-            && let Some(existing_fp) = &self.fp
-            && fp.is(existing_fp)
-        {
-            return Ok(());
-        }
-
-        let result = fp.getattr("write");
-        if let Ok(write) = result
-            && write.is_callable()
-        {
-            if !self.fp.is_none() {
-                // Flush any pending writes before replacing the file pointer
+        let result = fp.call_method0("writable");
+        if let Ok(writable) = &result && writable.is_truthy()? {
+            // Before replacing the file pointer, flush any pending writes and clear state
+            if let Some(existing_fp) = &self.fp && !fp.is(existing_fp) {
                 self.flush(fp.py())?;
                 self.shared_containers.clear();
                 self.string_references.clear();
                 self.bytes_references.clear();
             }
+
             self.fp = Some(fp.clone().unbind());
             Ok(())
         } else {
-            Err(PyValueError::new_err(
-                "fp must be a file-like object with a write() method",
-            ))
+            let exc = PyValueError::new_err("fp must be a writable file-like object");
+            exc.set_cause(fp.py(), result.err());
+            Err(exc)
         }
     }
 

@@ -187,7 +187,7 @@ mod _cbor2 {
     ) -> PyResult<()> {
         let encoder = CBOREncoder::new(
             py,
-            Some(fp),
+            fp,
             datetime_as_timestamp,
             timezone,
             value_sharing,
@@ -258,7 +258,7 @@ mod _cbor2 {
         string_referencing: bool,
         indefinite_containers: bool,
     ) -> PyResult<Vec<u8>> {
-        let encoder = CBOREncoder::new(
+        let encoder = CBOREncoder::new_internal(
             py,
             None,
             datetime_as_timestamp,

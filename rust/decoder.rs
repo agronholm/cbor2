@@ -16,6 +16,7 @@ use std::cmp::{max, min};
 use std::mem::{swap, take};
 
 const VALID_STR_ERRORS: [&str; 3] = ["strict", "ignore", "replace"];
+const SEEK_CUR: u8 = 1;
 
 static DATETIME_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static DATE_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -41,12 +42,13 @@ pub struct CBORDecoder {
     tag_hook: Option<Py<PyAny>>,
     object_hook: Option<Py<PyAny>>,
     str_errors: Py<PyAny>,
-    read_size: u32,
+    read_size: usize,
 
     major_decoders: Py<PyDict>,
     semantic_decoders: Py<PyDict>,
     buffer: Vec<u8>,
     decode_depth: u32,
+    fp_is_seekable: bool,
     share_index: Option<usize>,
     shareables: Vec<Option<Py<PyAny>>>,
     stringref_namespace: Option<Vec<Py<PyAny>>>,
@@ -62,7 +64,7 @@ impl CBORDecoder {
         tag_hook: Option<&Bound<'_, PyAny>>,
         object_hook: Option<&Bound<'_, PyAny>>,
         str_errors: &str,
-        read_size: u32,
+        read_size: usize,
     ) -> PyResult<Self> {
         let mut this = Self {
             fp: None,
@@ -74,6 +76,7 @@ impl CBORDecoder {
             semantic_decoders: SEMANTIC_DECODERS.get(py).unwrap().clone_ref(py),
             buffer,
             decode_depth: 0,
+            fp_is_seekable: false,
             share_index: None,
             shareables: Vec::new(),
             stringref_namespace: None,
@@ -89,7 +92,8 @@ impl CBORDecoder {
     }
 
     fn read_to_buffer(&mut self, py: Python<'_>, minimum_amount: usize) -> PyResult<()> {
-        let bytes_to_read = max(minimum_amount, self.read_size as usize);
+        let read_size: usize = if self.fp_is_seekable { self.read_size } else { 1 };
+        let bytes_to_read = max(minimum_amount, read_size);
         let num_read_bytes = if let Some(fp) = self.fp.as_ref() {
             let fp = fp.bind(py);
             let bytes_from_fp: Vec<u8> = fp
@@ -194,7 +198,7 @@ impl CBORDecoder {
         tag_hook: "collections.abc.Callable[[CBORDecoder, CBORTag], typing.Any]] | None" = None,
         object_hook: "collections.abc.Callable[[CBORDecoder, dict[typing.Any, typing.Any], typing.Any]]] | None" = None,
         str_errors: "str" = "strict",
-        read_size: "int" = 1,
+        read_size: "int" = 4096,
     ))]
     pub fn new(
         py: Python<'_>,
@@ -202,7 +206,7 @@ impl CBORDecoder {
         tag_hook: Option<&Bound<'_, PyAny>>,
         object_hook: Option<&Bound<'_, PyAny>>,
         str_errors: &str,
-        read_size: u32,
+        read_size: usize,
     ) -> PyResult<Self> {
         Self::new_internal(
             py,
@@ -222,17 +226,16 @@ impl CBORDecoder {
 
     #[setter]
     fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
-        let result = fp.getattr("read");
-        if let Ok(read) = result
-            && read.is_callable()
-        {
+        let result = fp.call_method0("readable");
+        if let Ok(readable) = &result && readable.is_truthy()? {
+            self.fp_is_seekable = fp.call_method0("seekable")?.is_truthy()?;
             self.fp = Some(fp.clone().unbind());
+            Ok(())
         } else {
-            return Err(PyValueError::new_err(
-                "fp must be a file-like object with a read() method",
-            ));
+            let exc = PyValueError::new_err("fp must be a readable file-like object");
+            exc.set_cause(fp.py(), result.err());
+            Err(exc)
         }
-        Ok(())
     }
 
     #[getter]
@@ -348,6 +351,14 @@ impl CBORDecoder {
             this.shareables.clear();
             this.stringref_namespace = None;
             this.share_index = None;
+
+            // If fp was seekable and excess data has been read, empty the buffer and rewind the
+            // file
+            if !this.buffer.is_empty() && let Some(fp) = &this.fp {
+                let offset = -(this.buffer.len() as isize);
+                fp.call_method1(py, "seek", (offset, SEEK_CUR))?;
+                this.buffer.clear();
+            }
         }
 
         result.map_err(|err| {

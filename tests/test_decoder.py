@@ -23,7 +23,7 @@ from ipaddress import (
     ip_network,
 )
 from pathlib import Path
-from types import SimpleNamespace
+from socket import socketpair
 from typing import Any, NoReturn
 from uuid import UUID
 
@@ -48,7 +48,7 @@ from cbor2 import (
 def will_overflow() -> bytes:
     """
     Construct an array/string/bytes length which would cause a memory error
-    on decode. This should be less than sys.maxsize (the max integer index)
+    on decode. This should be less than sys.maxsize (the max integer index).
     """
     bit_size = struct.calcsize("P") * 8
     huge_length = 1 << (bit_size - 8)
@@ -57,15 +57,16 @@ def will_overflow() -> bytes:
 
 class TestFpAttribute:
     def test_none(self) -> None:
-        with pytest.raises(
-            ValueError, match=r"fp must be a file-like object with a read\(\) method"
-        ):
+        with pytest.raises(ValueError, match=r"fp must be a readable file-like object"):
             CBORDecoder(None)
 
-    def test_no_read_method(self) -> None:
-        # Test for fp having a non-callable "read" attribute
-        with pytest.raises(ValueError):
-            CBORDecoder(SimpleNamespace(read=None))
+    def test_not_readable(self, tmp_path: Path) -> None:
+        # Test for fp not being readable
+        with (
+            pytest.raises(ValueError, match=r"fp must be a readable file-like object"),
+            tmp_path.joinpath("foo.cbor").open("wb") as fp,
+        ):
+            CBORDecoder(fp)
 
     def test_delete(self) -> None:
         decoder = CBORDecoder(BytesIO())
@@ -151,14 +152,26 @@ def test_immutable_attr() -> None:
         decoder.decode()
 
 
-def test_load() -> None:
-    with pytest.raises(TypeError):
-        load()
-    with pytest.raises(TypeError):
-        loads()
-    assert loads(b"\x01") == 1
-    with BytesIO(b"\x01") as stream:
-        assert load(stream) == 1
+def test_stream_position_after_decode() -> None:
+    """Test that the stream position is exactly at the end of the decoded CBOR value."""
+    # CBOR: integer 1, followed by non-CBOR data ("extra")
+    stream = BytesIO(b"\x01extra")
+    assert load(stream) == 1
+    # Stream position should be exactly at the end of CBOR data
+    assert stream.tell() == 1
+    # Should be able to read the extra data
+    assert stream.read() == b"extra"
+
+
+def test_non_seekable_fp() -> None:
+    sock1, sock2 = socketpair()
+    with sock1, sock2:
+        receiver = sock2.makefile("rb")
+        sock1.sendall(b"\x01\x02extra")
+        decoder = CBORDecoder(receiver)
+        assert decoder.decode() == 1
+        assert decoder.decode() == 2
+        assert receiver.read(5) == b"extra"
 
 
 @pytest.mark.parametrize(
