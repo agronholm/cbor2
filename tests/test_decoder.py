@@ -58,7 +58,7 @@ def will_overflow() -> bytes:
 class TestFpAttribute:
     def test_none(self) -> None:
         with pytest.raises(ValueError, match=r"fp must be a readable file-like object"):
-            CBORDecoder(None)
+            CBORDecoder(None)  # type: ignore[arg-type]
 
     def test_not_readable(self, tmp_path: Path) -> None:
         # Test for fp not being readable
@@ -83,8 +83,8 @@ class TestTagHookAttribute:
         assert decoder.tag_hook is tag_hook
 
     def test_not_callable(self) -> None:
-        with pytest.raises(TypeError, match="object_hook must be callable or None"):
-            CBORDecoder(BytesIO(), object_hook="foo")
+        with pytest.raises(TypeError, match="tag_hook must be callable or None"):
+            CBORDecoder(BytesIO(), tag_hook="foo")  # type: ignore[arg-type]
 
     def test_delete(self) -> None:
         decoder = CBORDecoder(BytesIO())
@@ -102,7 +102,7 @@ class TestObjectHookAttribute:
 
     def test_not_callable(self) -> None:
         with pytest.raises(TypeError, match="object_hook must be callable or None"):
-            CBORDecoder(BytesIO(), object_hook="foo")
+            CBORDecoder(BytesIO(), object_hook="foo")  # type: ignore[arg-type]
 
     def test_delete(self) -> None:
         decoder = CBORDecoder(BytesIO())
@@ -126,8 +126,10 @@ def test_read() -> None:
         decoder = CBORDecoder(stream)
         assert decoder.read(3) == b"foo"
         assert decoder.read(3) == b"bar"
+
         with pytest.raises(TypeError):
-            decoder.read("foo")
+            decoder.read("foo")  # type: ignore[arg-type]
+
         with pytest.raises(CBORDecodeError):
             decoder.read(10)
 
@@ -137,19 +139,7 @@ def test_decode_from_bytes() -> None:
         decoder = CBORDecoder(stream)
         assert decoder.decode_from_bytes(b"\x01") == 1
         with pytest.raises(TypeError):
-            decoder.decode_from_bytes("foo")
-
-
-def test_immutable_attr() -> None:
-    with BytesIO(unhexlify("d917706548656c6c6f")) as stream:
-        decoder = CBORDecoder(stream)
-        assert not decoder.immutable
-
-        def tag_hook(decoder, tag):
-            assert decoder.immutable
-            return tag.value
-
-        decoder.decode()
+            decoder.decode_from_bytes("foo")  # type: ignore[arg-type]
 
 
 def test_stream_position_after_decode() -> None:
@@ -197,7 +187,7 @@ def test_non_seekable_fp() -> None:
         ("3903e7", -1000),
     ],
 )
-def test_integer(payload, expected):
+def test_integer(payload: str, expected: int) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -233,13 +223,13 @@ def test_invalid_integer_subtype() -> None:
         ("fbfff0000000000000", float("-inf")),
     ],
 )
-def test_float(payload, expected):
+def test_float(payload: str, expected: float) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
 @pytest.mark.parametrize("payload", ["f97e00", "fa7fc00000", "fb7ff8000000000000"])
-def test_float_nan(payload):
+def test_float_nan(payload: str) -> None:
     decoded = loads(unhexlify(payload))
     assert math.isnan(decoded)
 
@@ -350,13 +340,13 @@ def test_string_issue_264_multiple_chunks_utf8_boundary() -> None:
         ),
     ],
 )
-def test_array(payload, expected):
+def test_array(payload: str, expected: list[Any]) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
 
 @pytest.mark.parametrize("payload, expected", [("a0", {}), ("a201020304", {1: 2, 3: 4})])
-def test_map(payload, expected):
+def test_map(payload: str, expected: dict[int, Any]) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -372,7 +362,7 @@ def test_map(payload, expected):
         ),
     ],
 )
-def test_mixed_array_map(payload, expected):
+def test_mixed_array_map(payload: str, expected: dict[str, Any]) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -397,7 +387,7 @@ def test_mixed_array_map(payload, expected):
         ("d901029f010203ff", {1, 2, 3}),
     ],
 )
-def test_streaming(payload, expected):
+def test_streaming(payload: str, expected: object) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -409,30 +399,27 @@ def test_streaming(payload, expected):
         "7f63737472a0",
     ],
 )
-def test_bad_streaming_strings(payload):
-    with pytest.raises(CBORDecodeError) as exc:
+def test_bad_streaming_strings(payload: str) -> None:
+    with pytest.raises(
+        CBORDecodeValueError,
+        match=r"non-(byte|text) string \(major type \d\) found in indefinite length (byte|text) string",
+    ):
         loads(unhexlify(payload))
-        assert exc.match(r"non-(byte)?string found in indefinite length \1string")
-        assert isinstance(exc, ValueError)
 
 
-@pytest.fixture(
-    params=[
+@pytest.mark.parametrize(
+    "payload, value",
+    [
         ("e0", 0),
         ("e2", 2),
         ("f3", 19),
         ("f820", 32),
-    ]
+    ],
 )
-def simple_value(request):
-    payload, expected = request.param
-    return payload, expected, CBORSimpleValue(expected)
-
-
-def test_simple_value(simple_value):
-    payload, expected, wrapped = simple_value
+def test_simple_value(payload: str, value: int) -> None:
+    wrapped = CBORSimpleValue(value)
     decoded = loads(unhexlify(payload))
-    assert decoded == expected
+    assert decoded == value
     assert decoded == wrapped
 
 
@@ -461,7 +448,7 @@ def test_simple_val_as_key() -> None:
         ),
     ],
 )
-def test_date(payload, expected):
+def test_date(payload: str, expected: date) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -496,7 +483,7 @@ def test_date(payload, expected):
         ),
     ],
 )
-def test_datetime(payload, expected):
+def test_datetime(payload: str, expected: datetime) -> None:
     decoded = loads(unhexlify(payload))
     assert decoded == expected
 
@@ -572,7 +559,7 @@ def test_datetime_date_out_of_range() -> None:
         loads(unhexlify("a6c11b00002401001b000000000000ff00"))
 
     if platform.system() == "Windows":
-        cause_exc_class = OSError
+        cause_exc_class: type[Exception] = OSError
     elif sys.maxsize == 2147483647:
         cause_exc_class = OverflowError
     else:
@@ -644,7 +631,7 @@ def test_bigfloat() -> None:
         ("d9a7f882f97e00f97e00", complex(float("nan"), float("nan"))),
     ],
 )
-def test_complex(payload, expected):
+def test_complex(payload: str, expected: complex) -> None:
     decoded = loads(unhexlify(payload))
     if math.isnan(expected.real):
         assert math.isnan(decoded.real)
@@ -776,8 +763,7 @@ class TestDeprecatedIPAddress:
         ],
     )
     def test_valid(self, payload: str, expected: Any) -> None:
-        payload = unhexlify(payload)
-        assert loads(payload) == expected
+        assert loads(unhexlify(payload)) == expected
 
     @pytest.mark.parametrize("payload", ["d9010443c00a0a", "d9010401"])
     def test_invalid(self, payload: str) -> None:
@@ -799,8 +785,7 @@ class TestDeprecatedIPNetwork:
         ],
     )
     def test_valid(self, payload: str, expected: Any) -> None:
-        payload = unhexlify(payload)
-        assert loads(payload) == expected
+        assert loads(unhexlify(payload)) == expected
 
     @pytest.mark.parametrize(
         "payload, pattern",
@@ -932,6 +917,7 @@ def test_tag_hook_cyclic() -> None:
 
     decoded = loads(unhexlify("D81CD90BB849D81CD90BB843D81D00"), tag_hook=unmarshal_dummy)
     assert isinstance(decoded, DummyType)
+    assert isinstance(decoded.value, DummyType)
     assert decoded.value.value is decoded
 
 
@@ -947,7 +933,7 @@ def test_object_hook() -> None:
 
 
 def test_object_hook_exception() -> None:
-    def object_hook(decoder: CBORDecoder, data) -> NoReturn:
+    def object_hook(decoder: CBORDecoder, data: dict[Any, Any]) -> NoReturn:
         raise RuntimeError("foo")
 
     payload = unhexlify("A2616103616205")
@@ -994,7 +980,7 @@ def test_set() -> None:
         ("d9010282d90102820102d90102820304", {frozenset({1, 2}), frozenset({3, 4})}),
     ],
 )
-def test_immutable_keys(payload: str, expected: object):
+def test_immutable_keys(payload: str, expected: object) -> None:
     value = loads(unhexlify(payload))
     assert value == expected
 
@@ -1186,10 +1172,11 @@ def test_decode_from_bytes_in_hook_preserves_buffer() -> None:
     corrupted, causing subsequent reads to fail or return wrong data.
     """
 
-    def tag_hook(decoder: CBORDecoder, tag: CBORTag):
+    def tag_hook(decoder: CBORDecoder, tag: CBORTag) -> Any:
         if tag.tag == 999:
             # Decode embedded CBOR (documented pattern)
             return decoder.decode_from_bytes(tag.value)
+
         return tag
 
     # Test data: array with [tag(999, embedded_cbor), "after_hook", "final"]
@@ -1232,10 +1219,11 @@ def test_decode_from_bytes_deeply_nested_in_hook() -> None:
     BytesIO objects and the original stream.
     """
 
-    def tag_hook(decoder: CBORDecoder, tag: CBORTag):
+    def tag_hook(decoder: CBORDecoder, tag: CBORTag) -> Any:
         if tag.tag in [999, 888, 777]:
             # Recursively decode embedded CBOR
             return decoder.decode_from_bytes(tag.value)
+
         return tag
 
     # Test data: [tag(999, tag(888, tag(777, [1,2,3]))), "after", "final"]

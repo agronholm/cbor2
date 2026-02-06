@@ -37,7 +37,7 @@ class TestBreakMarker:
 class TestCBORTag:
     def test_bad_args(self) -> None:
         with pytest.raises(TypeError):
-            CBORTag("foo", "bar")
+            CBORTag("foo", "bar")  # type: ignore[arg-type]
 
     def test_attr(self) -> None:
         tag = CBORTag(1, "foo")
@@ -69,7 +69,7 @@ class TestCBORTag:
             tag <= (1, "foo")
 
     def test_recursive_repr(self) -> None:
-        some_list = []
+        some_list: list[CBORTag] = []
         tag = CBORTag(1, some_list)
         some_list.append(tag)
         assert repr(tag) == "CBORTag(1, [CBORTag(1, [...])])"

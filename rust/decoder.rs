@@ -3,7 +3,10 @@ use crate::_cbor2::SEMANTIC_DECODERS;
 use crate::_cbor2::SYS_MAXSIZE;
 use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, FrozenDict};
-use crate::utils::{create_cbor_error, import_once, raise_cbor_error, raise_cbor_error_from, wrap_cbor_error, CBORDecodeError};
+use crate::utils::{
+    CBORDecodeError, create_cbor_error, import_once, raise_cbor_error, raise_cbor_error_from,
+    wrap_cbor_error,
+};
 use half::f16;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -11,7 +14,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{
     PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple,
 };
-use pyo3::{intern, pyclass, IntoPyObjectExt, Py, PyAny};
+use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::cmp::{max, min};
 use std::mem::{swap, take};
 
@@ -36,6 +39,16 @@ static RE_COMPILE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static MESSAGE_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static UUID_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
+/// The CBORDecoder class implements a fully featured `CBOR`_ decoder with
+/// several extensions for handling shared references, big integers, rational
+/// numbers and so on. Typically, the class is not used directly, but the
+/// :func:`load` and :func:`loads` functions are called to indirectly construct
+/// and use the class.
+///
+/// When the class is constructed manually, the main entry points are
+/// :meth:`decode` and :meth:`decode_from_bytes`.
+///
+/// .. _CBOR: https://cbor.io/
 #[pyclass(module = "cbor2")]
 pub struct CBORDecoder {
     fp: Option<Py<PyAny>>,
@@ -92,7 +105,11 @@ impl CBORDecoder {
     }
 
     fn read_to_buffer(&mut self, py: Python<'_>, minimum_amount: usize) -> PyResult<()> {
-        let read_size: usize = if self.fp_is_seekable { self.read_size } else { 1 };
+        let read_size: usize = if self.fp_is_seekable {
+            self.read_size
+        } else {
+            1
+        };
         let bytes_to_read = max(minimum_amount, read_size);
         let num_read_bytes = if let Some(fp) = self.fp.as_ref() {
             let fp = fp.bind(py);
@@ -227,7 +244,9 @@ impl CBORDecoder {
     #[setter]
     fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
         let result = fp.call_method0("readable");
-        if let Ok(readable) = &result && readable.is_truthy()? {
+        if let Ok(readable) = &result
+            && readable.is_truthy()?
+        {
             self.fp_is_seekable = fp.call_method0("seekable")?.is_truthy()?;
             self.fp = Some(fp.clone().unbind());
             Ok(())
@@ -300,6 +319,11 @@ impl CBORDecoder {
         Ok(())
     }
 
+    /// Read bytes from the data stream.
+    ///
+    /// :param int amount: the number of bytes to read
+    /// :rtype: bytes
+    #[pyo3(signature = (amount: "int", /))]
     fn read(slf: &Bound<'_, Self>, amount: usize) -> PyResult<Vec<u8>> {
         let py = slf.py();
         let mut this = slf.borrow_mut();
@@ -354,7 +378,9 @@ impl CBORDecoder {
 
             // If fp was seekable and excess data has been read, empty the buffer and rewind the
             // file
-            if !this.buffer.is_empty() && let Some(fp) = &this.fp {
+            if !this.buffer.is_empty()
+                && let Some(fp) = &this.fp
+            {
                 let offset = -(this.buffer.len() as isize);
                 fp.call_method1(py, "seek", (offset, SEEK_CUR))?;
                 this.buffer.clear();
@@ -385,7 +411,9 @@ impl CBORDecoder {
     ///  This method was intended to be used from the ``tag_hook`` hook when an
     ///  object needs to be decoded separately from the rest but while still
     ///  taking advantage of the shared value registry.
-    #[pyo3(signature = (buf: "bytes"))]
+    ///
+    /// :param bytes buf: the buffer from which to decode a CBOR object
+    #[pyo3(signature = (buf: "bytes", /))]
     pub fn decode_from_bytes<'py>(
         slf: &Bound<'py, Self>,
         mut buf: Vec<u8>,
@@ -479,8 +507,8 @@ impl CBORDecoder {
                                 py,
                                 "CBORDecodeValueError",
                                 format!(
-                                    "non-bytestring (major type {major_type}) found in indefinite \
-                                    length bytestring"
+                                    "non-byte string (major type {major_type}) found in indefinite \
+                                    length byte string"
                                 )
                                 .as_str(),
                             );
@@ -561,7 +589,7 @@ impl CBORDecoder {
                                 py,
                                 "CBORDecodeValueError",
                                 format!(
-                                    "non-bytestring (major type {major_type}) found in indefinite \
+                                    "non-text string (major type {major_type}) found in indefinite \
                                     length text string"
                                 )
                                 .as_str(),
@@ -749,13 +777,15 @@ impl CBORDecoder {
                     Some(tag_hook) => {
                         let tag_hook = tag_hook.clone_ref(py);
                         drop(this);
-                        bound_tag.borrow_mut().value = Self::decode(slf)?.unbind();
+                        bound_tag.borrow_mut().value =
+                            Self::with_immutable(slf, || Self::decode(slf))?.unbind();
                         tag_hook.bind(py).call1((slf, bound_tag))
                     }
                     None => {
                         drop(this);
                         Self::set_shareable_internal(slf, &bound_tag);
-                        bound_tag.borrow_mut().value = Self::decode(slf)?.unbind();
+                        bound_tag.borrow_mut().value =
+                            Self::with_immutable(slf, || Self::decode(slf))?.unbind();
                         Ok(bound_tag.into_any())
                     }
                 }
@@ -1239,7 +1269,7 @@ impl CBORDecoder {
     fn decode_epoch_date<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 100
         let value = Self::decode(slf)?.extract::<i32>()? + 719163;
-        let date_class = import_once(slf.py(), &DATE_TYPE,"datetime", "date")?;
+        let date_class = import_once(slf.py(), &DATE_TYPE, "datetime", "date")?;
         let date = date_class.call_method1("fromordinal", (value,))?;
         Ok(date)
     }
@@ -1324,7 +1354,8 @@ impl CBORDecoder {
                 // A ValueError may indicate that the bytestring has host bits set, so try parsing
                 // it as an IP interface instead
                 if e.is_instance_of::<PyValueError>(py) {
-                    let ip_interface_func = import_once(py, &IP_INTERFACE, "ipaddress", "ip_interface")?;
+                    let ip_interface_func =
+                        import_once(py, &IP_INTERFACE, "ipaddress", "ip_interface")?;
                     ip_interface_func.call1((first_item,))
                 } else {
                     Err(e)
@@ -1337,7 +1368,7 @@ impl CBORDecoder {
     fn decode_date_string<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 1004
         let value = Self::decode(slf)?;
-        let date_class = import_once(slf.py(), &DATE_TYPE,"datetime", "date")?;
+        let date_class = import_once(slf.py(), &DATE_TYPE, "datetime", "date")?;
         let date = date_class.call_method1("fromisoformat", (value,))?;
         Ok(date)
     }

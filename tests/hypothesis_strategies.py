@@ -3,6 +3,8 @@ from datetime import timedelta, timezone
 
 from cbor2 import FrozenDict
 from hypothesis import strategies
+from hypothesis.internal.filtering import Ex
+from hypothesis.strategies import DrawFn, SearchStrategy
 
 # Tune these for test run time
 MAX_SIZE = 5
@@ -39,7 +41,7 @@ basic_types_strategy = strategies.one_of(
 
 
 @strategies.composite
-def arbitrary_length_tuple(draw, child_types):
+def arbitrary_length_tuple(draw: DrawFn, child_types: SearchStrategy[Ex]) -> tuple[Ex, ...]:
     i = draw(strategies.integers(min_value=0, max_value=MAX_SIZE))
     return tuple(draw(child_types) for _ in range(i))
 
@@ -63,7 +65,7 @@ compound_types_strategy = strategies.recursive(
         strategies.dictionaries(
             dict_keys_strategy,
             children,
-            dict_class=lambda *a: defaultdict(None, *a),
+            dict_class=lambda *a: defaultdict(None, *a),  # type: ignore[arg-type]
             max_size=MAX_SIZE,
         ),
         strategies.dictionaries(

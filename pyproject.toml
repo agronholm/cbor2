@@ -49,7 +49,6 @@ doc = [
     "packaging",
     "Sphinx >= 7",
     "sphinx-rtd-theme >= 1.3.0",
-    "sphinx-autodoc-typehints >= 1.2.0",
     "typing_extensions; python_version < '3.12'",
 ]
 benchmarks = [
@@ -88,6 +87,8 @@ ignore = ["ISC001"]
 
 [tool.mypy]
 strict = true
+files = ["python", "tests"]
+exclude = ["tests/fuzzers"]
 
 [tool.pytest.ini_options]
 addopts = "-rsfE --tb=short"

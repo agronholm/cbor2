@@ -65,7 +65,7 @@ mod _cbor2 {
     #[pyfunction]
     #[pyo3(signature = (
         fp: "typing.IO[bytes]",
-        /, *,
+        *,
         tag_hook: "collections.abc.Callable | None" = None,
         object_hook: "collections.abc.Callable | None" = None,
         str_errors: "str" = "strict",
@@ -105,7 +105,7 @@ mod _cbor2 {
     #[pyfunction]
     #[pyo3(signature = (
         data: "bytes",
-        /, *,
+        *,
         tag_hook: "collections.abc.Callable | None" = None,
         object_hook: "collections.abc.Callable | None" = None,
         str_errors: "str" = "strict"
@@ -123,44 +123,44 @@ mod _cbor2 {
         CBORDecoder::decode(&instance)
     }
 
-    ///  Serialize an object to a file.
+    /// Serialize an object to a file.
     ///
-    ///  :param fp:
-    ///      the file to write to (any file-like object opened for writing in binary mode)
-    ///  :param obj:
-    ///      the object to serialize
-    ///  :param datetime_as_timestamp:
-    ///      set to ``True`` to serialize datetimes as UNIX timestamps (this makes datetimes
-    ///      more concise on the wire, but loses the timezone information)
-    ///  :param timezone:
-    ///      the default timezone to use for serializing naive datetimes; if this is not
-    ///      specified naive datetimes will throw a :exc:`ValueError` when encoding is
-    ///      attempted
-    ///  :param value_sharing:
-    ///      set to ``True`` to allow more efficient serializing of repeated values
-    ///      and, more importantly, cyclic data structures, at the cost of extra
-    ///      line overhead
-    ///  :param default:
-    ///      a callable that is called by the encoder with two arguments (the encoder
-    ///      instance and the value being encoded) when no suitable encoder has been found,
-    ///      and should use the methods on the encoder to encode any objects it wants to add
-    ///      to the data stream
-    ///  :param canonical:
-    ///      when ``True``, use "canonical" CBOR representation; this typically involves
-    ///      sorting maps, sets, etc. into a pre-determined order ensuring that
-    ///      serializations are comparable without decoding
-    ///  :param date_as_datetime:
-    ///      set to ``True`` to serialize date objects as datetimes (CBOR tag 0), which was
-    ///      the default behavior in previous releases (cbor2 <= 4.1.2).
-    ///  :param string_referencing:
-    ///      set to ``True`` to allow more efficient serializing of repeated string values
-    ///  :param indefinite_containers:
-    ///      encode containers as indefinite (use stop code instead of specifying length)
-    ///  :return: the serialized output
+    /// :param obj:
+    ///     the object to serialize
+    /// :param ~typing.IO[bytes] fp:
+    ///     the file to write to (any file-like object opened for writing in binary mode)
+    /// :param bool datetime_as_timestamp:
+    ///     set to ``True`` to serialize datetimes as UNIX timestamps (this makes datetimes
+    ///     more concise on the wire, but loses the timezone information)
+    /// :param ~datetime.tzinfo timezone:
+    ///     the default timezone to use for serializing naive datetimes; if this is not
+    ///     specified naive datetimes will throw a :exc:`ValueError` when encoding is
+    ///     attempted
+    /// :param bool value_sharing:
+    ///     set to ``True`` to allow more efficient serializing of repeated values
+    ///     and, more importantly, cyclic data structures, at the cost of extra
+    ///     line overhead
+    /// :param default:
+    ///     a callable that is called by the encoder with two arguments (the encoder
+    ///     instance and the value being encoded) when no suitable encoder has been found,
+    ///     and should use the methods on the encoder to encode any objects it wants to add
+    ///     to the data stream
+    /// :type default: ~collections.abc.Callable[[CBOREncoder, ~typing.Any], None] | None
+    /// :param bool canonical:
+    ///     when ``True``, use "canonical" CBOR representation; this typically involves
+    ///     sorting maps, sets, etc. into a pre-determined order ensuring that
+    ///     serializations are comparable without decoding
+    /// :param bool date_as_datetime:
+    ///     set to ``True`` to serialize date objects as datetimes (CBOR tag 0), which was
+    ///     the default behavior in previous releases (cbor2 <= 4.1.2).
+    /// :param bool string_referencing:
+    ///     set to ``True`` to allow more efficient serializing of repeated string values
+    /// :param bool indefinite_containers:
+    ///     encode containers as indefinite (use stop code instead of specifying length)
+    /// :rtype: None
     #[pyfunction]
     #[pyo3(signature = (
         obj,
-        /,
         fp: "typing.IO[bytes]",
         *,
         datetime_as_timestamp: "bool" = false,
@@ -201,42 +201,44 @@ mod _cbor2 {
         CBOREncoder::encode(&instance, obj)
     }
 
-    ///  Serialize an object to a bytestring.
+    /// Serialize an object to a bytestring.
     ///
-    ///  :param obj:
-    ///      the object to serialize
-    ///  :param datetime_as_timestamp:
-    ///      set to ``True`` to serialize datetimes as UNIX timestamps (this makes datetimes
-    ///      more concise on the wire, but loses the timezone information)
-    ///  :param timezone:
-    ///      the default timezone to use for serializing naive datetimes; if this is not
-    ///      specified naive datetimes will throw a :exc:`ValueError` when encoding is
-    ///      attempted
-    ///  :param value_sharing:
-    ///      set to ``True`` to allow more efficient serializing of repeated values
-    ///      and, more importantly, cyclic data structures, at the cost of extra
-    ///      line overhead
-    ///  :param default:
-    ///      a callable that is called by the encoder with two arguments (the encoder
-    ///      instance and the value being encoded) when no suitable encoder has been found,
-    ///      and should use the methods on the encoder to encode any objects it wants to add
-    ///      to the data stream
-    ///  :param canonical:
-    ///      when ``True``, use "canonical" CBOR representation; this typically involves
-    ///      sorting maps, sets, etc. into a pre-determined order ensuring that
-    ///      serializations are comparable without decoding
-    ///  :param date_as_datetime:
-    ///      set to ``True`` to serialize date objects as datetimes (CBOR tag 0), which was
-    ///      the default behavior in previous releases (cbor2 <= 4.1.2).
-    ///  :param string_referencing:
-    ///      set to ``True`` to allow more efficient serializing of repeated string values
-    ///  :param indefinite_containers:
-    ///      encode containers as indefinite (use stop code instead of specifying length)
-    ///  :return: the serialized output
+    /// :param obj:
+    ///     the object to serialize
+    /// :param bool datetime_as_timestamp:
+    ///     set to ``True`` to serialize datetimes as UNIX timestamps (this makes datetimes
+    ///     more concise on the wire, but loses the timezone information)
+    /// :param ~datetime.tzinfo | None timezone:
+    ///     the default timezone to use for serializing naive datetimes; if this is not
+    ///     specified naive datetimes will throw a :exc:`ValueError` when encoding is
+    ///     attempted
+    /// :param bool value_sharing:
+    ///     set to ``True`` to allow more efficient serializing of repeated values
+    ///     and, more importantly, cyclic data structures, at the cost of extra
+    ///     line overhead
+    /// :param default:
+    ///     a callable that is called by the encoder with two arguments (the encoder
+    ///     instance and the value being encoded) when no suitable encoder has been found,
+    ///     and should use the methods on the encoder to encode any objects it wants to add
+    ///     to the data stream
+    /// :type default: ~collections.abc.Callable[[CBOREncoder, ~typing.Any], None] | None
+    /// :param bool canonical:
+    ///     when ``True``, use "canonical" CBOR representation; this typically involves
+    ///     sorting maps, sets, etc. into a pre-determined order ensuring that
+    ///     serializations are comparable without decoding
+    /// :param bool date_as_datetime:
+    ///     set to ``True`` to serialize date objects as datetimes (CBOR tag 0), which was
+    ///     the default behavior in previous releases (cbor2 <= 4.1.2).
+    /// :param bool string_referencing:
+    ///     set to ``True`` to allow more efficient serializing of repeated string values
+    /// :param bool indefinite_containers:
+    ///     encode containers as indefinite (use stop code instead of specifying length)
+    /// :rtype: bytes
+    /// :return: the serialized output
     #[pyfunction]
     #[pyo3(signature = (
         obj,
-        /, *,
+        *,
         datetime_as_timestamp: "bool" = false,
         timezone: "datetime.tzinfo | None" = None,
         value_sharing: "bool" = false,

@@ -18,6 +18,17 @@ static ZERO_TIME: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static TZINFO_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static SORTED_FUNC: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
+/// Wrap the given encoder function to gracefully handle cyclic data
+/// structures.
+///
+/// If value sharing is enabled, this marks the given value shared in the
+/// datastream on the first call. If the value has already been passed to this
+/// method, a reference marker is instead written to the data stream and the
+/// wrapped function is not called.
+///
+/// If value sharing is disabled, only infinite recursion protection is done.
+///
+/// :rtype: Callable[[CBOREncoder, ~typing.Any], None]
 #[pyfunction]
 #[pyo3(signature = (wraps: "typing.Callable[[CBOREncoder, typing.Any], None]", /))]
 pub fn shareable_encoder<'py>(py: Python<'py>, wraps: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyCFunction>> {
@@ -377,10 +388,14 @@ impl CBOREncoder {
         self.maybe_flush(py)
     }
 
-    #[pyo3(signature = (bytes: "bytes", /))]
-    pub fn write<'py>(&self, py: Python<'py>, bytes: Vec<u8>) -> PyResult<Bound<'py, PyAny>> {
+    /// Write bytes to the data stream.
+    ///
+    /// :param bytes buf: the bytes to write
+    /// :rtype: None
+    #[pyo3(signature = (buf: "bytes", /))]
+    pub fn write<'py>(&self, py: Python<'py>, buf: Vec<u8>) -> PyResult<Bound<'py, PyAny>> {
         match self.fp.as_ref() {
-            Some(fp) => fp.bind(py).call_method1("write", (&bytes,)),
+            Some(fp) => fp.bind(py).call_method1("write", (&buf,)),
             None => Err(PyRuntimeError::new_err("fp not set")),
         }
     }
@@ -499,6 +514,9 @@ impl CBOREncoder {
     /// Takes a (key, value) tuple and calculates the length of its optimal byte
     /// representation, along with the representation itself.
     /// This is used as the sorting key in CBOR's canonical representations.
+    ///
+    /// :param item: a (key, value) tuple
+    /// :type item: tuple[Any, Any]
     pub fn encode_sortable_item<'py>(
         slf: &Bound<'py, Self>,
         item: &Bound<'py, PyTuple>,
