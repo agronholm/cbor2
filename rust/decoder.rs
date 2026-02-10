@@ -113,12 +113,12 @@ impl CBORDecoder {
         let bytes_to_read = max(minimum_amount, read_size);
         let num_read_bytes = if let Some(fp) = self.fp.as_ref() {
             let fp = fp.bind(py);
-            let bytes_from_fp: Vec<u8> = fp
+            let bytes_from_fp: Bound<PyBytes> = fp
                 .call_method1(intern!(py, "read"), (&bytes_to_read,))?
-                .extract()?;
-            let num_read_bytes = bytes_from_fp.len();
+                .cast_into()?;
+            let num_read_bytes = bytes_from_fp.len()?;
             if num_read_bytes >= minimum_amount {
-                self.buffer.extend(bytes_from_fp);
+                self.buffer.extend_from_slice(bytes_from_fp.as_bytes());
                 return Ok(());
             }
             num_read_bytes
