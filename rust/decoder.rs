@@ -59,6 +59,7 @@ pub struct CBORDecoder {
 
     major_decoders: Py<PyDict>,
     semantic_decoders: Py<PyDict>,
+    read_method: Option<Py<PyAny>>,
     buffer: Vec<u8>,
     decode_depth: u32,
     fp_is_seekable: bool,
@@ -87,6 +88,7 @@ impl CBORDecoder {
             read_size,
             major_decoders: MAJOR_DECODERS.get(py).unwrap().clone_ref(py),
             semantic_decoders: SEMANTIC_DECODERS.get(py).unwrap().clone_ref(py),
+            read_method: None,
             buffer,
             decode_depth: 0,
             fp_is_seekable: false,
@@ -111,10 +113,9 @@ impl CBORDecoder {
             1
         };
         let bytes_to_read = max(minimum_amount, read_size);
-        let num_read_bytes = if let Some(fp) = self.fp.as_ref() {
-            let fp = fp.bind(py);
-            let bytes_from_fp: Bound<PyBytes> = fp
-                .call_method1(intern!(py, "read"), (&bytes_to_read,))?
+        let num_read_bytes = if let Some(read) = self.read_method.as_ref() {
+            let bytes_from_fp: Bound<PyBytes> = read.bind(py)
+                .call1((&bytes_to_read,))?
                 .cast_into()?;
             let num_read_bytes = bytes_from_fp.len()?;
             if num_read_bytes >= minimum_amount {
@@ -228,7 +229,7 @@ impl CBORDecoder {
         Self::new_internal(
             py,
             Some(fp),
-            Vec::new(),
+            Vec::with_capacity(read_size),
             tag_hook,
             object_hook,
             str_errors,
@@ -248,7 +249,9 @@ impl CBORDecoder {
             && readable.is_truthy()?
         {
             self.fp_is_seekable = fp.call_method0("seekable")?.is_truthy()?;
-            self.fp = Some(fp.clone().unbind());
+            let fp = fp.clone();
+            self.read_method = Some(fp.getattr("read")?.unbind());
+            self.fp = Some(fp.unbind());
             Ok(())
         } else {
             let exc = PyValueError::new_err("fp must be a readable file-like object");
