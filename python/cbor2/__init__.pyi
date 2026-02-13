@@ -50,6 +50,7 @@ class CBORDecoder:
     object_hook: ObjectHook | None
     str_errors: str
     read_size: int
+    max_depth: int
     immutable: bool
     def __new__(
         cls,
@@ -59,6 +60,7 @@ class CBORDecoder:
         object_hook: ObjectHook | None = ...,
         str_errors: str = ...,
         read_size: int = ...,
+        max_depth: int = ...,
     ) -> Self: ...
     def decode(self) -> Any: ...
     def decode_from_bytes(self, buf: bytes, /) -> Any: ...
@@ -121,40 +123,42 @@ def dump(
     obj: object,
     fp: IO[bytes],
     *,
-    datetime_as_timestamp: bool = False,
-    timezone: tzinfo | None = None,
-    value_sharing: bool = False,
-    default: EncoderHook | None = None,
-    canonical: bool = False,
-    date_as_datetime: bool = False,
-    string_referencing: bool = False,
-    indefinite_containers: bool = False,
+    datetime_as_timestamp: bool = ...,
+    timezone: tzinfo | None = ...,
+    value_sharing: bool = ...,
+    default: EncoderHook | None = ...,
+    canonical: bool = ...,
+    date_as_datetime: bool = ...,
+    string_referencing: bool = ...,
+    indefinite_containers: bool = ...,
 ) -> None: ...
 def dumps(
     obj: object,
     *,
-    datetime_as_timestamp: bool = False,
-    timezone: tzinfo | None = None,
-    value_sharing: bool = False,
-    default: EncoderHook | None = None,
-    canonical: bool = False,
-    date_as_datetime: bool = False,
-    string_referencing: bool = False,
-    indefinite_containers: bool = False,
+    datetime_as_timestamp: bool = ...,
+    timezone: tzinfo | None = ...,
+    value_sharing: bool = ...,
+    default: EncoderHook | None = ...,
+    canonical: bool = ...,
+    date_as_datetime: bool = ...,
+    string_referencing: bool = ...,
+    indefinite_containers: bool = ...,
 ) -> bytes: ...
 def load(
     fp: IO[bytes],
     *,
-    tag_hook: TagHook | None = None,
-    object_hook: ObjectHook | None = None,
-    str_errors: str = "strict",
+    tag_hook: TagHook | None = ...,
+    object_hook: ObjectHook | None = ...,
+    str_errors: str = ...,
+    max_depth: int = ...,
 ) -> Any: ...
 def loads(
     data: bytes,
     *,
-    tag_hook: TagHook | None = None,
-    object_hook: ObjectHook | None = None,
-    str_errors: str = "strict",
+    tag_hook: TagHook | None = ...,
+    object_hook: ObjectHook | None = ...,
+    str_errors: str = ...,
+    max_depth: int = ...,
 ) -> Any: ...
 def shareable_encoder(
     wraps: Callable[[CBOREncoder, _T], None], /

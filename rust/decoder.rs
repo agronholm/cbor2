@@ -1,7 +1,7 @@
-use crate::_cbor2::MAJOR_DECODERS;
 use crate::_cbor2::SEMANTIC_DECODERS;
 use crate::_cbor2::SYS_MAXSIZE;
 use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
+use crate::_cbor2::{DEFAULT_MAX_DEPTH, DEFAULT_READ_SIZE, MAJOR_DECODERS};
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, FrozenDict};
 use crate::utils::{
     CBORDecodeError, create_cbor_error, import_once, raise_cbor_error, raise_cbor_error_from,
@@ -55,13 +55,16 @@ pub struct CBORDecoder {
     tag_hook: Option<Py<PyAny>>,
     object_hook: Option<Py<PyAny>>,
     str_errors: Py<PyAny>,
+    #[pyo3(get)]
     read_size: usize,
+    #[pyo3(get)]
+    max_depth: usize,
 
     major_decoders: Py<PyDict>,
     semantic_decoders: Py<PyDict>,
     read_method: Option<Py<PyAny>>,
     buffer: Vec<u8>,
-    decode_depth: u32,
+    decode_depth: usize,
     fp_is_seekable: bool,
     share_index: Option<usize>,
     shareables: Vec<Option<Py<PyAny>>>,
@@ -79,6 +82,7 @@ impl CBORDecoder {
         object_hook: Option<&Bound<'_, PyAny>>,
         str_errors: &str,
         read_size: usize,
+        max_depth: usize,
     ) -> PyResult<Self> {
         let mut this = Self {
             fp: None,
@@ -86,6 +90,7 @@ impl CBORDecoder {
             object_hook: None,
             str_errors: PyString::new(py, "strict").into_py_any(py)?,
             read_size,
+            max_depth,
             major_decoders: MAJOR_DECODERS.get(py).unwrap().clone_ref(py),
             semantic_decoders: SEMANTIC_DECODERS.get(py).unwrap().clone_ref(py),
             read_method: None,
@@ -114,9 +119,8 @@ impl CBORDecoder {
         };
         let bytes_to_read = max(minimum_amount, read_size);
         let num_read_bytes = if let Some(read) = self.read_method.as_ref() {
-            let bytes_from_fp: Bound<PyBytes> = read.bind(py)
-                .call1((&bytes_to_read,))?
-                .cast_into()?;
+            let bytes_from_fp: Bound<PyBytes> =
+                read.bind(py).call1((&bytes_to_read,))?.cast_into()?;
             let num_read_bytes = bytes_from_fp.len()?;
             if num_read_bytes >= minimum_amount {
                 self.buffer.extend_from_slice(bytes_from_fp.as_bytes());
@@ -216,7 +220,8 @@ impl CBORDecoder {
         tag_hook: "collections.abc.Callable[[CBORDecoder, CBORTag], typing.Any]] | None" = None,
         object_hook: "collections.abc.Callable[[CBORDecoder, dict[typing.Any, typing.Any], typing.Any]]] | None" = None,
         str_errors: "str" = "strict",
-        read_size: "int" = 4096,
+        read_size: "int" = DEFAULT_READ_SIZE,
+        max_depth: "int" = DEFAULT_MAX_DEPTH,
     ))]
     pub fn new(
         py: Python<'_>,
@@ -225,6 +230,7 @@ impl CBORDecoder {
         object_hook: Option<&Bound<'_, PyAny>>,
         str_errors: &str,
         read_size: usize,
+        max_depth: usize,
     ) -> PyResult<Self> {
         Self::new_internal(
             py,
@@ -234,6 +240,7 @@ impl CBORDecoder {
             object_hook,
             str_errors,
             read_size,
+            max_depth,
         )
     }
 
@@ -356,6 +363,11 @@ impl CBORDecoder {
         let py = slf.py();
         let (major_type, subtype) = Self::read_major_and_subtype(slf)?;
         let mut this = slf.borrow_mut();
+
+        if this.decode_depth == this.max_depth {
+            return raise_cbor_error(py, "CBORDecodeError", "maximum recursion depth exceeded");
+        }
+
         let decoder = match this.major_decoders.bind(py).get_item(&major_type)? {
             Some(decoder) => decoder,
             None => {

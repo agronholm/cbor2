@@ -29,6 +29,7 @@ from uuid import UUID
 
 import pytest
 from _pytest.fixtures import FixtureRequest
+
 from cbor2 import (
     CBORDecodeEOF,
     CBORDecodeError,
@@ -121,6 +122,12 @@ class TestStrErrorsAttribute:
             CBORDecoder(BytesIO(), str_errors="foo")
 
 
+def test_readonly_attributes() -> None:
+    decoder = CBORDecoder(BytesIO())
+    assert decoder.read_size == 4096
+    assert decoder.max_depth == 1024
+
+
 def test_read() -> None:
     with BytesIO(b"foobar") as stream:
         decoder = CBORDecoder(stream)
@@ -162,6 +169,16 @@ def test_non_seekable_fp() -> None:
         assert decoder.decode() == 1
         assert decoder.decode() == 2
         assert receiver.read(5) == b"extra"
+
+
+class TestMaximumDepth:
+    def test_default(self) -> None:
+        with pytest.raises(CBORDecodeError, match="maximum recursion depth exceeded"):
+            loads(b"\x81" * 1025 + b"\x80")
+
+    def test_explicit(self) -> None:
+        with pytest.raises(CBORDecodeError, match="maximum recursion depth exceeded"):
+            loads(b"\x81" * 10 + b"\x80", max_depth=9)
 
 
 @pytest.mark.parametrize(

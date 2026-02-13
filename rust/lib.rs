@@ -42,6 +42,9 @@ mod _cbor2 {
     pub static UNDEFINED: PyOnceLock<Py<UndefinedType>> = PyOnceLock::new();
     pub static BREAK_MARKER: PyOnceLock<Py<BreakMarkerType>> = PyOnceLock::new();
 
+    pub const DEFAULT_READ_SIZE: usize = 4096;
+    pub const DEFAULT_MAX_DEPTH: usize = 1024;
+
     ///  Deserialize an object from a bytestring.
     ///
     ///  :param bytes s:
@@ -58,6 +61,8 @@ mod _cbor2 {
     ///  :param str_errors:
     ///      determines how to handle unicode decoding errors (see the `Error Handlers`_
     ///      section in the standard library documentation for details)
+    ///  :param int max_depth:
+    ///      maximum allowed depth for nested containers
     ///  :return:
     ///      the deserialized object
     ///
@@ -69,6 +74,7 @@ mod _cbor2 {
         tag_hook: "collections.abc.Callable | None" = None,
         object_hook: "collections.abc.Callable | None" = None,
         str_errors: "str" = "strict",
+        max_depth: "int" = DEFAULT_MAX_DEPTH,
     ))]
     fn load<'py>(
         py: Python<'py>,
@@ -76,8 +82,17 @@ mod _cbor2 {
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
         str_errors: &str,
+        max_depth: usize,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let decoder = CBORDecoder::new(py, fp, tag_hook, object_hook, str_errors, 4096)?;
+        let decoder = CBORDecoder::new(
+            py,
+            fp,
+            tag_hook,
+            object_hook,
+            str_errors,
+            DEFAULT_READ_SIZE,
+            max_depth,
+        )?;
         let instance = Bound::new(py, decoder)?;
         CBORDecoder::decode(&instance)
     }
@@ -98,6 +113,8 @@ mod _cbor2 {
     ///  :param str_errors:
     ///      determines how to handle unicode decoding errors (see the `Error Handlers`_
     ///      section in the standard library documentation for details)
+    ///  :param int max_depth:
+    ///      maximum allowed depth for nested containers
     ///  :return:
     ///      the deserialized object
     ///
@@ -108,7 +125,8 @@ mod _cbor2 {
         *,
         tag_hook: "collections.abc.Callable | None" = None,
         object_hook: "collections.abc.Callable | None" = None,
-        str_errors: "str" = "strict"
+        str_errors: "str" = "strict",
+        max_depth: "int" = DEFAULT_MAX_DEPTH,
     ))]
     fn loads<'py>(
         py: Python<'py>,
@@ -116,9 +134,18 @@ mod _cbor2 {
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
         str_errors: &str,
+        max_depth: usize,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let decoder =
-            CBORDecoder::new_internal(py, None, data, tag_hook, object_hook, str_errors, 4096)?;
+        let decoder = CBORDecoder::new_internal(
+            py,
+            None,
+            data,
+            tag_hook,
+            object_hook,
+            str_errors,
+            DEFAULT_READ_SIZE,
+            max_depth,
+        )?;
         let instance = Bound::new(py, decoder)?;
         CBORDecoder::decode(&instance)
     }
