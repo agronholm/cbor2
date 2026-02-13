@@ -74,11 +74,11 @@ def iterdecode(
     str_errors: Literal["strict", "error", "replace"] = "strict",
 ) -> Iterator[Any]:
     decoder = CBORDecoder(f, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors)
-    while True:
-        try:
+    try:
+        while True:
             yield decoder.decode()
-        except EOFError:
-            return
+    except EOFError:
+        return
 
 
 def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict[str, Any] | T:
