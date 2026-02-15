@@ -150,6 +150,7 @@ CBORDecoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         self->object_hook = Py_None;
         self->str_errors = PyBytes_FromString("strict");
         self->immutable = false;
+        self->builtin_tags = true;
         self->shared_index = -1;
         self->decode_depth = 0;
         self->readahead = NULL;
@@ -170,14 +171,15 @@ int
 CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {
-        "fp", "tag_hook", "object_hook", "str_errors", "read_size", NULL
+        "fp", "tag_hook", "object_hook", "str_errors", "read_size", "builtin_tags", NULL
     };
     PyObject *fp = NULL, *tag_hook = NULL, *object_hook = NULL,
              *str_errors = NULL;
     Py_ssize_t read_size = CBOR2_DEFAULT_READ_SIZE;
+    int builtin_tags = 1;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOn", keywords,
-                &fp, &tag_hook, &object_hook, &str_errors, &read_size))
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOnp", keywords,
+                &fp, &tag_hook, &object_hook, &str_errors, &read_size, &builtin_tags))
         return -1;
 
     if (read_size < 1) {
@@ -185,6 +187,7 @@ CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
         return -1;
     }
 
+    self->builtin_tags = (bool) builtin_tags;
     if (_CBORDecoder_set_fp_with_read_size(self, fp, read_size) == -1)
         return -1;
     if (tag_hook && _CBORDecoder_set_tag_hook(self, tag_hook, NULL) == -1)
@@ -395,6 +398,30 @@ _CBORDecoder_get_immutable(CBORDecoderObject *self, void *closure)
         Py_RETURN_TRUE;
     else
         Py_RETURN_FALSE;
+}
+
+
+// CBORDecoder._get_builtin_tags(self)
+static PyObject *
+_CBORDecoder_get_builtin_tags(CBORDecoderObject *self, void *closure)
+{
+    if (self->builtin_tags)
+        Py_RETURN_TRUE;
+    else
+        Py_RETURN_FALSE;
+}
+
+
+// CBORDecoder._set_builtin_tags(self, value)
+static int
+_CBORDecoder_set_builtin_tags(CBORDecoderObject *self, PyObject *value, void *closure)
+{
+    if (!value) {
+        PyErr_SetString(PyExc_AttributeError, "cannot delete builtin_tags attribute");
+        return -1;
+    }
+    self->builtin_tags = PyObject_IsTrue(value);
+    return 0;
 }
 
 
@@ -1257,51 +1284,53 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
     PyObject *tag, *value, *ret = NULL;
 
     if (decode_length(self, subtype, &tagnum, NULL) == 0) {
-        switch (tagnum) {
-            case 0:     ret = CBORDecoder_decode_datetime_string(self); break;
-            case 1:     ret = CBORDecoder_decode_epoch_datetime(self);  break;
-            case 2:     ret = CBORDecoder_decode_positive_bignum(self); break;
-            case 3:     ret = CBORDecoder_decode_negative_bignum(self); break;
-            case 4:     ret = CBORDecoder_decode_fraction(self);        break;
-            case 5:     ret = CBORDecoder_decode_bigfloat(self);        break;
-            case 25:    ret = CBORDecoder_decode_stringref(self);       break;
-            case 28:    ret = CBORDecoder_decode_shareable(self);       break;
-            case 29:    ret = CBORDecoder_decode_sharedref(self);       break;
-            case 30:    ret = CBORDecoder_decode_rational(self);        break;
-            case 35:    ret = CBORDecoder_decode_regexp(self);          break;
-            case 36:    ret = CBORDecoder_decode_mime(self);            break;
-            case 37:    ret = CBORDecoder_decode_uuid(self);            break;
-            case 100:   ret = CBORDecoder_decode_epoch_date(self);      break;
-            case 256:   ret = CBORDecoder_decode_stringref_ns(self);    break;
-            case 258:   ret = CBORDecoder_decode_set(self);             break;
-            case 260:   ret = CBORDecoder_decode_ipaddress(self);       break;
-            case 261:   ret = CBORDecoder_decode_ipnetwork(self);       break;
-            case 1004:  ret = CBORDecoder_decode_date_string(self);     break;
-            case 43000: ret = CBORDecoder_decode_complex(self);         break;
-            case 55799: ret = CBORDecoder_decode_self_describe_cbor(self);
-                break;
+        if (self->builtin_tags) {
+            switch (tagnum) {
+                case 0:     ret = CBORDecoder_decode_datetime_string(self); break;
+                case 1:     ret = CBORDecoder_decode_epoch_datetime(self);  break;
+                case 2:     ret = CBORDecoder_decode_positive_bignum(self); break;
+                case 3:     ret = CBORDecoder_decode_negative_bignum(self); break;
+                case 4:     ret = CBORDecoder_decode_fraction(self);        break;
+                case 5:     ret = CBORDecoder_decode_bigfloat(self);        break;
+                case 25:    ret = CBORDecoder_decode_stringref(self);       break;
+                case 28:    ret = CBORDecoder_decode_shareable(self);       break;
+                case 29:    ret = CBORDecoder_decode_sharedref(self);       break;
+                case 30:    ret = CBORDecoder_decode_rational(self);        break;
+                case 35:    ret = CBORDecoder_decode_regexp(self);          break;
+                case 36:    ret = CBORDecoder_decode_mime(self);            break;
+                case 37:    ret = CBORDecoder_decode_uuid(self);            break;
+                case 100:   ret = CBORDecoder_decode_epoch_date(self);      break;
+                case 256:   ret = CBORDecoder_decode_stringref_ns(self);    break;
+                case 258:   ret = CBORDecoder_decode_set(self);             break;
+                case 260:   ret = CBORDecoder_decode_ipaddress(self);       break;
+                case 261:   ret = CBORDecoder_decode_ipnetwork(self);       break;
+                case 1004:  ret = CBORDecoder_decode_date_string(self);     break;
+                case 43000: ret = CBORDecoder_decode_complex(self);         break;
+                case 55799: ret = CBORDecoder_decode_self_describe_cbor(self);
+                    break;
+            }
+        }
 
-            default:
-                tag = CBORTag_New(tagnum);
-                if (tag) {
-                    set_shareable(self, tag);
-                    value = decode(self, DECODE_UNSHARED);
-                    if (value) {
-                        if (CBORTag_SetValue(tag, value) == 0) {
-                            if (self->tag_hook == Py_None) {
-                                Py_INCREF(tag);
-                                ret = tag;
-                            } else {
-                                ret = PyObject_CallFunctionObjArgs(
-                                        self->tag_hook, self, tag, NULL);
-                                set_shareable(self, ret);
-                            }
+        if (!ret && !PyErr_Occurred()) {
+            tag = CBORTag_New(tagnum);
+            if (tag) {
+                set_shareable(self, tag);
+                value = decode(self, DECODE_UNSHARED);
+                if (value) {
+                    if (CBORTag_SetValue(tag, value) == 0) {
+                        if (self->tag_hook == Py_None) {
+                            Py_INCREF(tag);
+                            ret = tag;
+                        } else {
+                            ret = PyObject_CallFunctionObjArgs(
+                                    self->tag_hook, self, tag, NULL);
+                            set_shareable(self, ret);
                         }
-                        Py_DECREF(value);
                     }
-                    Py_DECREF(tag);
+                    Py_DECREF(value);
                 }
-                break;
+                Py_DECREF(tag);
+            }
         }
     }
     return ret;
@@ -2307,6 +2336,9 @@ static PyGetSetDef CBORDecoder_getsetters[] = {
         (getter) _CBORDecoder_get_immutable, NULL,
         "when True, the next item decoded should be made immutable (a "
         "tuple instead of a list, a frozenset instead of a set, etc.)"},
+    {"builtin_tags",
+        (getter) _CBORDecoder_get_builtin_tags, (setter) _CBORDecoder_set_builtin_tags,
+        "when True, builtin semantic tags will be handled automatically"},
     {NULL}
 };
 

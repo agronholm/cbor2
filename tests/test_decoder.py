@@ -82,6 +82,38 @@ def test_str_errors_attr(impl):
             del decoder.str_errors
 
 
+def test_builtin_tags_attr(impl):
+    with BytesIO(b"") as stream:
+        decoder = impl.CBORDecoder(stream, builtin_tags=False)
+        assert decoder.builtin_tags is False
+        decoder.builtin_tags = True
+        assert decoder.builtin_tags is True
+        decoder.builtin_tags = False
+        assert decoder.builtin_tags is False
+        decoder.builtin_tags = True
+        assert decoder.builtin_tags is True
+        with pytest.raises(AttributeError):
+            del decoder.builtin_tags
+
+
+def test_builtin_tags(impl):
+    # UUID
+    u = UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")
+    data = b"\xd8%\x50" + u.bytes
+    assert impl.loads(data, builtin_tags=False) == impl.CBORTag(37, u.bytes)
+    assert impl.loads(data, builtin_tags=True) == u
+
+    # Datetime (string)
+    data = b"\xc0t2023-01-01T00:00:00Z"
+    assert impl.loads(data, builtin_tags=False) == impl.CBORTag(0, "2023-01-01T00:00:00Z")
+    assert impl.loads(data, builtin_tags=True) == datetime(2023, 1, 1, tzinfo=timezone.utc)
+
+    # Shareable / Sharedref
+    data = b"\x82\xd8\x1c\x63foo\xd8\x1d\x00"
+    assert impl.loads(data, builtin_tags=False) == [impl.CBORTag(28, "foo"), impl.CBORTag(29, 0)]
+    assert impl.loads(data, builtin_tags=True) == ["foo", "foo"]
+
+
 def test_read(impl):
     with BytesIO(b"foobar") as stream:
         decoder = impl.CBORDecoder(stream)
