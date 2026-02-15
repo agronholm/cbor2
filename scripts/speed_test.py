@@ -28,6 +28,7 @@ from fractions import Fraction
 from math import ceil, log2
 
 import cbor
+
 import cbor2
 
 UTC = timezone.utc
