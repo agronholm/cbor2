@@ -54,7 +54,7 @@ pub struct CBORDecoder {
     fp: Option<Py<PyAny>>,
     tag_hook: Option<Py<PyAny>>,
     object_hook: Option<Py<PyAny>>,
-    str_errors: Py<PyAny>,
+    str_errors: Py<PyString>,
     #[pyo3(get)]
     read_size: usize,
     #[pyo3(get)]
@@ -84,11 +84,12 @@ impl CBORDecoder {
         read_size: usize,
         max_depth: usize,
     ) -> PyResult<Self> {
+        let bound_str_errors = PyString::new(py, str_errors);
         let mut this = Self {
             fp: None,
             tag_hook: None,
             object_hook: None,
-            str_errors: PyString::new(py, "strict").into_py_any(py)?,
+            str_errors: bound_str_errors.clone().unbind(),
             read_size,
             max_depth,
             major_decoders: MAJOR_DECODERS.get(py).unwrap().clone_ref(py),
@@ -107,7 +108,7 @@ impl CBORDecoder {
         };
         this.set_tag_hook(tag_hook)?;
         this.set_object_hook(object_hook)?;
-        this.set_str_errors(py, str_errors)?;
+        this.set_str_errors(&bound_str_errors)?;
         Ok(this)
     }
 
@@ -141,44 +142,33 @@ impl CBORDecoder {
         )
     }
 
-    fn read_exact<const N: usize>(slf: &Bound<'_, Self>) -> PyResult<[u8; N]> {
-        let py = slf.py();
-        let mut this = slf.borrow_mut();
-
+    fn read_exact<const N: usize>(&mut self, py: Python<'_>) -> PyResult<[u8; N]> {
         // If there's not enough data in the buffer, read some more
-        let buffer_length = this.buffer.len();
+        let buffer_length = self.buffer.len();
         if N > buffer_length {
-            this.read_to_buffer(py, N - buffer_length)?;
+            self.read_to_buffer(py, N - buffer_length)?;
         }
 
         let mut output: [u8; N] = [0; N];
-        output.copy_from_slice(this.buffer.drain(..N).as_slice());
+        output.copy_from_slice(self.buffer.drain(..N).as_slice());
         Ok(output)
     }
 
-    fn read_major_and_subtype(slf: &Bound<'_, Self>) -> PyResult<(u8, u8)> {
-        let initial_byte = Self::read_exact::<1>(slf)?[0];
+    fn read_major_and_subtype(&mut self, py: Python<'_>) -> PyResult<(u8, u8)> {
+        let initial_byte = self.read_exact::<1>(py)?[0];
         let major_type = initial_byte >> 5;
         let subtype = initial_byte & 31;
         Ok((major_type, subtype))
     }
 
-    fn decode_length_finite(slf: &Bound<'_, Self>, subtype: u8) -> PyResult<usize> {
-        match Self::decode_length(slf, subtype)? {
+    fn decode_length_finite(&mut self, py: Python<'_>, subtype: u8) -> PyResult<usize> {
+        match self.decode_length(py, subtype)? {
             Some(length) => Ok(length),
             None => raise_cbor_error(
-                slf.py(),
+                py,
                 "CBORDecodeValueError",
                 "indefinite length not allowed here",
             )?,
-        }
-    }
-
-    fn set_shareable_internal<'py, T>(slf: &Bound<'_, Self>, value: &Bound<'py, T>) {
-        let mut this = slf.borrow_mut();
-        if let Some(index) = this.share_index {
-            this.shareables[index] = Some(value.clone().unbind().into_any());
-            this.share_index = None;
         }
     }
 
@@ -319,13 +309,14 @@ impl CBORDecoder {
     }
 
     #[setter]
-    fn set_str_errors(&mut self, py: Python<'_>, str_errors: &str) -> PyResult<()> {
-        if !VALID_STR_ERRORS.contains(&str_errors) {
+    fn set_str_errors(&mut self, str_errors: &Bound<'_, PyString>) -> PyResult<()> {
+        let as_string: &str = str_errors.extract()?;
+        if !VALID_STR_ERRORS.contains(&as_string) {
             return Err(PyValueError::new_err(format!(
                 "invalid str_errors value: '{str_errors}'"
             )));
         }
-        self.str_errors = PyString::new(py, str_errors).into_py_any(py)?;
+        self.str_errors = str_errors.clone().unbind();
         Ok(())
     }
 
@@ -334,17 +325,14 @@ impl CBORDecoder {
     /// :param int amount: the number of bytes to read
     /// :rtype: bytes
     #[pyo3(signature = (amount: "int", /))]
-    fn read(slf: &Bound<'_, Self>, amount: usize) -> PyResult<Vec<u8>> {
-        let py = slf.py();
-        let mut this = slf.borrow_mut();
-
+    fn read(&mut self, py: Python<'_>, amount: usize) -> PyResult<Vec<u8>> {
         // If there's not enough data in the buffer, read some more
-        let buffer_length = this.buffer.len();
+        let buffer_length = self.buffer.len();
         if amount > buffer_length {
-            this.read_to_buffer(py, amount - buffer_length)?;
+            self.read_to_buffer(py, amount - buffer_length)?;
         }
 
-        Ok(this.buffer.drain(..amount).collect())
+        Ok(self.buffer.drain(..amount).collect())
     }
 
     /// Set the shareable value for the last encountered shared value marker,
@@ -352,8 +340,11 @@ impl CBORDecoder {
     ///
     /// :param value: the shared value
     /// :returns: the shared value to permit chaining
-    fn set_shareable<'py>(slf: &Bound<'_, Self>, value: &Bound<'py, PyAny>) {
-        Self::set_shareable_internal(slf, value)
+    fn set_shareable<'py>(&mut self, value: &Bound<'py, PyAny>) {
+        if let Some(index) = self.share_index {
+            self.shareables[index] = Some(value.clone().unbind().into_any());
+            self.share_index = None;
+        }
     }
 
     /// Decode the next value from the stream.
@@ -361,8 +352,8 @@ impl CBORDecoder {
     /// :raises CBORDecodeError: if there is any problem decoding the stream
     pub fn decode<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         let py = slf.py();
-        let (major_type, subtype) = Self::read_major_and_subtype(slf)?;
         let mut this = slf.borrow_mut();
+        let (major_type, subtype) = this.read_major_and_subtype(py)?;
 
         if this.decode_depth == this.max_depth {
             return raise_cbor_error(py, "CBORDecodeError", "maximum recursion depth exceeded");
@@ -451,57 +442,57 @@ impl CBORDecoder {
     // Decoders for major tags (0-7)
     //
 
-    fn decode_length(slf: &Bound<'_, Self>, subtype: u8) -> PyResult<Option<usize>> {
+    fn decode_length(&mut self, py: Python<'_>, subtype: u8) -> PyResult<Option<usize>> {
         let length = match subtype {
             ..24 => Some(subtype as usize),
-            24 => Some(Self::read_exact::<1>(slf)?[0] as usize),
-            25 => Some(u16::from_be_bytes(Self::read_exact(slf)?) as usize),
-            26 => Some(u32::from_be_bytes(Self::read_exact(slf)?) as usize),
-            27 => Some(u64::from_be_bytes(Self::read_exact(slf)?) as usize),
+            24 => Some(self.read_exact::<1>(py)?[0] as usize),
+            25 => Some(u16::from_be_bytes(self.read_exact(py)?) as usize),
+            26 => Some(u32::from_be_bytes(self.read_exact(py)?) as usize),
+            27 => Some(u64::from_be_bytes(self.read_exact(py)?) as usize),
             31 => None,
             _ => {
                 let msg = format!("unknown unsigned integer subtype 0x{subtype:x}");
-                raise_cbor_error(slf.py(), "CBORDecodeValueError", msg.as_str())?
+                raise_cbor_error(py, "CBORDecodeValueError", msg.as_str())?
             }
         };
         Ok(length)
     }
 
     #[pyo3(signature = (subtype: "int"))]
-    fn decode_uint<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
+    fn decode_uint<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 0
-        let uint = Self::decode_length_finite(slf, subtype)?;
-        let py_int = uint.into_bound_py_any(slf.py())?;
+        let uint = self.decode_length_finite(py, subtype)?;
+        let py_int = uint.into_bound_py_any(py)?;
         Ok(py_int)
     }
 
     #[pyo3(signature = (subtype: "int"))]
-    fn decode_negint<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
+    fn decode_negint<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 1
-        let uint = Self::decode_length_finite(slf, subtype)?;
+        let uint = self.decode_length_finite(py, subtype)?;
         let signed_int = -(uint as i128) - 1;
-        let py_int = signed_int.into_bound_py_any(slf.py())?;
+        let py_int = signed_int.into_bound_py_any(py)?;
         Ok(py_int)
     }
 
     #[pyo3(signature = (subtype: "int"))]
     fn decode_bytestring<'py>(
-        slf: &Bound<'py, Self>,
+        &mut self,
+        py: Python<'py>,
         subtype: u8,
     ) -> PyResult<Bound<'py, PyBytes>> {
         // Major tag 2
-        let py = slf.py();
-        let (decoded, length) = match Self::decode_length(slf, subtype)? {
+        let (decoded, length) = match self.decode_length(py, subtype)? {
             None => {
                 // Indefinite length
                 let mut bytes = PyBytes::new(py, b"");
                 let mut total_length: usize = 0;
                 let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
                 loop {
-                    let (major_type, subtype) = Self::read_major_and_subtype(slf)?;
+                    let (major_type, subtype) = self.read_major_and_subtype(py)?;
                     match (major_type, subtype) {
                         (2, _) => {
-                            let length = Self::decode_length_finite(slf, subtype)?;
+                            let length = self.decode_length_finite(py, subtype)?;
                             if length > sys_maxsize {
                                 return raise_cbor_error(
                                     py,
@@ -513,7 +504,7 @@ impl CBORDecoder {
                                 );
                             }
                             total_length += length;
-                            let chunk = Self::read(slf, length)?;
+                            let chunk = self.read(py, length)?;
                             bytes = bytes.add(chunk)?.cast_into()?;
                         }
                         (7, 31) => break (bytes, total_length), // break marker
@@ -532,7 +523,7 @@ impl CBORDecoder {
                 }
             }
             Some(length) if length <= 65536 => {
-                let bytes = Self::read(slf, length)?;
+                let bytes = self.read(py, length)?;
                 (PyBytes::new(py, &bytes), length)
             }
             Some(length) => {
@@ -541,51 +532,35 @@ impl CBORDecoder {
                 let mut remaining_length = length;
                 while remaining_length > 0 {
                     let chunk_size = min(remaining_length, 65536) as usize;
-                    let chunk = Self::read(slf, chunk_size)?;
+                    let chunk = self.read(py, chunk_size)?;
                     remaining_length -= chunk_size;
                     bytes = bytes.add(chunk)?.cast_into()?;
                 }
                 (bytes, length)
             }
         };
-        slf.borrow_mut().add_string_to_namespace(&decoded, length);
+        self.add_string_to_namespace(&decoded, length);
         Ok(decoded)
     }
 
     #[pyo3(signature = (subtype: "int"))]
-    fn decode_string<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyString>> {
-        let py = slf.py();
-        let str_errors = &slf.borrow().str_errors.clone_ref(py);
-
-        let read_string = |length: usize| -> PyResult<Bound<'py, PyString>> {
-            let bytes = Self::read(slf, length)?;
-            let py_bytes = bytes.into_bound_py_any(py)?;
-            py_bytes
-                .call_method1(intern!(py, "decode"), (intern!(py, "utf-8"), str_errors))
-                .map_err(|e| {
-                    create_cbor_error(
-                        py,
-                        "CBORDecodeValueError",
-                        "error decoding text string",
-                        Some(e),
-                    )
-                })?
-                .cast_into()
-                .map_err(|e| PyErr::from(e))
-        };
-
+    fn decode_string<'py>(
+        &mut self,
+        py: Python<'py>,
+        subtype: u8,
+    ) -> PyResult<Bound<'py, PyString>> {
         // Major tag 3
-        let (decoded, length) = match Self::decode_length(slf, subtype)? {
+        let (decoded, length) = match self.decode_length(py, subtype)? {
             None => {
                 // Indefinite length
                 let mut string = PyString::new(py, "");
                 let mut total_length: usize = 0;
                 loop {
-                    let (major_type, subtype) = Self::read_major_and_subtype(slf)?;
+                    let (major_type, subtype) = self.read_major_and_subtype(py)?;
                     let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
                     match (major_type, subtype) {
                         (3, _) => {
-                            let length = Self::decode_length_finite(slf, subtype)?;
+                            let length = self.decode_length_finite(py, subtype)?;
                             if length > sys_maxsize {
                                 return raise_cbor_error(
                                     py,
@@ -596,7 +571,24 @@ impl CBORDecoder {
                                 );
                             }
                             total_length += length;
-                            string = string.add(read_string(length)?)?.cast_into()?;
+                            let bytes = self.read(py, length)?;
+                            let decoded: Bound<PyString> = bytes
+                                .into_bound_py_any(py)?
+                                .call_method1(
+                                    intern!(py, "decode"),
+                                    (intern!(py, "utf-8"), &self.str_errors),
+                                )
+                                .map_err(|e| {
+                                    create_cbor_error(
+                                        py,
+                                        "CBORDecodeValueError",
+                                        "error decoding text string",
+                                        Some(e),
+                                    )
+                                })?
+                                .cast_into()
+                                .map_err(|e| PyErr::from(e))?;
+                            string = string.add(decoded)?.cast_into()?;
                         }
                         (7, 31) => break (string, total_length), // break marker
                         _ => {
@@ -614,11 +606,12 @@ impl CBORDecoder {
                 }
             }
             Some(length) if length <= 65536 => {
-                let bytes = Self::read(slf, length)?;
+                let bytes = self.read(py, length)?;
                 let py_bytes = bytes.into_bound_py_any(py)?;
-                let str_errors = &slf.borrow().str_errors.clone_ref(py);
-                let decode_result = py_bytes
-                    .call_method1(intern!(py, "decode"), (intern!(py, "utf-8"), str_errors));
+                let decode_result = py_bytes.call_method1(
+                    intern!(py, "decode"),
+                    (intern!(py, "utf-8"), self.str_errors.bind(py)),
+                );
                 if let Ok(decoded_bytes) = decode_result {
                     (decoded_bytes.cast_into().map_err(PyErr::from)?, length)
                 } else {
@@ -632,18 +625,16 @@ impl CBORDecoder {
             }
             Some(mut length) => {
                 // Incrementally decode the string, in chunks of 65536 bytes
-                let this = slf.borrow();
                 let decoder = py
                     .import("codecs")?
                     .getattr("lookup")?
                     .call1(("utf-8",))?
                     .getattr("incrementaldecoder")?
-                    .call1((this.str_errors.bind(py),))?;
-                drop(this);
+                    .call1((self.str_errors.bind(py),))?;
                 let mut string = PyString::new(py, "");
                 while length > 0 {
                     let chunk_size = min(length, 65536) as usize;
-                    let chunk = Self::read(slf, chunk_size)?;
+                    let chunk = self.read(py, chunk_size)?;
                     length -= chunk_size;
                     let is_final_chunk = length == 0;
                     let decode_result =
@@ -664,7 +655,7 @@ impl CBORDecoder {
                 (string, length)
             }
         };
-        slf.borrow_mut().add_string_to_namespace(&decoded, length);
+        self.add_string_to_namespace(&decoded, length);
         Ok(decoded)
     }
 
@@ -672,17 +663,18 @@ impl CBORDecoder {
     fn decode_array<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 4
         let py = slf.py();
-        let immutable = slf.borrow().immutable;
-        let length = Self::decode_length(slf, subtype)?;
-        match (length, immutable) {
+        let mut this = slf.borrow_mut();
+        let length = this.decode_length(py, subtype)?;
+        match (length, this.immutable) {
             (None, true) => {
                 // Tuple of indefinite length
                 let mut items = Vec::<Bound<'_, PyAny>>::new();
+                drop(this);
                 loop {
                     let obj = Self::decode(slf)?;
                     if obj.is_exact_instance_of::<BreakMarkerType>() {
                         let tuple = PyTuple::new(py, items)?;
-                        Self::set_shareable_internal(slf, &tuple);
+                        slf.borrow_mut().set_shareable(&tuple);
                         break Ok(tuple.into_any());
                     }
                     items.push(obj);
@@ -691,7 +683,8 @@ impl CBORDecoder {
             (None, false) => {
                 // Indefinite length list (shareable)
                 let list = PyList::empty(py);
-                Self::set_shareable_internal(slf, &list);
+                this.set_shareable(&list);
+                drop(this);
                 loop {
                     let obj = Self::decode(slf)?;
                     if obj.is_exact_instance_of::<BreakMarkerType>() {
@@ -703,18 +696,20 @@ impl CBORDecoder {
             }
             (Some(length), true) => {
                 // Fixed-length tuple
+                drop(this);
                 let mut items = Vec::<Bound<'_, PyAny>>::with_capacity(length);
                 for _ in 0..length {
                     items.push(Self::decode(slf)?);
                 }
                 let tuple = PyTuple::new(py, items)?;
-                Self::set_shareable_internal(slf, &tuple);
+                slf.borrow_mut().set_shareable(&tuple);
                 Ok(tuple.into_any())
             }
             (Some(length), false) => {
                 // Fixed-length list (shareable)
                 let list = PyList::empty(py);
-                Self::set_shareable_internal(slf, &list);
+                this.set_shareable(&list);
+                drop(this);
                 for _ in 0..length {
                     list.append(Self::decode(slf)?)?;
                 }
@@ -727,11 +722,13 @@ impl CBORDecoder {
     fn decode_map<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 5
         let py = slf.py();
+        let mut this = slf.borrow_mut();
         let dict = PyDict::new(py);
-        Self::set_shareable_internal(slf, &dict);
-        match Self::decode_length(slf, subtype)? {
+        this.set_shareable(&dict);
+        match this.decode_length(py, subtype)? {
             None => {
                 // Indefinite length
+                drop(this);
                 loop {
                     let key = Self::with_immutable(slf, || Self::decode(slf))?;
                     if key.is_exact_instance_of::<BreakMarkerType>() {
@@ -742,6 +739,7 @@ impl CBORDecoder {
                 }
             }
             Some(length) => {
+                drop(this);
                 for _ in 0..length {
                     let key = Self::with_immutable(slf, || Self::decode(slf))?;
                     let value = Self::decode(slf)?;
@@ -775,8 +773,8 @@ impl CBORDecoder {
     #[pyo3(signature = (subtype: "int"))]
     fn decode_semantic<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         let py = slf.py();
-        let tagnum = Self::decode_length_finite(slf, subtype)?;
-        let this = slf.borrow();
+        let mut this = slf.borrow_mut();
+        let tagnum = this.decode_length_finite(py, subtype)?;
         let semantic_decoders = this.semantic_decoders.bind(py);
         match semantic_decoders.get_item(&tagnum)? {
             Some(decoder) => {
@@ -797,8 +795,8 @@ impl CBORDecoder {
                         tag_hook.bind(py).call1((slf, bound_tag))
                     }
                     None => {
+                        this.set_shareable(&bound_tag);
                         drop(this);
-                        Self::set_shareable_internal(slf, &bound_tag);
                         bound_tag.borrow_mut().value =
                             Self::with_immutable(slf, || Self::decode(slf))?.unbind();
                         Ok(bound_tag.into_any())
@@ -809,9 +807,9 @@ impl CBORDecoder {
     }
 
     #[pyo3(signature = (subtype: "int"))]
-    fn decode_special<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
+    fn decode_special<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 7
-        let py = slf.py();
+        // let py = slf.py();
         match subtype {
             0..20 => {
                 let value = subtype.into_pyobject(py)?;
@@ -822,19 +820,19 @@ impl CBORDecoder {
             22 => Ok(py.None().into_bound_py_any(py)?),
             23 => Ok(UNDEFINED.get(py).unwrap().into_bound_py_any(py)?),
             24 => {
-                let value = Self::read_exact::<1>(slf)?[0];
+                let value = self.read_exact::<1>(py)?[0];
                 CBORSimpleValue::new(value.into_pyobject(py)?)?.into_bound_py_any(py)
             }
             25 => {
-                let bytes = Self::read_exact::<2>(slf)?;
+                let bytes = self.read_exact::<2>(py)?;
                 f16::from_be_bytes(bytes).to_f32().into_bound_py_any(py)
             }
             26 => {
-                let bytes = Self::read_exact::<4>(slf)?;
+                let bytes = self.read_exact::<4>(py)?;
                 f32::from_be_bytes(bytes).into_bound_py_any(py)
             }
             27 => {
-                let bytes = Self::read_exact::<8>(slf)?;
+                let bytes = self.read_exact::<8>(py)?;
                 f64::from_be_bytes(bytes).into_bound_py_any(py)
             }
             31 => Ok(BREAK_MARKER.get(py).unwrap().into_bound_py_any(py)?),
@@ -1055,8 +1053,9 @@ impl CBORDecoder {
 
         match Self::decode(slf) {
             Ok(decoded) => {
-                Self::set_shareable(slf, &decoded);
-                slf.borrow_mut().share_index = old_index;
+                this = slf.borrow_mut();
+                this.set_shareable(&decoded);
+                this.share_index = old_index;
                 Ok(decoded)
             }
             Err(e) => {
