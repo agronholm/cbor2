@@ -1,11 +1,10 @@
 from collections import OrderedDict, defaultdict
 from datetime import timedelta, timezone
 
+from cbor2 import FrozenDict
 from hypothesis import strategies
 from hypothesis.internal.filtering import Ex
 from hypothesis.strategies import DrawFn, SearchStrategy
-
-from cbor2 import FrozenDict
 
 # Tune these for test run time
 MAX_SIZE = 5
