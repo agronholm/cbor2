@@ -11,7 +11,7 @@ mod _cbor2 {
     use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
     use pyo3::sync::PyOnceLock;
-    use pyo3::types::PyDict;
+    use pyo3::types::{PyBytes, PyDict};
     use std::mem::take;
 
     #[pymodule_export]
@@ -133,7 +133,7 @@ mod _cbor2 {
     ))]
     fn loads<'py>(
         py: Python<'py>,
-        data: Vec<u8>,
+        data: Bound<'py, PyBytes>,
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
         str_errors: &str,
@@ -142,7 +142,7 @@ mod _cbor2 {
         let decoder = CBORDecoder::new_internal(
             py,
             None,
-            data,
+            Some(data),
             tag_hook,
             object_hook,
             str_errors,

@@ -16,7 +16,7 @@ use pyo3::types::{
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::cmp::{max, min};
-use std::mem::{swap, take};
+use std::mem::{replace, take};
 
 const VALID_STR_ERRORS: [&str; 3] = ["strict", "ignore", "replace"];
 const SEEK_CUR: u8 = 1;
@@ -63,7 +63,9 @@ pub struct CBORDecoder {
     major_decoders: Py<PyDict>,
     semantic_decoders: Py<PyDict>,
     read_method: Option<Py<PyAny>>,
-    buffer: Vec<u8>,
+    buffer: Option<Py<PyBytes>>,
+    read_position: usize,
+    available_bytes: usize,
     decode_depth: usize,
     fp_is_seekable: bool,
     share_index: Option<usize>,
@@ -77,13 +79,18 @@ impl CBORDecoder {
     pub fn new_internal(
         py: Python<'_>,
         fp: Option<&Bound<'_, PyAny>>,
-        buffer: Vec<u8>,
+        buffer: Option<Bound<PyBytes>>,
         tag_hook: Option<&Bound<'_, PyAny>>,
         object_hook: Option<&Bound<'_, PyAny>>,
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
     ) -> PyResult<Self> {
+        let available_bytes = if let Some(buffer) = buffer.as_ref() {
+            buffer.len()?
+        } else {
+            0
+        };
         let bound_str_errors = PyString::new(py, str_errors);
         let mut this = Self {
             fp: None,
@@ -95,7 +102,9 @@ impl CBORDecoder {
             major_decoders: MAJOR_DECODERS.get(py).unwrap().clone_ref(py),
             semantic_decoders: SEMANTIC_DECODERS.get(py).unwrap().clone_ref(py),
             read_method: None,
-            buffer,
+            buffer: buffer.map(Bound::unbind),
+            read_position: 0,
+            available_bytes,
             decode_depth: 0,
             fp_is_seekable: false,
             share_index: None,
@@ -112,7 +121,11 @@ impl CBORDecoder {
         Ok(this)
     }
 
-    fn read_to_buffer(&mut self, py: Python<'_>, minimum_amount: usize) -> PyResult<()> {
+    fn read_from_fp<'py>(
+        &mut self,
+        py: Python<'py>,
+        minimum_amount: usize,
+    ) -> PyResult<(Bound<'py, PyBytes>, usize)> {
         let read_size: usize = if self.fp_is_seekable {
             self.read_size
         } else {
@@ -124,8 +137,8 @@ impl CBORDecoder {
                 read.bind(py).call1((&bytes_to_read,))?.cast_into()?;
             let num_read_bytes = bytes_from_fp.len()?;
             if num_read_bytes >= minimum_amount {
-                self.buffer.extend_from_slice(bytes_from_fp.as_bytes());
-                return Ok(());
+                // self.buffer = Some(bytes_from_fp.unbind());
+                return Ok((bytes_from_fp, num_read_bytes));
             }
             num_read_bytes
         } else {
@@ -143,15 +156,32 @@ impl CBORDecoder {
     }
 
     fn read_exact<const N: usize>(&mut self, py: Python<'_>) -> PyResult<[u8; N]> {
-        // If there's not enough data in the buffer, read some more
-        let buffer_length = self.buffer.len();
-        if N > buffer_length {
-            self.read_to_buffer(py, N - buffer_length)?;
+        if self.available_bytes == 0 {
+            // No buffer
+            let (new_bytes, amount_read) = self.read_from_fp(py, N)?;
+            self.read_position = N;
+            self.available_bytes = amount_read - N;
+            self.buffer = Some(new_bytes.unbind());
+            Ok(self.buffer.as_ref().unwrap().as_bytes(py)[..N].try_into()?)
+        } else if self.available_bytes < N {
+            // Combine the remnants of the partial buffer with new data read from the file
+            let needed_bytes = N - self.available_bytes;
+            let mut concatenated_buffer: Vec<u8> = self.buffer.take().unwrap().extract(py)?;
+            let (new_bytes, amount_read) = self.read_from_fp(py, needed_bytes)?;
+            concatenated_buffer.extend_from_slice(&new_bytes[..needed_bytes]);
+            self.buffer = Some(new_bytes.unbind());
+            self.available_bytes = amount_read - needed_bytes;
+            self.read_position = needed_bytes;
+            Ok(concatenated_buffer.try_into().unwrap())
+        } else {
+            // Return a slice from the existing bytes object
+            let slice: [u8; N] = self.buffer.as_ref().unwrap().bind(py).as_bytes()
+                [self.read_position..self.read_position + N]
+                .try_into()?;
+            self.available_bytes -= N;
+            self.read_position += N;
+            Ok(slice)
         }
-
-        let mut output: [u8; N] = [0; N];
-        output.copy_from_slice(self.buffer.drain(..N).as_slice());
-        Ok(output)
     }
 
     fn read_major_and_subtype(&mut self, py: Python<'_>) -> PyResult<(u8, u8)> {
@@ -225,7 +255,7 @@ impl CBORDecoder {
         Self::new_internal(
             py,
             Some(fp),
-            Vec::with_capacity(read_size),
+            None,
             tag_hook,
             object_hook,
             str_errors,
@@ -249,6 +279,9 @@ impl CBORDecoder {
             let fp = fp.clone();
             self.read_method = Some(fp.getattr("read")?.unbind());
             self.fp = Some(fp.unbind());
+            self.available_bytes = 0;
+            self.read_position = 0;
+            self.buffer = None;
             Ok(())
         } else {
             let exc = PyValueError::new_err("fp must be a readable file-like object");
@@ -326,13 +359,38 @@ impl CBORDecoder {
     /// :rtype: bytes
     #[pyo3(signature = (amount: "int", /))]
     fn read(&mut self, py: Python<'_>, amount: usize) -> PyResult<Vec<u8>> {
-        // If there's not enough data in the buffer, read some more
-        let buffer_length = self.buffer.len();
-        if amount > buffer_length {
-            self.read_to_buffer(py, amount - buffer_length)?;
+        if amount == 0 {
+            return Ok(Vec::default());
         }
 
-        Ok(self.buffer.drain(..amount).collect())
+        if self.available_bytes == 0 {
+            // No buffer
+            let (new_bytes, amount_read) = self.read_from_fp(py, amount)?;
+            self.read_position = amount;
+            self.available_bytes = amount_read - amount;
+            let new_buffer = new_bytes.as_bytes()[..amount].to_vec();
+            self.buffer = Some(new_bytes.unbind());
+            Ok(new_buffer)
+        } else if self.available_bytes < amount {
+            // Combine the remnants of the partial buffer with new data read from the file
+            let needed_bytes = amount - self.available_bytes;
+            let mut concatenated_buffer: Vec<u8> =
+                self.buffer.take().unwrap().as_bytes(py).to_vec();
+            let (new_bytes, amount_read) = self.read_from_fp(py, needed_bytes)?;
+            concatenated_buffer.extend_from_slice(&new_bytes[..needed_bytes]);
+            self.buffer = Some(new_bytes.unbind());
+            self.available_bytes = amount_read - needed_bytes;
+            self.read_position = needed_bytes;
+            Ok(concatenated_buffer)
+        } else {
+            // Return a slice from the existing bytes object
+            let vec = self.buffer.as_ref().unwrap().as_bytes(py)
+                [self.read_position..self.read_position + amount]
+                .to_vec();
+            self.available_bytes -= amount;
+            self.read_position += amount;
+            Ok(vec)
+        }
     }
 
     /// Set the shareable value for the last encountered shared value marker,
@@ -359,7 +417,11 @@ impl CBORDecoder {
             return raise_cbor_error(
                 py,
                 "CBORDecodeError",
-                format!("maximum container nesting depth ({}) exceeded", this.max_depth).as_str(),
+                format!(
+                    "maximum container nesting depth ({}) exceeded",
+                    this.max_depth
+                )
+                .as_str(),
             );
         }
 
@@ -388,12 +450,14 @@ impl CBORDecoder {
 
             // If fp was seekable and excess data has been read, empty the buffer and rewind the
             // file
-            if !this.buffer.is_empty()
+            if this.available_bytes > 0
                 && let Some(fp) = &this.fp
             {
-                let offset = -(this.buffer.len() as isize);
+                let offset = -(this.available_bytes as isize);
                 fp.call_method1(py, "seek", (offset, SEEK_CUR))?;
-                this.buffer.clear();
+                this.buffer = None;
+                this.available_bytes = 0;
+                this.read_position = 0;
             }
         }
 
@@ -426,19 +490,22 @@ impl CBORDecoder {
     #[pyo3(signature = (buf: "bytes", /))]
     pub fn decode_from_bytes<'py>(
         slf: &Bound<'py, Self>,
-        mut buf: Vec<u8>,
+        buf: Bound<'py, PyBytes>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let mut this = slf.borrow_mut();
-        let mut fp: Option<Py<PyAny>> = None;
-        swap(&mut fp, &mut this.fp);
-        swap(&mut buf, &mut this.buffer);
+        let fp = this.fp.take();
+        let read_position = replace(&mut this.read_position, 0);
+        let available_bytes = replace(&mut this.available_bytes, buf.len()?);
+        let buffer = replace(&mut this.buffer, Some(buf.unbind()));
         drop(this);
 
         let result = Self::decode(slf);
 
         this = slf.borrow_mut();
-        swap(&mut fp, &mut this.fp);
-        swap(&mut buf, &mut this.buffer);
+        this.fp = fp;
+        this.buffer = buffer;
+        this.read_position = read_position;
+        this.available_bytes = available_bytes;
         result
     }
 
