@@ -44,6 +44,8 @@ from cbor2 import (
     undefined,
 )
 
+DECODER_MAX_DEPTH = 200 if platform.python_implementation() == "PyPy" else 950
+
 
 @pytest.fixture
 def will_overflow() -> bytes:
@@ -125,7 +127,7 @@ class TestStrErrorsAttribute:
 def test_readonly_attributes() -> None:
     decoder = CBORDecoder(BytesIO())
     assert decoder.read_size == 4096
-    assert decoder.max_depth == 1024
+    assert decoder.max_depth == DECODER_MAX_DEPTH
 
 
 def test_read() -> None:
@@ -173,11 +175,16 @@ def test_non_seekable_fp() -> None:
 
 class TestMaximumDepth:
     def test_default(self) -> None:
-        with pytest.raises(CBORDecodeError, match="maximum recursion depth exceeded"):
-            loads(b"\x81" * 1025 + b"\x80")
+        with pytest.raises(
+            CBORDecodeError,
+            match=f"maximum container nesting depth \\({DECODER_MAX_DEPTH}\\) exceeded",
+        ):
+            loads(b"\x81" * 1000 + b"\x80")
 
     def test_explicit(self) -> None:
-        with pytest.raises(CBORDecodeError, match="maximum recursion depth exceeded"):
+        with pytest.raises(
+            CBORDecodeError, match=r"maximum container nesting depth \(9\) exceeded"
+        ):
             loads(b"\x81" * 10 + b"\x80", max_depth=9)
 
 

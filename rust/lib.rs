@@ -43,7 +43,10 @@ mod _cbor2 {
     pub static BREAK_MARKER: PyOnceLock<Py<BreakMarkerType>> = PyOnceLock::new();
 
     pub const DEFAULT_READ_SIZE: usize = 4096;
-    pub const DEFAULT_MAX_DEPTH: usize = 1024;
+    #[cfg(PyPy)]
+    pub const DEFAULT_MAX_DEPTH: usize = 200;  // PyPy segfaults at much larger nesting depth
+    #[cfg(not(PyPy))]
+    pub const DEFAULT_MAX_DEPTH: usize = 950;
 
     ///  Deserialize an object from a bytestring.
     ///

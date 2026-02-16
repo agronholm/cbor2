@@ -14,3 +14,6 @@ bigdecimal = "0.4.10"
 half = "2.7.1"
 num-bigint = "*"
 pyo3 = { version = "0.28.0", features = ["extension-module", "experimental-inspect", "num-bigint", "bigdecimal"] }
+
+[build-dependencies]
+pyo3-build-config = { version = "0.28.1", features = ["resolve-config"] }

@@ -356,7 +356,11 @@ impl CBORDecoder {
         let (major_type, subtype) = this.read_major_and_subtype(py)?;
 
         if this.decode_depth == this.max_depth {
-            return raise_cbor_error(py, "CBORDecodeError", "maximum recursion depth exceeded");
+            return raise_cbor_error(
+                py,
+                "CBORDecodeError",
+                format!("maximum container nesting depth ({}) exceeded", this.max_depth).as_str(),
+            );
         }
 
         let decoder = match this.major_decoders.bind(py).get_item(&major_type)? {
