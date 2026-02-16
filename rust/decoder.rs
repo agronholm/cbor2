@@ -454,7 +454,7 @@ impl CBORDecoder {
                 && let Some(fp) = &this.fp
             {
                 let offset = -(this.available_bytes as isize);
-                fp.call_method1(py, "seek", (offset, SEEK_CUR))?;
+                fp.call_method1(py, intern!(py, "seek"), (offset, SEEK_CUR))?;
                 this.buffer = None;
                 this.available_bytes = 0;
                 this.read_position = 0;
@@ -963,7 +963,7 @@ impl CBORDecoder {
 
         let datetime_class = import_once(py, &DATETIME_TYPE, "datetime", "datetime")?;
         let datetime = datetime_class
-            .call_method1("fromisoformat", (&datetime_str,))
+            .call_method1(intern!(py, "fromisoformat"), (&datetime_str,))
             .map_err(|e| {
                 create_cbor_error(
                     py,
@@ -982,7 +982,7 @@ impl CBORDecoder {
         let datetime_class = import_once(py, &DATETIME_TYPE, "datetime", "datetime")?;
         let utc = import_once(py, &UTC, "datetime", "timezone.utc")?;
         datetime_class
-            .call_method1("fromtimestamp", (value, utc))
+            .call_method1(intern!(py, "fromtimestamp"), (value, utc))
             .map_err(|e| {
                 create_cbor_error(
                     py,
@@ -998,7 +998,7 @@ impl CBORDecoder {
         let py = slf.py();
         let int_type = py.get_type::<PyInt>();
         let value = Self::decode(slf)?;
-        let int = int_type.call_method1("from_bytes", (value, intern!(py, "big")))?;
+        let int = int_type.call_method1(intern!(py, "from_bytes"), (value, intern!(py, "big")))?;
         Ok(int)
     }
 
@@ -1007,7 +1007,7 @@ impl CBORDecoder {
         let py = slf.py();
         let int_type = py.get_type::<PyInt>();
         let value = Self::decode(slf)?;
-        let mut int = int_type.call_method1("from_bytes", (value, intern!(py, "big")))?;
+        let mut int = int_type.call_method1(intern!(py, "from_bytes"), (value, intern!(py, "big")))?;
         int = int.neg()?.add(-1)?;
         Ok(int)
     }
@@ -1042,7 +1042,7 @@ impl CBORDecoder {
                 let exp = tuple.get_item(0)?;
                 let sig_tuple = decimal_class
                     .call1((tuple.get_item(1)?,))?
-                    .call_method0("as_tuple")?
+                    .call_method0(intern!(py, "as_tuple"))?
                     .cast_into::<PyTuple>()?;
                 let sign = sig_tuple.get_item(0)?;
                 let digits = sig_tuple.get_item(1)?;
@@ -1142,12 +1142,12 @@ impl CBORDecoder {
         let index: usize = Self::decode(slf)?.extract()?;
         match slf.borrow().shareables.get(index) {
             None => raise_cbor_error(
-                slf.py(),
+                py,
                 "CBORDecodeValueError",
                 format!("shared reference {index} not found").as_str(),
             ),
             Some(None) => raise_cbor_error(
-                slf.py(),
+                py,
                 "CBORDecodeValueError",
                 format!("shared value {index} has not been initialized").as_str(),
             ),
@@ -1207,7 +1207,7 @@ impl CBORDecoder {
         let value = Self::decode(slf)?;
         let email_parser_class = import_once(py, &MESSAGE_TYPE, "email.parser", "Parser")?;
         let parser = email_parser_class.call0()?;
-        match parser.call_method1("parsestr", (value,)) {
+        match parser.call_method1(intern!(py, "parsestr"), (value,)) {
             Ok(message) => Ok(message),
             Err(e) => {
                 raise_cbor_error_from(py, "CBORDecodeValueError", "error decoding MIME message", e)
@@ -1221,7 +1221,7 @@ impl CBORDecoder {
         let value = Self::decode(slf)?;
         let uuid_class = import_once(py, &UUID_TYPE, "uuid", "UUID")?;
         let kwargs = PyDict::new(py);
-        kwargs.set_item("bytes", value)?;
+        kwargs.set_item(intern!(py, "bytes"), value)?;
         match uuid_class.call((), Some(&kwargs)) {
             Ok(uuid) => Ok(uuid),
             Err(e) => {
@@ -1355,7 +1355,7 @@ impl CBORDecoder {
         // Semantic tag 100
         let value = Self::decode(slf)?.extract::<i32>()? + 719163;
         let date_class = import_once(slf.py(), &DATE_TYPE, "datetime", "date")?;
-        let date = date_class.call_method1("fromordinal", (value,))?;
+        let date = date_class.call_method1(intern!(slf.py(), "fromordinal"), (value,))?;
         Ok(date)
     }
 
@@ -1454,7 +1454,7 @@ impl CBORDecoder {
         // Semantic tag 1004
         let value = Self::decode(slf)?;
         let date_class = import_once(slf.py(), &DATE_TYPE, "datetime", "date")?;
-        let date = date_class.call_method1("fromisoformat", (value,))?;
+        let date = date_class.call_method1(intern!(slf.py(), "fromisoformat"), (value,))?;
         Ok(date)
     }
 
