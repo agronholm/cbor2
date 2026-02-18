@@ -79,6 +79,7 @@ pub struct CBOREncoder {
     #[pyo3(get)]
     encoders: Py<PyDict>,
 
+    write_method: Option<Py<PyAny>>,
     pub buffer: Vec<u8>,
     shared_containers: HashMap<usize, (Py<PyAny>, Option<Py<PyInt>>)>,
     string_references: HashMap<String, usize>,
@@ -113,6 +114,7 @@ impl CBOREncoder {
             string_namespacing: string_referencing,
             indefinite_containers,
             encoders: ENCODERS.get(py).unwrap().clone_ref(py),
+            write_method: None,
             buffer: Vec::new(),
             shared_containers: HashMap::new(),
             string_references: HashMap::new(),
@@ -310,6 +312,7 @@ impl CBOREncoder {
                 self.bytes_references.clear();
             }
 
+            self.write_method = Some(fp.getattr("write")?.unbind());
             self.fp = Some(fp.clone().unbind());
             Ok(())
         } else {
@@ -364,7 +367,7 @@ impl CBOREncoder {
 
     fn flush(&mut self, py: Python<'_>) -> PyResult<()> {
         if let Some(fp) = &self.fp {
-            fp.call_method1(py, "write", (&*self.buffer,))?;
+            fp.call_method1(py, intern!(py, "write"), (&*self.buffer,))?;
             self.buffer.clear();
         }
         Ok(())
@@ -394,8 +397,8 @@ impl CBOREncoder {
     /// :rtype: None
     #[pyo3(signature = (buf: "bytes", /))]
     pub fn write<'py>(&self, py: Python<'py>, buf: Vec<u8>) -> PyResult<Bound<'py, PyAny>> {
-        match self.fp.as_ref() {
-            Some(fp) => fp.bind(py).call_method1("write", (&buf,)),
+        match self.write_method.as_ref() {
+            Some(write) => write.bind(py).call1((&buf,)),
             None => Err(PyRuntimeError::new_err("fp not set")),
         }
     }
