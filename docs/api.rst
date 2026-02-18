@@ -29,6 +29,30 @@ Types
 
     A singleton representing the CBOR "undefined" value.
 
+Type aliases
+------------
+
+.. type:: MajorDecoderCallback
+    :canonical: ~collections.abc.Callable[[CBORDecoder, int], typing.Any]
+
+    Type of the callback needed in the ``major_decoders`` decoder option.
+.. type:: SemanticDecoderCallback
+    :canonical: ~collections.abc.Callable[[CBORDecoder], Any]
+
+    Type of the callback needed in the ``semantic_decoders`` decoder option.
+.. type:: ObjectHook
+    :canonical: ~collections.abc.Callable[[CBORDecoder, dict[Any, Any]], Any]
+
+    Type of the callback needed for the ``object_hook`` decoder option.
+.. type:: TagHook
+    :canonical: ~collections.abc.Callable[[CBORDecoder, CBORTag], Any]
+
+    Type of the callback needed for the ``tag_hook`` decoder option.
+.. type:: EncoderHook
+    :canonical: ~collections.abc.Callable[[CBOREncoder, Any], Any]
+
+    Type of the callback needed for the ``default`` encoder option.
+
 Exceptions
 ----------
 

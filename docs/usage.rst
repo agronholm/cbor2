@@ -95,10 +95,12 @@ Tag   Semantics                                Python type(s)
 35    Regular expression                       :class:`re.Pattern` (result of ``re.compile(...)``)
 36    MIME message                             :class:`email.message.Message`
 37    Binary UUID                              :class:`uuid.UUID`
-52    IPv4 address/network                     :class:`ipaddress.IPv4Address` or
-                                               :class:`ipaddress.IPv4Network`
-54    IPv6 address/network                     :class:`ipaddress.IPv6Address` or
-                                               :class:`ipaddress.IPv6Network`
+52    IPv4 address/network                     :class:`ipaddress.IPv4Address`,
+                                               :class:`ipaddress.IPv4Network` or
+                                               :class:`ipaddress.IPv4Interface`
+54    IPv6 address/network                     :class:`ipaddress.IPv6Address`,
+                                               :class:`ipaddress.IPv6Network` or
+                                               :class:`ipaddress.IPv6Interface`
 100   Epoch-based date                         :class:`datetime.date`
 256   String reference namespace               N/A
 258   Set of unique items                      :class:`set`
@@ -170,7 +172,6 @@ Python type                       Semantic tag
 :class:`set`                      258
 :class:`uuid.UUID`                37
 ================================= =========================================
-
 
 If you want to write a file that is detected as CBOR by the Unix ``file`` utility, wrap your data
 in a :class:`CBORTag` object like so::

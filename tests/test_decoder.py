@@ -921,6 +921,7 @@ def test_premature_end_of_stream() -> None:
 
 def test_tag_hook() -> None:
     def reverse(decoder: CBORDecoder, tag: CBORTag) -> Any:
+        assert tag.tag == 6000
         return tag.value[::-1]
 
     decoded = loads(unhexlify("d917706548656c6c6f"), tag_hook=reverse)
@@ -1296,3 +1297,22 @@ def test_string_stack_threshold_boundary(length: int) -> None:
 
     payload += test_string.encode("utf-8")
     assert loads(payload) == test_string
+
+
+def test_override_major_decoder() -> None:
+    def string_decoder(decoder: CBORDecoder, subtype: int) -> str:
+        return decoder.decode_string(subtype)[::-1]
+
+    payload = unhexlify("824568656c6c6f65776f726c64")  # [b"hello", "world"]"
+    assert loads(payload, major_decoders={3: string_decoder}) == [b"hello", "dlrow"]
+
+
+def test_override_semantic_decoder() -> None:
+    expected_datetime = datetime(2026, 2, 18)
+
+    def date_decoder(decoder: CBORDecoder) -> datetime:
+        decoder.decode_epoch_datetime()
+        return datetime(2026, 2, 18)
+
+    payload = unhexlify("c11a514b67b0")  # datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)
+    assert loads(payload, semantic_decoders={1: date_decoder}) == expected_datetime

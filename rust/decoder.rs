@@ -1,19 +1,16 @@
-use crate::_cbor2::SEMANTIC_DECODERS;
 use crate::_cbor2::SYS_MAXSIZE;
 use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
-use crate::_cbor2::{DEFAULT_MAX_DEPTH, DEFAULT_READ_SIZE, MAJOR_DECODERS};
+use crate::_cbor2::{DEFAULT_MAX_DEPTH, DEFAULT_READ_SIZE};
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, FrozenDict};
 use crate::utils::{
     CBORDecodeError, create_cbor_error, import_once, raise_cbor_error, raise_cbor_error_from,
     wrap_cbor_error,
 };
 use half::f16;
-use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{
-    PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple,
-};
+use pyo3::types::{PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyMapping, PySet, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::cmp::{max, min};
 use std::mem::{replace, take};
@@ -54,14 +51,14 @@ pub struct CBORDecoder {
     fp: Option<Py<PyAny>>,
     tag_hook: Option<Py<PyAny>>,
     object_hook: Option<Py<PyAny>>,
+    major_decoders: Option<Py<PyMapping>>,
+    semantic_decoders: Option<Py<PyMapping>>,
     str_errors: Py<PyString>,
     #[pyo3(get)]
     read_size: usize,
     #[pyo3(get)]
     max_depth: usize,
 
-    major_decoders: Py<PyDict>,
-    semantic_decoders: Py<PyDict>,
     read_method: Option<Py<PyAny>>,
     buffer: Option<Py<PyBytes>>,
     read_position: usize,
@@ -82,6 +79,8 @@ impl CBORDecoder {
         buffer: Option<Bound<PyBytes>>,
         tag_hook: Option<&Bound<'_, PyAny>>,
         object_hook: Option<&Bound<'_, PyAny>>,
+        major_decoders: Option<&Bound<'_, PyMapping>>,
+        semantic_decoders: Option<&Bound<'_, PyMapping>>,
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
@@ -99,8 +98,8 @@ impl CBORDecoder {
             str_errors: bound_str_errors.clone().unbind(),
             read_size,
             max_depth,
-            major_decoders: MAJOR_DECODERS.get(py).unwrap().clone_ref(py),
-            semantic_decoders: SEMANTIC_DECODERS.get(py).unwrap().clone_ref(py),
+            major_decoders: major_decoders.map(|d| d.clone().unbind()),
+            semantic_decoders: semantic_decoders.map(|d| d.clone().unbind()),
             read_method: None,
             buffer: buffer.map(Bound::unbind),
             read_position: 0,
@@ -239,6 +238,8 @@ impl CBORDecoder {
         *,
         tag_hook: "collections.abc.Callable[[CBORDecoder, CBORTag], typing.Any]] | None" = None,
         object_hook: "collections.abc.Callable[[CBORDecoder, dict[typing.Any, typing.Any], typing.Any]]] | None" = None,
+        major_decoders = None,
+        semantic_decoders = None,
         str_errors: "str" = "strict",
         read_size: "int" = DEFAULT_READ_SIZE,
         max_depth: "int" = DEFAULT_MAX_DEPTH,
@@ -248,6 +249,8 @@ impl CBORDecoder {
         fp: &Bound<'_, PyAny>,
         tag_hook: Option<&Bound<'_, PyAny>>,
         object_hook: Option<&Bound<'_, PyAny>>,
+        major_decoders: Option<&Bound<'_, PyMapping>>,
+        semantic_decoders: Option<&Bound<'_, PyMapping>>,
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
@@ -258,6 +261,8 @@ impl CBORDecoder {
             None,
             tag_hook,
             object_hook,
+            major_decoders,
+            semantic_decoders,
             str_errors,
             read_size,
             max_depth,
@@ -425,9 +430,46 @@ impl CBORDecoder {
             );
         }
 
-        let decoder = match this.major_decoders.bind(py).get_item(&major_type)? {
-            Some(decoder) => decoder,
-            None => {
+        if let Some(major_decoders) = &this.major_decoders {
+            match major_decoders.bind(py).get_item(&major_type) {
+                Ok(decoder) => {
+                    this.decode_depth += 1;
+                    drop(this);
+                    let result = decoder.call1((slf, subtype));
+                    slf.borrow_mut().decode_depth -= 1;
+                    return result
+                },
+                Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
+                Err(e) => return Err(e)
+            }
+        }
+
+        this.decode_depth += 1;
+        let result = match major_type {
+            0 => this.decode_uint(py, subtype),
+            1 => this.decode_negint(py, subtype),
+            2 => this.decode_bytestring(py, subtype)?.into_bound_py_any(py),
+            3 => this.decode_string(py, subtype)?.into_bound_py_any(py),
+            4 => {
+                drop(this);
+                let result = Self::decode_array(slf, subtype);
+                this = slf.borrow_mut();
+                result
+            }
+            5 => {
+                drop(this);
+                let result = Self::decode_map(slf, subtype);
+                this = slf.borrow_mut();
+                result
+            }
+            6 => {
+                drop(this);
+                let result = Self::decode_semantic(slf, subtype);
+                this = slf.borrow_mut();
+                result
+            }
+            7 => this.decode_special(py, subtype),
+            _ => {
                 return raise_cbor_error(
                     py,
                     "CBORDecodeError",
@@ -435,14 +477,9 @@ impl CBORDecoder {
                 );
             }
         };
-        this.decode_depth += 1;
-        drop(this);
-
-        let result = decoder.call1((slf, subtype));
+        this.decode_depth -= 1;
 
         // Clear shareables and string references to prevent any leaks
-        this = slf.borrow_mut();
-        this.decode_depth -= 1;
         if this.decode_depth == 0 {
             this.shareables.clear();
             this.stringref_namespace = None;
@@ -513,6 +550,13 @@ impl CBORDecoder {
     // Decoders for major tags (0-7)
     //
 
+    /// Decode the length of the next item.
+    ///
+    /// This is a low-level operation that may be needed by custom decoder callbacks.
+    ///
+    /// :param int subtype:
+    /// :return: the length of the item, or ``None`` to indicate an indefinite-length item
+    /// :rtype: int | None
     fn decode_length(&mut self, py: Python<'_>, subtype: u8) -> PyResult<Option<usize>> {
         let length = match subtype {
             ..24 => Some(subtype as usize),
@@ -841,22 +885,54 @@ impl CBORDecoder {
         }
     }
 
-    #[pyo3(signature = (subtype: "int"))]
     fn decode_semantic<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         let py = slf.py();
         let mut this = slf.borrow_mut();
         let tagnum = this.decode_length_finite(py, subtype)?;
-        let semantic_decoders = this.semantic_decoders.bind(py);
-        match semantic_decoders.get_item(&tagnum)? {
-            Some(decoder) => {
-                drop(this);
-                decoder.call1((slf,))
+
+        if let Some(semantic_decoders) = &this.semantic_decoders {
+            match semantic_decoders.bind(py).get_item(&tagnum) {
+                Ok(decoder) => {
+                    drop(this);
+                    return decoder.call1((slf,))
+                },
+                Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
+                Err(e) => return Err(e)
             }
-            None => {
+        }
+
+        // No semantic decoder lookup map – fall back to the hard coded switchboard
+        drop(this);
+        match tagnum {
+            0 => Self::decode_datetime_string(slf),
+            1 => Self::decode_epoch_datetime(slf),
+            2 => Self::decode_positive_bignum(slf),
+            3 => Self::decode_negative_bignum(slf),
+            4 => Self::decode_fraction(slf),
+            5 => Self::decode_bigfloat(slf),
+            25 => Self::decode_stringref(slf),
+            28 => Self::decode_shareable(slf),
+            29 => Self::decode_sharedref(slf),
+            30 => Self::decode_rational(slf),
+            35 => Self::decode_regexp(slf),
+            36 => Self::decode_mime(slf),
+            37 => Self::decode_uuid(slf),
+            52 => Self::decode_ipv4(slf),
+            54 => Self::decode_ipv6(slf),
+            100 => Self::decode_epoch_date(slf),
+            256 => Self::decode_stringref_namespace(slf),
+            258 => Self::decode_set(slf),
+            260 => Self::decode_ipaddress(slf),
+            261 => Self::decode_ipnetwork(slf),
+            1004 => Self::decode_date_string(slf),
+            43000 => Self::decode_complex(slf),
+            55799 => Self::decode_self_describe_cbor(slf),
+            _ => {
                 // For a tag with no designated decoder, check if we have a tag hook, and call
                 // that with the tag object, using its return value as the decoded value.
                 let tag = CBORTag::new(tagnum.into_bound_py_any(py)?, py.None().into_bound(py))?;
                 let bound_tag = Bound::new(py, tag)?;
+                this = slf.borrow_mut();
                 match this.tag_hook.as_ref() {
                     Some(tag_hook) => {
                         let tag_hook = tag_hook.clone_ref(py);
@@ -1007,7 +1083,8 @@ impl CBORDecoder {
         let py = slf.py();
         let int_type = py.get_type::<PyInt>();
         let value = Self::decode(slf)?;
-        let mut int = int_type.call_method1(intern!(py, "from_bytes"), (value, intern!(py, "big")))?;
+        let mut int =
+            int_type.call_method1(intern!(py, "from_bytes"), (value, intern!(py, "big")))?;
         int = int.neg()?.add(-1)?;
         Ok(int)
     }
@@ -1458,7 +1535,7 @@ impl CBORDecoder {
         Ok(date)
     }
 
-    fn decode_complex<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyComplex>> {
+    fn decode_complex<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 43000
         let py = slf.py();
         let value = Self::with_immutable(slf, || Self::decode(slf))?;
@@ -1482,7 +1559,7 @@ impl CBORDecoder {
         wrap_cbor_error(py, "CBORDecodeValueError", "error decoding complex", || {
             let real: f64 = tuple.get_item(0)?.extract()?;
             let imag: f64 = tuple.get_item(1)?.extract()?;
-            Ok(PyComplex::from_doubles(py, real, imag))
+            Ok(PyComplex::from_doubles(py, real, imag).into_any())
         })
     }
 

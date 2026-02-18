@@ -155,6 +155,7 @@ pub struct FrozenDict {
     hash: Option<u64>,
 }
 
+// TODO: replace with PEP 814 frozendict when it becomes available
 #[pymethods]
 impl FrozenDict {
     #[new]

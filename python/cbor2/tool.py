@@ -23,6 +23,8 @@ from . import CBORDecoder, CBORSimpleValue, CBORTag, FrozenDict, load, undefined
 if TYPE_CHECKING:
     from typing import Literal, TypeAlias
 
+    from . import ObjectHook, TagHook
+
 T = TypeVar("T")
 JSONValue: TypeAlias = "str | float | bool | None | list[JSONValue] | dict[str, JSONValue]"
 
@@ -69,8 +71,8 @@ class DefaultEncoder(json.JSONEncoder):
 
 def iterdecode(
     f: BinaryIO,
-    tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
-    object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
+    tag_hook: TagHook | None = None,
+    object_hook: ObjectHook | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
 ) -> Iterator[Any]:
     decoder = CBORDecoder(f, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors)

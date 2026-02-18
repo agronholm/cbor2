@@ -11,11 +11,57 @@ The callback should then return a value that the encoder can serialize on its ow
 return value is allowed to contain objects that also require the encoder to use the callback, as
 long as it won't result in an infinite loop.
 
-On the decoder side, you have two options: ``tag_hook`` and ``object_hook``. The former is called
-by the decoder to process any semantic tags that have no predefined decoders. The latter is called
-for any newly decoded ``dict`` objects, and is mostly useful for implementing a JSON compatible
-custom type serialization scheme. Unless your requirements restrict you to JSON compatible types
-only, it is recommended to use ``tag_hook`` for this purpose.
+On the decoder side, you have four venues, available as keyword arguments to :func:`load`,
+:func:`loads` and :class:`CBORDecoder`:
+
+#. ``major_decoders``: lets you override how specific major CBOR types are decoded
+#. ``semantic_decoders``: lets you override how specific semantic tags are decoded
+#. ``tag_hook``: lets you define a catch-all for unhandled semantic tags
+#. ``object_hook``: lets you transform any newly-decoded dicts
+
+Overriding the decoding of major types
+--------------------------------------
+
+The following example overrides the decoding for major type 3 (text strings)::
+
+    import cbor2
+
+    def string_decoder(decoder, subtype):
+        # Call the original implementation (optional if you want to do the
+        # low-level decoding yourself
+        my_string = decoder.decode_string(subtype)
+        return my_string[::-1]
+
+    payload = b'mHello, world!'  # "Hello, world" encoded with CBOR
+    print(cbor2.loads(payload, major_decoders={3: string_decoder}))
+    # This prints: !dlrow ,olleH
+
+.. note:: Overriding major decoders is a niche feature, not needed by most users.
+    Additionally, passing a major decoder lookup mapping has negative consequences
+    for the decoder's performance due to the extra round-trips to the Python interpreter.
+
+Overriding the decoding of semantic tags
+----------------------------------------
+
+If you want to override how an already supported tag is decoded, this is a good way to do it.
+
+Here's an example decoder implementation for semantic tag 1 (epoch datetime)::
+
+    from datetime import datetime, timezone
+
+    import cbor2
+
+    def decode_epoch_datetime(decoder):
+        timestamp = decoder.decode()
+        return datetime.fromtimestamp(timestamp, timezone.utc)
+
+    payload = b'\xc1\x1aQKg\xb0'  # 1(1363896240) in CBOR notation
+    print(cbor2.loads(payload, semantic_decoders={1: decode_epoch_datetime}))
+    # This prints: 2013-03-21 20:04:00+00:00
+
+.. note:: Overriding semantic decoders incurs a slight performance penalty for all semantic
+    tags as it involves a round-trip to the Python interpreter for the decoder callback
+    lookup.
 
 Using the CBOR tags for custom types
 ------------------------------------
@@ -34,7 +80,7 @@ to add a custom tag in the data stream, with the payload as the value::
 
 The corresponding ``tag_hook`` would be::
 
-    def tag_hook(decoder, tag, shareable_index=None):
+    def tag_hook(decoder, tag):
         if tag.tag != 4000:
             return tag
 
@@ -129,7 +175,7 @@ Since the CBOR specification allows any type to be used as a key in the mapping 
 provides a flag that indicates it is expecting an immutable (and by implication hashable) type. If
 your custom class cannot be used this way you can raise an exception if this flag is set::
 
-    def tag_hook(decoder, tag, shareable_index=None):
+    def tag_hook(decoder, tag):
         if tag.tag != 3000:
             return tag
 
@@ -144,7 +190,7 @@ An example where the data could be used as a dict key::
 
     Pair = namedtuple('Pair', 'first second')
 
-    def tag_hook(decoder, tag, shareable_index=None):
+    def tag_hook(decoder, tag):
         if tag.tag != 4000:
             return tag
 
