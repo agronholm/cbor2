@@ -251,15 +251,15 @@ impl CBORDecoder {
 impl CBORDecoder {
     #[new]
     #[pyo3(signature = (
-        fp: "typing.IO[bytes]",
+        fp,
         *,
-        tag_hook: "collections.abc.Callable[[CBORDecoder, CBORTag], typing.Any]] | None" = None,
-        object_hook: "collections.abc.Callable[[CBORDecoder, dict[typing.Any, typing.Any], typing.Any]]] | None" = None,
+        tag_hook = None,
+        object_hook = None,
         major_decoders = None,
         semantic_decoders = None,
-        str_errors: "str" = "strict",
-        read_size: "int" = DEFAULT_READ_SIZE,
-        max_depth: "int" = DEFAULT_MAX_DEPTH,
+        str_errors = "strict",
+        read_size = DEFAULT_READ_SIZE,
+        max_depth = DEFAULT_MAX_DEPTH,
     ))]
     pub fn new(
         py: Python<'_>,
@@ -379,7 +379,7 @@ impl CBORDecoder {
     ///
     /// :param int amount: the number of bytes to read
     /// :rtype: bytes
-    #[pyo3(signature = (amount: "int", /))]
+    #[pyo3(signature = (amount, /))]
     fn read(&mut self, py: Python<'_>, amount: usize) -> PyResult<Vec<u8>> {
         if amount == 0 {
             return Ok(Vec::default());
@@ -541,7 +541,7 @@ impl CBORDecoder {
     /// taking advantage of the shared value registry.
     ///
     /// :param bytes buf: the buffer from which to decode a CBOR object
-    #[pyo3(signature = (buf: "bytes", /))]
+    #[pyo3(signature = (buf, /))]
     pub fn decode_from_bytes<'py>(
         slf: &Bound<'py, Self>,
         buf: Bound<'py, PyBytes>,
@@ -590,7 +590,7 @@ impl CBORDecoder {
         Ok(length)
     }
 
-    #[pyo3(signature = (subtype: "int"))]
+    #[pyo3(signature = (subtype))]
     fn decode_uint<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 0
         let uint = self.decode_length_finite(py, subtype)?;
@@ -598,7 +598,7 @@ impl CBORDecoder {
         Ok(py_int)
     }
 
-    #[pyo3(signature = (subtype: "int"))]
+    #[pyo3(signature = (subtype))]
     fn decode_negint<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 1
         let uint = self.decode_length_finite(py, subtype)?;
@@ -607,7 +607,7 @@ impl CBORDecoder {
         Ok(py_int)
     }
 
-    #[pyo3(signature = (subtype: "int"))]
+    #[pyo3(signature = (subtype))]
     fn decode_bytestring<'py>(
         &mut self,
         py: Python<'py>,
@@ -675,7 +675,7 @@ impl CBORDecoder {
         Ok(decoded)
     }
 
-    #[pyo3(signature = (subtype: "int"))]
+    #[pyo3(signature = (subtype))]
     fn decode_string<'py>(
         &mut self,
         py: Python<'py>,
@@ -791,7 +791,7 @@ impl CBORDecoder {
         Ok(decoded)
     }
 
-    #[pyo3(signature = (subtype: "int"))]
+    #[pyo3(signature = (subtype))]
     fn decode_array<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 4
         let py = slf.py();
@@ -850,7 +850,7 @@ impl CBORDecoder {
         }
     }
 
-    #[pyo3(signature = (subtype: "int"))]
+    #[pyo3(signature = (subtype))]
     fn decode_map<'py>(slf: &Bound<'py, Self>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 5
         let py = slf.py();
@@ -970,7 +970,7 @@ impl CBORDecoder {
         }
     }
 
-    #[pyo3(signature = (subtype: "int"))]
+    #[pyo3(signature = (subtype))]
     fn decode_special<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<Bound<'py, PyAny>> {
         // Major tag 7
         // let py = slf.py();

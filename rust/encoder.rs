@@ -317,17 +317,17 @@ impl CBOREncoder {
 impl CBOREncoder {
     #[new]
     #[pyo3(signature = (
-        fp: "typing.IO[bytes]",
+        fp,
         *,
-        datetime_as_timestamp: "bool" = false,
-        timezone: "datetime.tzinfo | None" = None,
-        value_sharing: "bool" = false,
+        datetime_as_timestamp = false,
+        timezone = None,
+        value_sharing = false,
         encoders = None,
-        default: "collections.abc.Callable[[CBOREncoder, typing.Any], None] | None" = None,
-        canonical: "bool" = false,
-        date_as_datetime: "bool" = false,
-        string_referencing: "bool" = false,
-        indefinite_containers: "bool" = false
+        default = None,
+        canonical = false,
+        date_as_datetime = false,
+        string_referencing = false,
+        indefinite_containers = false
     ))]
     pub fn new(
         fp: &Bound<'_, PyAny>,
@@ -464,7 +464,7 @@ impl CBOREncoder {
     /// .. note:: This method will first flush any write-ahead buffer, potentially causing
     ///    the number of written bytes to be higher than the length of the bytes passed
     ///    as the argument.
-    #[pyo3(signature = (buf: "bytes", /))]
+    #[pyo3(signature = (buf, /))]
     fn write<'py>(&mut self, py: Python<'py>, buf: Vec<u8>) -> PyResult<Bound<'py, PyAny>> {
         if self.write_method.is_none() {
             return Err(PyRuntimeError::new_err("fp not set"));
@@ -711,7 +711,7 @@ impl CBOREncoder {
         Self::encode_sortable_key(slf, &key)
     }
 
-    #[pyo3(signature = (major_tag: "int", length: "int | None" = None))]
+    #[pyo3(signature = (major_tag, length = None))]
     fn encode_length(
         &mut self,
         py: Python<'_>,

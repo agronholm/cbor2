@@ -77,14 +77,14 @@ mod _cbor2 {
     ///  .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
     #[pyfunction]
     #[pyo3(signature = (
-        fp: "typing.IO[bytes]",
+        fp,
         *,
-        tag_hook: "collections.abc.Callable | None" = None,
-        object_hook: "collections.abc.Callable | None" = None,
+        tag_hook = None,
+        object_hook = None,
         major_decoders = None,
         semantic_decoders = None,
-        str_errors: "str" = "strict",
-        max_depth: "int" = DEFAULT_MAX_DEPTH,
+        str_errors = "strict",
+        max_depth = DEFAULT_MAX_DEPTH,
     ))]
     fn load<'py>(
         py: Python<'py>,
@@ -143,14 +143,14 @@ mod _cbor2 {
     ///  .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
     #[pyfunction]
     #[pyo3(signature = (
-        data: "bytes",
+        data,
         *,
-        tag_hook: "collections.abc.Callable | None" = None,
-        object_hook: "collections.abc.Callable | None" = None,
+        tag_hook = None,
+        object_hook = None,
         major_decoders = None,
         semantic_decoders = None,
-        str_errors: "str" = "strict",
-        max_depth: "int" = DEFAULT_MAX_DEPTH,
+        str_errors = "strict",
+        max_depth = DEFAULT_MAX_DEPTH,
     ))]
     fn loads<'py>(
         py: Python<'py>,
@@ -222,17 +222,17 @@ mod _cbor2 {
     #[pyfunction]
     #[pyo3(signature = (
         obj,
-        fp: "typing.IO[bytes]",
+        fp,
         *,
-        datetime_as_timestamp: "bool" = false,
-        timezone: "datetime.tzinfo | None" = None,
-        value_sharing: "bool" = false,
+        datetime_as_timestamp = false,
+        timezone = None,
+        value_sharing = false,
         encoders = None,
-        default: "collections.abc.Callable[[CBOREncoder, typing.Any], None] | None" = None,
-        canonical: "bool" = false,
-        date_as_datetime: "bool" = false,
-        string_referencing: "bool" = false,
-        indefinite_containers: "bool" = false
+        default = None,
+        canonical = false,
+        date_as_datetime = false,
+        string_referencing = false,
+        indefinite_containers = false
     ))]
     fn dump<'py>(
         py: Python<'py>,
@@ -308,15 +308,15 @@ mod _cbor2 {
     #[pyo3(signature = (
         obj,
         *,
-        datetime_as_timestamp: "bool" = false,
-        timezone: "datetime.tzinfo | None" = None,
-        value_sharing: "bool" = false,
+        datetime_as_timestamp = false,
+        timezone = None,
+        value_sharing = false,
         encoders = None,
-        default: "collections.abc.Callable[[CBOREncoder, typing.Any], None] | None" = None,
-        canonical: "bool" = false,
-        date_as_datetime: "bool" = false,
-        string_referencing: "bool" = false,
-        indefinite_containers: "bool" = false
+        default = None,
+        canonical = false,
+        date_as_datetime = false,
+        string_referencing = false,
+        indefinite_containers = false
     ))]
     fn dumps<'py>(
         py: Python<'py>,
