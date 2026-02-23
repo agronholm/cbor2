@@ -1,3 +1,4 @@
+use crate::utils::PyImportable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::PyAnyMethods;
@@ -10,6 +11,17 @@ use pyo3::{
 };
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+
+pub static DECIMAL_TYPE: PyImportable = PyImportable::new("decimal", "Decimal");
+pub static FRACTION_TYPE: PyImportable = PyImportable::new("fractions", "Fraction");
+pub static IPV4ADDRESS_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv4Address");
+pub static IPV4INTERFACE_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv4Interface");
+pub static IPV4NETWORK_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv4Network");
+pub static IPV6ADDRESS_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Address");
+pub static IPV6INTERFACE_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Interface");
+pub static IPV6NETWORK_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Network");
+pub static UUID_TYPE: PyImportable = PyImportable::new("uuid", "UUID");
+
 
 /// Represents a CBOR semantic tag.
 ///

@@ -1,22 +1,28 @@
-use crate::_cbor2::ENCODERS;
 use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, UndefinedType};
-use crate::utils::{import_once, raise_cbor_error};
+use crate::utils::{PyImportable, raise_cbor_error};
 use bigdecimal::BigDecimal;
 use half::f16;
 use num_bigint::BigInt;
-use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyLookupError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyByteArray, PyBytes, PyCFunction, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyMapping, PyNone, PySequence, PySet, PyString, PyTuple};
+use pyo3::types::{
+    PyBool, PyByteArray, PyBytes, PyCFunction, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt,
+    PyList, PyMapping, PyNone, PySequence, PySet, PyString, PyTuple, PyType,
+};
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::collections::HashMap;
 use std::mem::swap;
 
-static DATETIME_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static ID_FUNC: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+type EncoderFn = fn(&Bound<CBOREncoder>, &Bound<PyAny>) -> PyResult<()>;
+type EncoderLookupVec = Vec<(Py<PyType>, EncoderFn)>;
+
+static DATETIME_COMBINE_FUNC: PyImportable = PyImportable::new("datetime", "datetime.combine");
+static ID_FUNC: PyImportable = PyImportable::new("builtins", "id");
+static TZINFO_TYPE: PyImportable = PyImportable::new("datetime", "tzinfo");
+static SORTED_FUNC: PyImportable = PyImportable::new("builtins", "sorted");
 static ZERO_TIME: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static TZINFO_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static SORTED_FUNC: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static STDLIB_ENCODERS: PyOnceLock<EncoderLookupVec> = PyOnceLock::new();
 
 /// Wrap the given encoder function to gracefully handle cyclic data
 /// structures.
@@ -27,26 +33,73 @@ static SORTED_FUNC: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 /// wrapped function is not called.
 ///
 /// If value sharing is disabled, only infinite recursion protection is done.
-///
-/// :rtype: Callable[[CBOREncoder, ~typing.Any], None]
 #[pyfunction]
-#[pyo3(signature = (wraps: "typing.Callable[[CBOREncoder, typing.Any], None]", /))]
-pub fn shareable_encoder<'py>(py: Python<'py>, wraps: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyCFunction>> {
+#[pyo3(signature = (wraps, /))]
+pub fn shareable_encoder<'py>(
+    py: Python<'py>,
+    wraps: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyCFunction>> {
     // `wraps` is the original Python function
     let wraps = wraps.clone().unbind();
     PyCFunction::new_closure(
         py,
-        None,    // no module
-        None,    // no qualified name override
+        None, // no module
+        None, // no qualified name override
         move |args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>| -> PyResult<()> {
             let py = args.py();
             let encoder = args.get_item(0)?.cast_into::<CBOREncoder>()?;
             let value = args.get_item(1)?;
-            CBOREncoder::encode_shared(&encoder, wraps.bind(py), &value)
+            CBOREncoder::encode_shared_internal(&encoder, &value, || {
+                wraps.call1(py, (&encoder, &value)).map(|_| ())
+            })
         },
     )
 }
 
+/// The CBOREncoder class implements a fully featured CBOR encoder with several extensions for
+/// handling shared references, big integers, rational numbers and so on. Typically the class is not
+/// used directly, but the dump() and dumps() functions are called to indirectly construct and use
+/// the class.
+///
+/// When the class is constructed manually, the main entry points are :meth:`encode` and
+/// :meth:`encode_to_bytes`.
+///
+/// :param ~typing.IO[bytes] fp:
+///     the file to write to (any file-like object opened for writing in binary mode)
+/// :param bool datetime_as_timestamp:
+///     set to :data:`True` to serialize datetimes as UNIX timestamps (this makes datetimes
+///     more concise on the wire, but loses the timezone information)
+/// :param ~datetime.tzinfo timezone:
+///     the default timezone to use for serializing naive datetimes; if this is not
+///     specified naive datetimes will throw a :exc:`ValueError` when encoding is
+///     attempted
+/// :param bool value_sharing:
+///     set to :data:`True` to allow more efficient serializing of repeated values
+///     and, more importantly, cyclic data structures, at the cost of extra
+///     line overhead
+/// :param encoders:
+///     An optional mapping for overriding the encoding for select Python types.
+///     Each key in this mapping should be a Python type object, and the value a callable
+///     that takes two arguments: the encoder object and the object to encode.
+/// :type encoders: ~collections.abc.Mapping[type,
+///     ~collections.abc.Callable[[CBOREncoder, typing.Any], typing.Any]]
+/// :param default:
+///     a callable that is called by the encoder with two arguments (the encoder
+///     instance and the value being encoded) when no suitable encoder has been found,
+///     and should use the methods on the encoder to encode any objects it wants to add
+///     to the data stream
+/// :type default: ~collections.abc.Callable[[CBOREncoder, typing.Any], None] | None
+/// :param bool canonical:
+///     when :data:`True`, use "canonical" CBOR representation; this typically involves
+///     sorting maps, sets, etc. into a pre-determined order ensuring that
+///     serializations are comparable without decoding
+/// :param bool date_as_datetime:
+///     set to :data:`True` to serialize date objects as datetimes (CBOR tag 0), which was
+///     the default behavior in previous releases (cbor2 <= 4.1.2).
+/// :param bool string_referencing:
+///     set to :data:`True` to allow more efficient serializing of repeated string values
+/// :param bool indefinite_containers:
+///     encode containers as indefinite (use stop code instead of specifying length)
 #[pyclass(module = "cbor2")]
 pub struct CBOREncoder {
     fp: Option<Py<PyAny>>,
@@ -76,9 +129,7 @@ pub struct CBOREncoder {
     #[pyo3(get)]
     indefinite_containers: bool,
 
-    #[pyo3(get)]
-    encoders: Py<PyDict>,
-
+    encoders: Option<Py<PyMapping>>,
     write_method: Option<Py<PyAny>>,
     pub buffer: Vec<u8>,
     shared_containers: HashMap<usize, (Py<PyAny>, Option<Py<PyInt>>)>,
@@ -91,11 +142,11 @@ const MAX_BUFFER_SIZE: usize = 4096;
 
 impl CBOREncoder {
     pub fn new_internal(
-        py: Python<'_>,
         fp: Option<&Bound<'_, PyAny>>,
         datetime_as_timestamp: bool,
         timezone: Option<&Bound<'_, PyAny>>,
         value_sharing: bool,
+        encoders: Option<&Bound<'_, PyMapping>>,
         default: Option<&Bound<'_, PyAny>>,
         canonical: bool,
         date_as_datetime: bool,
@@ -113,7 +164,7 @@ impl CBOREncoder {
             string_referencing,
             string_namespacing: string_referencing,
             indefinite_containers,
-            encoders: ENCODERS.get(py).unwrap().clone_ref(py),
+            encoders: encoders.map(|e| e.clone().unbind()),
             write_method: None,
             buffer: Vec::new(),
             shared_containers: HashMap::new(),
@@ -136,8 +187,7 @@ impl CBOREncoder {
     ) -> PyResult<()> {
         let py = slf.py();
         let value_sharing = slf.borrow().value_sharing;
-        let id = import_once(py, &ID_FUNC, "builtins", "id")?;
-        let value_id = id.call1((obj,))?.extract::<usize>()?;
+        let value_id = ID_FUNC.get(py)?.call1((obj,))?.extract::<usize>()?;
 
         let mut this = slf.borrow_mut();
         let option = this.shared_containers.get(&value_id);
@@ -177,7 +227,7 @@ impl CBOREncoder {
     }
 
     /// Call the given function with value sharing disabled in the encoder.
-    pub fn disable_value_sharing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
+    fn disable_value_sharing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
         let mut this = slf.borrow_mut();
         let old_value_sharing = this.value_sharing;
         this.value_sharing = false;
@@ -188,7 +238,7 @@ impl CBOREncoder {
     }
 
     /// Call the given function with string namespacing disabled in the encoder.
-    pub fn disable_string_namespacing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
+    fn disable_string_namespacing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
         let mut this = slf.borrow_mut();
         let old_string_namespacing = this.string_namespacing;
         this.string_namespacing = false;
@@ -199,7 +249,7 @@ impl CBOREncoder {
     }
 
     /// Call the given function with string referencing disabled in the encoder.
-    pub fn disable_string_referencing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
+    fn disable_string_referencing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
         let mut this = slf.borrow_mut();
         let old_string_referencing = this.string_referencing;
         this.string_referencing = false;
@@ -209,7 +259,7 @@ impl CBOREncoder {
         result
     }
 
-    pub fn encode_container_internal(
+    fn encode_container_internal(
         slf: &Bound<'_, Self>,
         obj: &Bound<'_, PyAny>,
         f: impl FnOnce() -> PyResult<()>,
@@ -272,6 +322,7 @@ impl CBOREncoder {
         datetime_as_timestamp: "bool" = false,
         timezone: "datetime.tzinfo | None" = None,
         value_sharing: "bool" = false,
+        encoders = None,
         default: "collections.abc.Callable[[CBOREncoder, typing.Any], None] | None" = None,
         canonical: "bool" = false,
         date_as_datetime: "bool" = false,
@@ -279,11 +330,11 @@ impl CBOREncoder {
         indefinite_containers: "bool" = false
     ))]
     pub fn new(
-        py: Python<'_>,
         fp: &Bound<'_, PyAny>,
         datetime_as_timestamp: bool,
         timezone: Option<&Bound<'_, PyAny>>,
         value_sharing: bool,
+        encoders: Option<&Bound<'_, PyMapping>>,
         default: Option<&Bound<'_, PyAny>>,
         canonical: bool,
         date_as_datetime: bool,
@@ -291,7 +342,16 @@ impl CBOREncoder {
         indefinite_containers: bool,
     ) -> PyResult<Self> {
         CBOREncoder::new_internal(
-            py, Some(fp), datetime_as_timestamp, timezone, value_sharing, default, canonical, date_as_datetime, string_referencing, indefinite_containers
+            Some(fp),
+            datetime_as_timestamp,
+            timezone,
+            value_sharing,
+            encoders,
+            default,
+            canonical,
+            date_as_datetime,
+            string_referencing,
+            indefinite_containers,
         )
     }
 
@@ -303,9 +363,13 @@ impl CBOREncoder {
     #[setter]
     fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
         let result = fp.call_method0("writable");
-        if let Ok(writable) = &result && writable.is_truthy()? {
+        if let Ok(writable) = &result
+            && writable.is_truthy()?
+        {
             // Before replacing the file pointer, flush any pending writes and clear state
-            if let Some(existing_fp) = &self.fp && !fp.is(existing_fp) {
+            if let Some(existing_fp) = &self.fp
+                && !fp.is(existing_fp)
+            {
                 self.flush(fp.py())?;
                 self.shared_containers.clear();
                 self.string_references.clear();
@@ -332,8 +396,8 @@ impl CBOREncoder {
     #[setter]
     fn set_timezone(&mut self, timezone: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
         if let Some(timezone) = timezone {
-            let tzinfo_class = import_once(timezone.py(), &TZINFO_TYPE, "datetime", "tzinfo")?;
-            if !timezone.is_instance(&tzinfo_class)? {
+            let py = timezone.py();
+            if !timezone.is_instance(&TZINFO_TYPE.get(py)?)? {
                 return Err(PyErr::new::<PyTypeError, _>(
                     "timezone must be a tzinfo object",
                 ));
@@ -394,42 +458,173 @@ impl CBOREncoder {
     /// Write bytes to the data stream.
     ///
     /// :param bytes buf: the bytes to write
-    /// :rtype: None
+    /// :returns: the number of bytes written
+    /// :rtype: int
+    ///
+    /// .. note:: This method will first flush any write-ahead buffer, potentially causing
+    ///    the number of written bytes to be higher than the length of the bytes passed
+    ///    as the argument.
     #[pyo3(signature = (buf: "bytes", /))]
-    pub fn write<'py>(&self, py: Python<'py>, buf: Vec<u8>) -> PyResult<Bound<'py, PyAny>> {
-        match self.write_method.as_ref() {
-            Some(write) => write.bind(py).call1((&buf,)),
-            None => Err(PyRuntimeError::new_err("fp not set")),
+    fn write<'py>(&mut self, py: Python<'py>, buf: Vec<u8>) -> PyResult<Bound<'py, PyAny>> {
+        if self.write_method.is_none() {
+            return Err(PyRuntimeError::new_err("fp not set"));
         }
+        self.flush(py)?;
+        let write = self.write_method.as_ref().unwrap();
+        write.bind(py).call1((&buf,))
     }
 
-    pub fn encode_value(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_value(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         // Look up the Python type object of the object to be encoded
         let py = slf.py();
-        let obj_type = obj.get_type();
-        let result = slf.borrow().encoders.bind(slf.py()).get_item(&obj_type)?;
+        let this = slf.borrow();
+
+        if let Some(encoders) = &this.encoders {
+            match encoders.bind(py).get_item(&obj.get_type()) {
+                Ok(encoder) => {
+                    drop(this);
+                    return encoder.call1((slf, obj)).map(|_| ());
+                }
+                Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
+                Err(e) => return Err(e),
+            }
+        }
 
         // Look up the type in the encoders dict, and if no encoder callback was found, check for
         // special types. If all else fails, fall back to the default encoder callback, if one was
         // provided. Otherwise, raise CBOREncoderError.
-        if let Some(encoder_func) = result {
-            encoder_func.call1((slf, obj)).map(|_| ())
+        drop(this);
+        if let Ok(obj) = obj.cast::<PyBytes>() {
+            Self::encode_bytes(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyString>() {
+            Self::encode_string(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyBool>() {
+            Self::encode_bool(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyInt>() {
+            Self::encode_int(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyFloat>() {
+            Self::encode_float(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyComplex>() {
+            Self::encode_complex(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyByteArray>() {
+            Self::encode_bytearray(slf, obj)
         } else if obj.is_none() {
             Self::encode_none(slf)
         } else if obj.is_exact_instance_of::<UndefinedType>() {
             Self::encode_undefined(slf)
         } else if obj.is_exact_instance_of::<BreakMarkerType>() {
             Self::encode_break(slf)
+        } else if let Ok(map) = obj.cast::<PyMapping>() {
+            Self::encode_map(slf, map)
+        } else if let Ok(sequence) = obj.cast::<PySequence>() {
+            Self::encode_array(slf, sequence)
+        } else if let Ok(sequence) = obj.cast::<PySet>() {
+            Self::encode_set(slf, sequence)
+        } else if let Ok(sequence) = obj.cast::<PyFrozenSet>() {
+            Self::encode_frozenset(slf, sequence)
         } else if let Ok(simple_value) = obj.cast::<CBORSimpleValue>() {
             Self::encode_simple_value(slf, simple_value)
         } else if let Ok(tag) = obj.cast::<CBORTag>() {
             let tag = tag.borrow();
             Self::encode_semantic(slf, tag.tag, tag.value.bind(py))
-        } else if let Ok(map) = obj.cast::<PyMapping>() {
-            Self::encode_map(slf, map)
-        } else if let Ok(sequence) = obj.cast::<PySequence>() {
-            Self::encode_array(slf, sequence)
         } else {
+            let obj_type = obj.get_type();
+            let stdlib_encoders =
+                STDLIB_ENCODERS.get_or_try_init(py, || -> PyResult<EncoderLookupVec> {
+                    let mut encoders: EncoderLookupVec = Vec::new();
+                    encoders.push((
+                        py.import("datetime")?
+                            .getattr("datetime")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_datetime,
+                    ));
+                    encoders.push((
+                        py.import("datetime")?
+                            .getattr("date")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_date,
+                    ));
+                    encoders.push((
+                        py.import("decimal")?
+                            .getattr("Decimal")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_decimal,
+                    ));
+                    encoders.push((
+                        py.import("fractions")?
+                            .getattr("Fraction")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_rational,
+                    ));
+                    encoders.push((
+                        py.import("uuid")?.getattr("UUID")?.cast_into()?.unbind(),
+                        CBOREncoder::encode_uuid,
+                    ));
+                    encoders.push((
+                        py.import("re")?.getattr("Pattern")?.cast_into()?.unbind(),
+                        CBOREncoder::encode_regexp,
+                    ));
+                    encoders.push((
+                        py.import("ipaddress")?
+                            .getattr("IPv4Address")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_ipv4_address,
+                    ));
+                    encoders.push((
+                        py.import("ipaddress")?
+                            .getattr("IPv4Network")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_ipv4_network,
+                    ));
+                    encoders.push((
+                        py.import("ipaddress")?
+                            .getattr("IPv4Interface")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_ipv4_interface,
+                    ));
+                    encoders.push((
+                        py.import("ipaddress")?
+                            .getattr("IPv6Address")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_ipv6_address,
+                    ));
+                    encoders.push((
+                        py.import("ipaddress")?
+                            .getattr("IPv6Network")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_ipv6_network,
+                    ));
+                    encoders.push((
+                        py.import("ipaddress")?
+                            .getattr("IPv6Interface")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_ipv6_interface,
+                    ));
+                    encoders.push((
+                        py.import("email.mime.text")?
+                            .getattr("MIMEText")?
+                            .cast_into()?
+                            .unbind(),
+                        CBOREncoder::encode_mime,
+                    ));
+                    Ok(encoders)
+                })?;
+            for (pytype, callback) in stdlib_encoders {
+                if obj_type.is(pytype) {
+                    return callback(slf, obj);
+                }
+            }
+
             let default = slf.borrow().default.as_ref().map(|d| d.clone_ref(py));
             if let Some(default) = default {
                 default.call1(py, (slf, obj)).map(|_| ())
@@ -488,22 +683,10 @@ impl CBOREncoder {
         result.map(|_| buffer)
     }
 
-    #[pyo3(signature = (
-        encoder: "Callable[[CBOREncoder, typing.Any], typing.Any]",
-        value: "typing.Any"
-    ))]
-    pub fn encode_shared(
-        slf: &Bound<'_, Self>,
-        encoder: &Bound<'_, PyAny>,
-        value: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        Self::encode_shared_internal(slf, value, || encoder.call1((slf, value)).map(|_| ()))
-    }
-
     /// Takes a key and calculates the length of its optimal byte
     /// representation, along with the representation itself.
     /// This is used as the sorting key in CBOR's canonical representations.
-    pub fn encode_sortable_key<'py>(
+    fn encode_sortable_key<'py>(
         slf: &Bound<'py, Self>,
         key: &Bound<'py, PyAny>,
     ) -> PyResult<(usize, Bound<'py, PyAny>)> {
@@ -520,7 +703,7 @@ impl CBOREncoder {
     ///
     /// :param item: a (key, value) tuple
     /// :type item: tuple[Any, Any]
-    pub fn encode_sortable_item<'py>(
+    fn encode_sortable_item<'py>(
         slf: &Bound<'py, Self>,
         item: &Bound<'py, PyTuple>,
     ) -> PyResult<(usize, Bound<'py, PyAny>)> {
@@ -529,7 +712,7 @@ impl CBOREncoder {
     }
 
     #[pyo3(signature = (major_tag: "int", length: "int | None" = None))]
-    pub fn encode_length(
+    fn encode_length(
         &mut self,
         py: Python<'_>,
         major_tag: u8,
@@ -563,7 +746,7 @@ impl CBOREncoder {
         }
     }
 
-    pub fn encode_string(slf: &Bound<'_, Self>, obj: &Bound<'_, PyString>) -> PyResult<()> {
+    fn encode_string(slf: &Bound<'_, Self>, obj: &Bound<'_, PyString>) -> PyResult<()> {
         let py = slf.py();
         let string_referencing = slf.borrow().string_referencing;
 
@@ -581,7 +764,7 @@ impl CBOREncoder {
         this.fp_write(py, encoded.to_vec())
     }
 
-    pub fn encode_bytes(slf: &Bound<'_, Self>, obj: &Bound<'_, PyBytes>) -> PyResult<()> {
+    fn encode_bytes(slf: &Bound<'_, Self>, obj: &Bound<'_, PyBytes>) -> PyResult<()> {
         let py = slf.py();
         let string_referencing = slf.borrow().string_referencing;
 
@@ -599,7 +782,7 @@ impl CBOREncoder {
         this.fp_write(py, bytes.to_vec())
     }
 
-    pub fn encode_bytearray(slf: &Bound<'_, Self>, obj: &Bound<'_, PyByteArray>) -> PyResult<()> {
+    fn encode_bytearray(slf: &Bound<'_, Self>, obj: &Bound<'_, PyByteArray>) -> PyResult<()> {
         let py = slf.py();
         let mut this = slf.borrow_mut();
         this.encode_length(py, 2, Some(obj.len() as u64))?;
@@ -648,10 +831,12 @@ impl CBOREncoder {
             if slf.borrow().canonical {
                 // Reorder keys according to Canonical CBOR specification where they're sorted
                 // by the length of the CBOR encoded value first, and only then by the lexical order
-                let sorted_func = import_once(py, &SORTED_FUNC, "builtins", "sorted")?;
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("key", slf.getattr("encode_sortable_item")?)?;
-                iterator = sorted_func.call((iterator,), Some(&kwargs))?.try_iter()?;
+                iterator = SORTED_FUNC
+                    .get(py)?
+                    .call((iterator,), Some(&kwargs))?
+                    .try_iter()?;
             }
             for item in iterator {
                 let (key, value): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
@@ -666,50 +851,50 @@ impl CBOREncoder {
         })
     }
 
-    pub fn encode_break(slf: &Bound<'_, Self>) -> PyResult<()> {
+    fn encode_break(slf: &Bound<'_, Self>) -> PyResult<()> {
         // Break stop code for indefinite containers
         slf.borrow_mut().fp_write_byte(slf.py(), 0xff)
     }
 
-    pub fn encode_int(slf: &Bound<'_, Self>, integer: &Bound<'_, PyInt>) -> PyResult<()> {
+    fn encode_int(slf: &Bound<'_, Self>, obj: &Bound<'_, PyInt>) -> PyResult<()> {
         let py = slf.py();
-        if integer.ge(18446744073709551616_i128)? {
-            let (_, payload) = integer.extract::<BigInt>()?.to_bytes_be();
+        if obj.ge(18446744073709551616_i128)? {
+            let (_, payload) = obj.extract::<BigInt>()?.to_bytes_be();
             let py_payload = PyBytes::new(py, &payload);
             Self::encode_semantic(slf, 2, py_payload.as_any())
-        } else if integer.lt(-18446744073709551616_i128)? {
-            let mut value = integer.extract::<BigInt>()?;
+        } else if obj.lt(-18446744073709551616_i128)? {
+            let mut value = obj.extract::<BigInt>()?;
             value = -value - 1;
             let (_, payload) = value.to_bytes_be();
             let py_payload = PyBytes::new(py, &payload);
             Self::encode_semantic(slf, 3, py_payload.as_any())
-        } else if integer.ge(0)? {
-            let value: u64 = integer.extract()?;
+        } else if obj.ge(0)? {
+            let value: u64 = obj.extract()?;
             slf.borrow_mut().encode_length(py, 0, Some(value))
         } else {
-            let value = integer.add(1)?.abs()?.extract::<u64>()?;
+            let value = obj.add(1)?.abs()?.extract::<u64>()?;
             slf.borrow_mut().encode_length(py, 1, Some(value))
         }
     }
 
-    pub fn encode_bool(slf: &Bound<'_, Self>, value: bool) -> PyResult<()> {
+    fn encode_bool(slf: &Bound<'_, Self>, obj: &Bound<'_, PyBool>) -> PyResult<()> {
         slf.borrow_mut()
-            .fp_write_byte(slf.py(), if value { b'\xf5' } else { b'\xf4' })
+            .fp_write_byte(slf.py(), if obj.is_true() { b'\xf5' } else { b'\xf4' })
     }
 
-    pub fn encode_none(slf: &Bound<'_, Self>) -> PyResult<()> {
+    fn encode_none(slf: &Bound<'_, Self>) -> PyResult<()> {
         slf.borrow_mut().fp_write_byte(slf.py(), b'\xf6')
     }
 
-    pub fn encode_undefined(slf: &Bound<'_, Self>) -> PyResult<()> {
+    fn encode_undefined(slf: &Bound<'_, Self>) -> PyResult<()> {
         slf.borrow_mut().fp_write_byte(slf.py(), b'\xf7')
     }
 
-    pub fn encode_semantic(
-        slf: &Bound<'_, Self>,
-        tag: u64,
-        value: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
+    /// Encode a value with a semantic tag.
+    ///
+    /// :param int tag: a numeric tag value
+    /// :param value: the object to be encoded
+    fn encode_semantic(slf: &Bound<'_, Self>, tag: u64, value: &Bound<'_, PyAny>) -> PyResult<()> {
         let old_string_referencing = slf.borrow().string_referencing;
         if tag == 256 {
             let mut this = slf.borrow_mut();
@@ -726,32 +911,30 @@ impl CBOREncoder {
         result
     }
 
-    pub fn encode_set(slf: &Bound<'_, Self>, value: &Bound<'_, PySet>) -> PyResult<()> {
+    fn encode_set(slf: &Bound<'_, Self>, obj: &Bound<'_, PySet>) -> PyResult<()> {
         // Semantic tag 258
         if slf.borrow().canonical {
             let py = slf.py();
-            let sorted_func = import_once(py, &SORTED_FUNC, "builtins", "sorted")?;
             let kwargs = PyDict::new(py);
             kwargs.set_item("key", slf.getattr("encode_sortable_key")?)?;
-            let list = sorted_func.call((value,), Some(&kwargs))?;
+            let list = SORTED_FUNC.get(py)?.call((obj,), Some(&kwargs))?;
             Self::encode_semantic(slf, 258, list.as_any())
         } else {
-            let tuple = PyTuple::new(slf.py(), value)?;
+            let tuple = PyTuple::new(slf.py(), obj)?;
             Self::encode_semantic(slf, 258, tuple.as_any())
         }
     }
 
-    pub fn encode_frozenset(slf: &Bound<'_, Self>, value: &Bound<'_, PyFrozenSet>) -> PyResult<()> {
+    fn encode_frozenset(slf: &Bound<'_, Self>, obj: &Bound<'_, PyFrozenSet>) -> PyResult<()> {
         // Semantic tag 258
         if slf.borrow().canonical {
             let py = slf.py();
-            let sorted_func = import_once(py, &SORTED_FUNC, "builtins", "sorted")?;
             let kwargs = PyDict::new(py);
             kwargs.set_item("key", slf.getattr("encode_sortable_key")?)?;
-            let list = sorted_func.call((value,), Some(&kwargs))?;
+            let list = SORTED_FUNC.get(py)?.call((obj,), Some(&kwargs))?;
             Self::encode_semantic(slf, 258, list.as_any())
         } else {
-            let tuple = PyTuple::new(slf.py(), value)?;
+            let tuple = PyTuple::new(slf.py(), obj)?;
             Self::encode_semantic(slf, 258, tuple.as_any())
         }
     }
@@ -760,7 +943,7 @@ impl CBOREncoder {
     // Semantic decoders (major tag 6)
     //
 
-    pub fn encode_datetime(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_datetime(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         let py = slf.py();
 
         let inner_encode_datetime = |aware_datetime: &Bound<'_, PyAny>| -> PyResult<()> {
@@ -768,12 +951,15 @@ impl CBOREncoder {
             match datetime_as_timestamp {
                 false => {
                     let formatted = aware_datetime
-                        .call_method0("isoformat")?
-                        .call_method1("replace", (intern!(py, "+00:00"), intern!(py, "Z")))?;
+                        .call_method0(intern!(py, "isoformat"))?
+                        .call_method1(
+                            intern!(py, "replace"),
+                            (intern!(py, "+00:00"), intern!(py, "Z")),
+                        )?;
                     Self::encode_semantic(slf, 0, formatted.as_any())
                 }
                 true => {
-                    let py_timestamp = aware_datetime.call_method0("timestamp")?;
+                    let py_timestamp = aware_datetime.call_method0(intern!(py, "timestamp"))?;
 
                     // If the timestamp can be converted to an integer without loss, encode that
                     // integer instead
@@ -790,14 +976,14 @@ impl CBOREncoder {
             }
         };
 
-        if value.getattr("tzinfo")?.is_none() {
+        if obj.getattr("tzinfo")?.is_none() {
             // value is a naive datetime (no time zone)
             let timezone = slf.borrow().timezone.as_ref().map(|tz| tz.clone_ref(py));
             match timezone {
                 Some(timezone) => {
                     let kwargs = PyDict::new(py);
                     kwargs.set_item("tzinfo", timezone)?;
-                    let value = value.call_method("replace", (), Some(&kwargs))?;
+                    let value = obj.call_method("replace", (), Some(&kwargs))?;
                     inner_encode_datetime(&value)
                 }
                 None => raise_cbor_error(
@@ -807,11 +993,11 @@ impl CBOREncoder {
                 ),
             }
         } else {
-            inner_encode_datetime(value)
+            inner_encode_datetime(obj)
         }
     }
 
-    pub fn encode_date(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_date(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 100
         let (date_as_datetime, datetime_as_timestamp) = {
             let this = slf.borrow();
@@ -821,11 +1007,10 @@ impl CBOREncoder {
         if date_as_datetime {
             // Encode a datetime with a zeroed-out time portion
             let py = slf.py();
-            let datetime_type = import_once(py, &DATETIME_TYPE, "datetime", "datetime")?;
             let time_zero = ZERO_TIME.get_or_try_init(py, || {
                 Ok::<_, PyErr>(py.import("datetime")?.getattr("time")?.call0()?.unbind())
             })?;
-            let value = datetime_type.call_method1("combine", (value, time_zero))?;
+            let value = DATETIME_COMBINE_FUNC.get(py)?.call1((value, time_zero))?;
             Self::encode_datetime(slf, &value)
         } else if datetime_as_timestamp {
             // Encode a date as a number of days since the Unix epoch
@@ -840,7 +1025,7 @@ impl CBOREncoder {
         }
     }
 
-    pub fn encode_rational(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_rational(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 30
         let numerator = value.getattr("numerator")?;
         let denominator = value.getattr("denominator")?;
@@ -850,25 +1035,25 @@ impl CBOREncoder {
         })
     }
 
-    pub fn encode_regexp(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_regexp(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 35
         let pattern = value.getattr("pattern")?;
         Self::encode_semantic(slf, 35, &pattern.str()?.as_any())
     }
 
-    pub fn encode_mime(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_mime(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 36
         let string = value.call_method0("as_string")?;
         Self::encode_semantic(slf, 36, &string)
     }
 
-    pub fn encode_uuid(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_uuid(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 37
         let bytes = value.getattr("bytes")?;
         Self::encode_semantic(slf, 37, &bytes)
     }
 
-    pub fn encode_decimal(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_decimal(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         if value.call_method0("is_nan")?.is_truthy()? {
             slf.borrow_mut().fp_write(slf.py(), vec![0xf9, 0x7e, 0x00])
         } else if value.call_method0("is_infinite")?.is_truthy()? {
@@ -887,12 +1072,12 @@ impl CBOREncoder {
         }
     }
 
-    pub fn encode_ipv4_address(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_ipv4_address(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 52
         Self::encode_semantic(slf, 52, &value.getattr("packed")?)
     }
 
-    pub fn encode_ipv4_network(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_ipv4_network(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 52
         let packed_addr = value
             .getattr("network_address")?
@@ -903,7 +1088,7 @@ impl CBOREncoder {
         Self::encode_semantic(slf, 52, &elements)
     }
 
-    pub fn encode_ipv4_interface(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_ipv4_interface(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 52
         let packed_addr = value.getattr("packed")?;
         let prefixlen = value.getattr("network")?.getattr("prefixlen")?;
@@ -911,7 +1096,7 @@ impl CBOREncoder {
         Self::encode_semantic(slf, 52, &elements)
     }
 
-    pub fn encode_ipv6_address(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_ipv6_address(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 54
         let packed_addr = value.getattr("packed")?;
         let scope_id = value.getattr("scope_id")?;
@@ -929,7 +1114,7 @@ impl CBOREncoder {
         }
     }
 
-    pub fn encode_ipv6_network(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_ipv6_network(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 54
         let py = slf.py();
         let packed_addr = value
@@ -941,7 +1126,7 @@ impl CBOREncoder {
         Self::encode_semantic(slf, 54, &elements)
     }
 
-    pub fn encode_ipv6_interface(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn encode_ipv6_interface(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 54
         let packed_addr = value.getattr("packed")?;
         let prefixlen = value.getattr("network")?.getattr("prefixlen")?;

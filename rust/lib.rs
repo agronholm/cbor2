@@ -35,7 +35,6 @@ mod _cbor2 {
     use crate::types::BreakMarkerType;
     use crate::types::UndefinedType;
 
-    pub static ENCODERS: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
     pub static SYS_MAXSIZE: PyOnceLock<usize> = PyOnceLock::new();
     pub static UNDEFINED: PyOnceLock<Py<UndefinedType>> = PyOnceLock::new();
     pub static BREAK_MARKER: PyOnceLock<Py<BreakMarkerType>> = PyOnceLock::new();
@@ -196,12 +195,18 @@ mod _cbor2 {
     ///     set to ``True`` to allow more efficient serializing of repeated values
     ///     and, more importantly, cyclic data structures, at the cost of extra
     ///     line overhead
+    /// :param encoders:
+    ///     An optional mapping for overriding the encoding for select Python types.
+    ///     Each key in this mapping should be a Python type object, and the value a callable
+    ///     that takes two arguments: the encoder object and the object to encode.
+    /// :type encoders: ~collections.abc.Mapping[type,
+    ///     ~collections.abc.Callable[[CBOREncoder, typing.Any], typing.Any]]
     /// :param default:
     ///     a callable that is called by the encoder with two arguments (the encoder
     ///     instance and the value being encoded) when no suitable encoder has been found,
     ///     and should use the methods on the encoder to encode any objects it wants to add
     ///     to the data stream
-    /// :type default: ~collections.abc.Callable[[CBOREncoder, ~typing.Any], None] | None
+    /// :type default: ~collections.abc.Callable[[CBOREncoder, typing.Any], None] | None
     /// :param bool canonical:
     ///     when ``True``, use "canonical" CBOR representation; this typically involves
     ///     sorting maps, sets, etc. into a pre-determined order ensuring that
@@ -222,6 +227,7 @@ mod _cbor2 {
         datetime_as_timestamp: "bool" = false,
         timezone: "datetime.tzinfo | None" = None,
         value_sharing: "bool" = false,
+        encoders = None,
         default: "collections.abc.Callable[[CBOREncoder, typing.Any], None] | None" = None,
         canonical: "bool" = false,
         date_as_datetime: "bool" = false,
@@ -235,6 +241,7 @@ mod _cbor2 {
         datetime_as_timestamp: bool,
         timezone: Option<&Bound<'py, PyAny>>,
         value_sharing: bool,
+        encoders: Option<&Bound<'py, PyMapping>>,
         default: Option<&Bound<'py, PyAny>>,
         canonical: bool,
         date_as_datetime: bool,
@@ -242,11 +249,11 @@ mod _cbor2 {
         indefinite_containers: bool,
     ) -> PyResult<()> {
         let encoder = CBOREncoder::new(
-            py,
             fp,
             datetime_as_timestamp,
             timezone,
             value_sharing,
+            encoders,
             default,
             canonical,
             date_as_datetime,
@@ -272,12 +279,18 @@ mod _cbor2 {
     ///     set to ``True`` to allow more efficient serializing of repeated values
     ///     and, more importantly, cyclic data structures, at the cost of extra
     ///     line overhead
+    /// :param encoders:
+    ///     An optional mapping for overriding the encoding for select Python types.
+    ///     Each key in this mapping should be a Python type object, and the value a callable
+    ///     that takes two arguments: the encoder object and the object to encode.
+    /// :type encoders: ~collections.abc.Mapping[type,
+    ///     ~collections.abc.Callable[[CBOREncoder, typing.Any], typing.Any]]
     /// :param default:
     ///     a callable that is called by the encoder with two arguments (the encoder
     ///     instance and the value being encoded) when no suitable encoder has been found,
     ///     and should use the methods on the encoder to encode any objects it wants to add
     ///     to the data stream
-    /// :type default: ~collections.abc.Callable[[CBOREncoder, ~typing.Any], None] | None
+    /// :type default: ~collections.abc.Callable[[CBOREncoder, typing.Any], None] | None
     /// :param bool canonical:
     ///     when ``True``, use "canonical" CBOR representation; this typically involves
     ///     sorting maps, sets, etc. into a pre-determined order ensuring that
@@ -298,6 +311,7 @@ mod _cbor2 {
         datetime_as_timestamp: "bool" = false,
         timezone: "datetime.tzinfo | None" = None,
         value_sharing: "bool" = false,
+        encoders = None,
         default: "collections.abc.Callable[[CBOREncoder, typing.Any], None] | None" = None,
         canonical: "bool" = false,
         date_as_datetime: "bool" = false,
@@ -310,6 +324,7 @@ mod _cbor2 {
         datetime_as_timestamp: bool,
         timezone: Option<&Bound<'_, PyAny>>,
         value_sharing: bool,
+        encoders: Option<&Bound<'py, PyMapping>>,
         default: Option<&Bound<'_, PyAny>>,
         canonical: bool,
         date_as_datetime: bool,
@@ -317,11 +332,11 @@ mod _cbor2 {
         indefinite_containers: bool,
     ) -> PyResult<Vec<u8>> {
         let encoder = CBOREncoder::new_internal(
-            py,
             None,
             datetime_as_timestamp,
             timezone,
             value_sharing,
+            encoders,
             default,
             canonical,
             date_as_datetime,
@@ -352,32 +367,6 @@ mod _cbor2 {
             let py_type = py.import(module_name)?.getattr(class_name)?;
             encoders.set_item(py_type, cbor_encoder_type.getattr(encoder_func_name)?)
         };
-
-        // Register encoder callbacks
-        register_encoder("builtins.str", "encode_string")?;
-        register_encoder("builtins.bytes", "encode_bytes")?;
-        register_encoder("builtins.bytearray", "encode_bytearray")?;
-        register_encoder("builtins.int", "encode_int")?;
-        register_encoder("builtins.float", "encode_float")?;
-        register_encoder("builtins.complex", "encode_complex")?;
-        register_encoder("builtins.bool", "encode_bool")?;
-        register_encoder("decimal.Decimal", "encode_decimal")?;
-        register_encoder("datetime.datetime", "encode_datetime")?;
-        register_encoder("datetime.date", "encode_date")?;
-        register_encoder("fractions.Fraction", "encode_rational")?;
-        register_encoder("re.Pattern", "encode_regexp")?;
-        register_encoder("email.mime.text.MIMEText", "encode_mime")?;
-        register_encoder("uuid.UUID", "encode_uuid")?;
-        register_encoder("builtins.set", "encode_set")?;
-        register_encoder("builtins.frozenset", "encode_frozenset")?;
-        register_encoder("ipaddress.IPv4Address", "encode_ipv4_address")?;
-        register_encoder("ipaddress.IPv6Address", "encode_ipv6_address")?;
-        register_encoder("ipaddress.IPv4Network", "encode_ipv4_network")?;
-        register_encoder("ipaddress.IPv6Network", "encode_ipv6_network")?;
-        register_encoder("ipaddress.IPv4Interface", "encode_ipv4_interface")?;
-        register_encoder("ipaddress.IPv6Interface", "encode_ipv6_interface")?;
-        m.add("encoders", encoders.clone())?;
-        ENCODERS.get_or_init(py, || encoders.unbind());
 
         let undefined = Bound::new(py, UndefinedType)?;
         m.add("undefined", undefined.clone())?;

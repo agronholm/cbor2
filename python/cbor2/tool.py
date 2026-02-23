@@ -39,7 +39,7 @@ default_encoders: dict[type, Callable[[Any], Any]] = {
     uuid.UUID: lambda x: x.urn,
     CBORTag: lambda x: {f"CBORTag:{x.tag:d}": x.value},
     set: list,
-    re.compile("").__class__: lambda x: x.pattern,
+    re.Pattern: lambda x: x.pattern,
     ipaddress.IPv4Address: str,
     ipaddress.IPv6Address: str,
     ipaddress.IPv4Network: str,

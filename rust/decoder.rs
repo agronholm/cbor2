@@ -1,15 +1,11 @@
 use crate::_cbor2::SYS_MAXSIZE;
 use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
 use crate::_cbor2::{DEFAULT_MAX_DEPTH, DEFAULT_READ_SIZE};
-use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, FrozenDict};
-use crate::utils::{
-    CBORDecodeError, create_cbor_error, import_once, raise_cbor_error, raise_cbor_error_from,
-    wrap_cbor_error,
-};
+use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, FrozenDict, DECIMAL_TYPE, FRACTION_TYPE, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE};
+use crate::utils::{CBORDecodeError, create_cbor_error, raise_cbor_error, raise_cbor_error_from, wrap_cbor_error, PyImportable};
 use half::f16;
 use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyMapping, PySet, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::cmp::{max, min};
@@ -18,23 +14,18 @@ use std::mem::{replace, take};
 const VALID_STR_ERRORS: [&str; 3] = ["strict", "ignore", "replace"];
 const SEEK_CUR: u8 = 1;
 
-static DATETIME_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static DATE_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static UTC: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static DECIMAL_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static FRACTION_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static IP_ADDRESS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static IP_INTERFACE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static IP_NETWORK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static IPV4ADDRESS_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static IPV4INTERFACE_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static IPV4NETWORK_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static IPV6ADDRESS_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static IPV6INTERFACE_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static IPV6NETWORK_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static RE_COMPILE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static MESSAGE_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-static UUID_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+static DATE_FROMISOFORMAT: PyImportable = PyImportable::new("datetime", "date.fromisoformat");
+static DATE_FROMORDINAL: PyImportable = PyImportable::new("datetime", "date.fromordinal");
+static DATETIME_FROMISOFORMAT: PyImportable = PyImportable::new("datetime", "datetime.fromisoformat");
+static DATETIME_FROMTIMESTAMP: PyImportable = PyImportable::new("datetime", "datetime.fromtimestamp");
+static EMAIL_PARSER: PyImportable = PyImportable::new("email.parser", "Parser");
+static INT_FROMBYTES: PyImportable = PyImportable::new("builtins", "int.from_bytes");
+static IPADDRESS_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_address");
+static IPNETWORK_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_network");
+static IPINTERFACE_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_interface");
+static RE_COMPILE: PyImportable = PyImportable::new("re", "compile");
+static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
 
 /// The CBORDecoder class implements a fully featured `CBOR`_ decoder with
 /// several extensions for handling shared references, big integers, rational
@@ -44,6 +35,32 @@ static UUID_TYPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 ///
 /// When the class is constructed manually, the main entry points are
 /// :meth:`decode` and :meth:`decode_from_bytes`.
+///
+/// :param bytes data:
+///     the bytestring to deserialize
+/// :param tag_hook:
+///     callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
+///     to be decoded. This callback is invoked for any tags for which there is no
+///     built-in decoder. The return value is substituted for the :class:`.CBORTag`
+///     object in the deserialized output
+/// :param object_hook:
+///     callable that takes 2 arguments: the decoder instance, and a dictionary. This
+///     callback is invoked for each deserialized :class:`dict` object. The return value
+///     is substituted for the dict in the deserialized output.
+/// :param major_decoders:
+///     An optional mapping for overriding the decoders for select major types.
+///     The value is a mapping of major types (integers 0-7) to callable that take 2
+///     arguments: the decoder instance and a numeric subtype.
+/// :param semantic_decoders:
+///     An optional mapping for overriding the decoding for select semantic tags.
+///     The value is a mapping of semantic tags (integers) to callables that take
+///     the decoder instance as the sole argument.
+/// :param str_errors:
+///     determines how to handle unicode decoding errors (see the `Error Handlers`_
+///     section in the standard library documentation for details)
+/// :param int read_size: minimum amount of bytes to read at once (if ``fp`` is seekable)
+/// :param int max_depth:
+///     maximum allowed depth for nested containers
 ///
 /// .. _CBOR: https://cbor.io/
 #[pyclass(module = "cbor2")]
@@ -399,15 +416,15 @@ impl CBORDecoder {
     }
 
     /// Set the shareable value for the last encountered shared value marker,
-    /// if any. If the current shared index is ``None``, nothing is done.
+    /// if any. If the current shared index is :data:`None`, nothing is done.
     ///
     /// :param value: the shared value
-    /// :returns: the shared value to permit chaining
-    fn set_shareable<'py>(&mut self, value: &Bound<'py, PyAny>) {
+    fn set_shareable<'py>(&mut self, value: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
         if let Some(index) = self.share_index {
             self.shareables[index] = Some(value.clone().unbind().into_any());
             self.share_index = None;
         }
+        value.clone()
     }
 
     /// Decode the next value from the stream.
@@ -516,12 +533,12 @@ impl CBORDecoder {
         })
     }
 
-    ///  Wrap the given bytestring as a file and call :meth:`decode` with it as
-    ///  the argument.
+    /// Wrap the given bytestring as a file and call :meth:`decode` with it as
+    /// the argument.
     ///
-    ///  This method was intended to be used from the ``tag_hook`` hook when an
-    ///  object needs to be decoded separately from the rest but while still
-    ///  taking advantage of the shared value registry.
+    /// This method was intended to be used from the ``tag_hook`` hook when an
+    /// object needs to be decoded separately from the rest but while still
+    /// taking advantage of the shared value registry.
     ///
     /// :param bytes buf: the buffer from which to decode a CBOR object
     #[pyo3(signature = (buf: "bytes", /))]
@@ -555,7 +572,7 @@ impl CBORDecoder {
     /// This is a low-level operation that may be needed by custom decoder callbacks.
     ///
     /// :param int subtype:
-    /// :return: the length of the item, or ``None`` to indicate an indefinite-length item
+    /// :return: the length of the item, or :data:`None` to indicate an indefinite-length item
     /// :rtype: int | None
     fn decode_length(&mut self, py: Python<'_>, subtype: u8) -> PyResult<Option<usize>> {
         let length = match subtype {
@@ -1037,9 +1054,8 @@ impl CBORDecoder {
             datetime_str = temp_str.into_pyobject(py)?;
         }
 
-        let datetime_class = import_once(py, &DATETIME_TYPE, "datetime", "datetime")?;
-        let datetime = datetime_class
-            .call_method1(intern!(py, "fromisoformat"), (&datetime_str,))
+        let datetime = DATETIME_FROMISOFORMAT.get(py)?
+            .call1((&datetime_str,))
             .map_err(|e| {
                 create_cbor_error(
                     py,
@@ -1055,10 +1071,9 @@ impl CBORDecoder {
         // Semantic tag 1
         let py = slf.py();
         let value = Self::decode(slf)?;
-        let datetime_class = import_once(py, &DATETIME_TYPE, "datetime", "datetime")?;
-        let utc = import_once(py, &UTC, "datetime", "timezone.utc")?;
-        datetime_class
-            .call_method1(intern!(py, "fromtimestamp"), (value, utc))
+        let utc = UTC.get(py)?;
+        DATETIME_FROMTIMESTAMP.get(py)?
+            .call1((value, utc))
             .map_err(|e| {
                 create_cbor_error(
                     py,
@@ -1110,7 +1125,7 @@ impl CBORDecoder {
             );
         }
 
-        let decimal_class = import_once(py, &DECIMAL_TYPE, "decimal", "Decimal")?;
+        let decimal_class = DECIMAL_TYPE.get(py)?;
         let decimal = wrap_cbor_error(
             py,
             "CBORDecodeValueError",
@@ -1151,7 +1166,7 @@ impl CBORDecoder {
             );
         }
 
-        let decimal_class = import_once(py, &DECIMAL_TYPE, "decimal", "Decimal")?;
+        let decimal_class = DECIMAL_TYPE.get(py)?;
         let decimal = wrap_cbor_error(
             py,
             "CBORDecodeValueError",
@@ -1253,8 +1268,7 @@ impl CBORDecoder {
             );
         }
 
-        let fraction_class = import_once(py, &FRACTION_TYPE, "fractions", "Fraction")?;
-        match fraction_class.call1(tuple) {
+        match FRACTION_TYPE.get(py)?.call1(tuple) {
             Ok(fraction) => Ok(fraction),
             Err(e) => {
                 raise_cbor_error_from(py, "CBORDecodeValueError", "error decoding rational", e)
@@ -1266,8 +1280,7 @@ impl CBORDecoder {
         // Semantic tag 35
         let py = slf.py();
         let value = Self::decode(slf)?;
-        let re_compile_func = import_once(py, &RE_COMPILE, "re", "compile")?;
-        match re_compile_func.call1((value,)) {
+        match RE_COMPILE.get(py)?.call1((value,)) {
             Ok(regexp) => Ok(regexp),
             Err(e) => raise_cbor_error_from(
                 py,
@@ -1282,8 +1295,7 @@ impl CBORDecoder {
         // Semantic tag 36
         let py = slf.py();
         let value = Self::decode(slf)?;
-        let email_parser_class = import_once(py, &MESSAGE_TYPE, "email.parser", "Parser")?;
-        let parser = email_parser_class.call0()?;
+        let parser = EMAIL_PARSER.get(py)?.call0()?;
         match parser.call_method1(intern!(py, "parsestr"), (value,)) {
             Ok(message) => Ok(message),
             Err(e) => {
@@ -1296,10 +1308,9 @@ impl CBORDecoder {
         // Semantic tag 37
         let py = slf.py();
         let value = Self::decode(slf)?;
-        let uuid_class = import_once(py, &UUID_TYPE, "uuid", "UUID")?;
         let kwargs = PyDict::new(py);
         kwargs.set_item(intern!(py, "bytes"), value)?;
-        match uuid_class.call((), Some(&kwargs)) {
+        match UUID_TYPE.get(py)?.call((), Some(&kwargs)) {
             Ok(uuid) => Ok(uuid),
             Err(e) => {
                 raise_cbor_error_from(py, "CBORDecodeValueError", "error decoding UUID value", e)
@@ -1313,8 +1324,7 @@ impl CBORDecoder {
         let value = Self::with_immutable(slf, || Self::decode(slf))?;
         let addr = if let Ok(bytes) = value.cast::<PyBytes>() {
             // The decoded value was a bytestring, so this is an IPv4 address
-            let ipv4addr_class = import_once(py, &IPV4ADDRESS_TYPE, "ipaddress", "IPv4Address")?;
-            ipv4addr_class.call1((bytes,))?
+            IPV4ADDRESS_TYPE.get(py)?.call1((bytes,))?
         } else if let Ok(tuple) = value.cast_into::<PyTuple>()
             && tuple.len() == 2
         {
@@ -1326,16 +1336,13 @@ impl CBORDecoder {
             if let Ok(prefix) = first_item.cast::<PyInt>()
                 && let Ok(address) = second_item.cast::<PyBytes>()
             {
-                let ipv4net_class = import_once(py, &IPV4NETWORK_TYPE, "ipaddress", "IPv4Network")?;
                 let mut address_vec: Vec<u8> = address.extract()?;
                 address_vec.resize(4, 0);
-                ipv4net_class.call1(((address_vec, prefix),))?
+                IPV4NETWORK_TYPE.get(py)?.call1(((address_vec, prefix),))?
             } else if let Ok(address) = first_item.cast::<PyBytes>()
                 && let Ok(prefix) = second_item.cast::<PyInt>()
             {
-                let ipv4if_class =
-                    import_once(py, &IPV4INTERFACE_TYPE, "ipaddress", "IPv4Interface")?;
-                ipv4if_class.call1(((address, prefix),))?
+                IPV4INTERFACE_TYPE.get(py)?.call1(((address, prefix),))?
             } else {
                 return raise_cbor_error(
                     py,
@@ -1356,8 +1363,8 @@ impl CBORDecoder {
     fn decode_ipv6<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 54
         let py = slf.py();
+        let ipv6addr_class = IPV6ADDRESS_TYPE.get(py)?;
         let value = Self::with_immutable(slf, || Self::decode(slf))?;
-        let ipv6addr_class = import_once(py, &IPV6ADDRESS_TYPE, "ipaddress", "IPv6Address")?;
         let addr = if let Ok(bytes) = value.cast::<PyBytes>() {
             // The decoded value was a bytestring, so this is an IPv6 address
             ipv6addr_class.call1((bytes,))?
@@ -1374,20 +1381,17 @@ impl CBORDecoder {
             let (class, addr_bytes, prefix) = if let Ok(prefix) = first_item.cast::<PyInt>()
                 && let Ok(address) = second_item.cast::<PyBytes>()
             {
-                let ipv6net_class = import_once(py, &IPV6NETWORK_TYPE, "ipaddress", "IPv6Network")?;
                 let mut address_vec: Vec<u8> = address.extract()?;
                 address_vec.resize(16, 0);
                 Ok((
-                    ipv6net_class,
+                    IPV6NETWORK_TYPE.get(py)?,
                     PyBytes::new(py, address_vec.as_slice()),
                     prefix,
                 ))
             } else if let Ok(address) = first_item.cast_into::<PyBytes>()
                 && let Ok(prefix) = second_item.cast::<PyInt>()
             {
-                let ipv6if_class =
-                    import_once(py, &IPV6INTERFACE_TYPE, "ipaddress", "IPv6Interface")?;
-                Ok((ipv6if_class, address, prefix))
+                Ok((IPV6INTERFACE_TYPE.get(py)?, address, prefix))
             } else {
                 raise_cbor_error(
                     py,
@@ -1431,8 +1435,7 @@ impl CBORDecoder {
     fn decode_epoch_date<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 100
         let value = Self::decode(slf)?.extract::<i32>()? + 719163;
-        let date_class = import_once(slf.py(), &DATE_TYPE, "datetime", "date")?;
-        let date = date_class.call_method1(intern!(slf.py(), "fromordinal"), (value,))?;
+        let date = DATE_FROMORDINAL.get(slf.py())?.call1((value,))?;
         Ok(date)
     }
 
@@ -1475,8 +1478,7 @@ impl CBORDecoder {
         })?;
         let addr_obj = match value.len()? {
             4 | 16 => {
-                let ip_address_func = import_once(py, &IP_ADDRESS, "ipaddress", "ip_address")?;
-                ip_address_func.call1((value,))
+                IPADDRESS_FUNC.get(py)?.call1((value,))
             }
             6 => Ok(Bound::new(py, CBORTag::new_internal(260, value.into_any()))?.into_any()), // MAC address
             length => raise_cbor_error(
@@ -1509,16 +1511,13 @@ impl CBORDecoder {
             );
         }
 
-        let ip_network_func = import_once(py, &IP_NETWORK, "ipaddress", "ip_network")?;
-        let addr_obj = match ip_network_func.call1((&first_item,)) {
+        let addr_obj = match IPNETWORK_FUNC.get(py)?.call1((&first_item,)) {
             Ok(ip_network) => Ok(ip_network),
             Err(e) => {
                 // A ValueError may indicate that the bytestring has host bits set, so try parsing
                 // it as an IP interface instead
                 if e.is_instance_of::<PyValueError>(py) {
-                    let ip_interface_func =
-                        import_once(py, &IP_INTERFACE, "ipaddress", "ip_interface")?;
-                    ip_interface_func.call1((first_item,))
+                    IPINTERFACE_FUNC.get(py)?.call1((first_item,))
                 } else {
                     Err(e)
                 }
@@ -1530,8 +1529,7 @@ impl CBORDecoder {
     fn decode_date_string<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 1004
         let value = Self::decode(slf)?;
-        let date_class = import_once(slf.py(), &DATE_TYPE, "datetime", "date")?;
-        let date = date_class.call_method1(intern!(slf.py(), "fromisoformat"), (value,))?;
+        let date = DATE_FROMISOFORMAT.get(slf.py())?.call1((value,))?;
         Ok(date)
     }
 

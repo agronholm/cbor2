@@ -6,7 +6,6 @@ from ._cbor2 import FrozenDict as FrozenDict
 from ._cbor2 import break_marker as break_marker
 from ._cbor2 import dump as dump
 from ._cbor2 import dumps as dumps
-from ._cbor2 import encoders as encoders
 from ._cbor2 import load as load
 from ._cbor2 import loads as loads
 from ._cbor2 import shareable_encoder as shareable_encoder
