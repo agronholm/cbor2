@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any, TypeAlias
+
 from ._cbor2 import CBORDecoder as CBORDecoder
 from ._cbor2 import CBOREncoder as CBOREncoder
 from ._cbor2 import CBORSimpleValue as CBORSimpleValue
@@ -17,3 +20,9 @@ from ._types import CBOREncodeError as CBOREncodeError
 from ._types import CBOREncodeTypeError as CBOREncodeTypeError
 from ._types import CBOREncodeValueError as CBOREncodeValueError
 from ._types import CBORError as CBORError
+
+TagHook: TypeAlias = Callable[[CBORDecoder, CBORTag], Any]
+MajorDecoderCallback: TypeAlias = Callable[[CBORDecoder, int], Any]
+SemanticDecoderCallback: TypeAlias = Callable[[CBORDecoder], Any]
+ObjectHook: TypeAlias = Callable[[CBORDecoder, dict[Any, Any]], Any]
+EncoderHook: TypeAlias = Callable[[CBOREncoder, Any], Any]

@@ -2,12 +2,13 @@ use crate::utils::PyImportable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::PyAnyMethods;
+use pyo3::types::PyTupleMethods;
 use pyo3::types::{
-    PyDict, PyDictMethods, PyFrozenSet, PyInt, PyIterator, PyNotImplemented, PyString,
-    PyTuple,
+    PyDict, PyDictMethods, PyFrozenSet, PyGenericAlias, PyInt, PyIterator, PyNotImplemented,
+    PyString, PyTuple, PyType,
 };
 use pyo3::{
-    pyclass, pymethods, Bound, IntoPyObjectExt, Py, PyAny, PyResult, PyTypeInfo, Python,
+    Bound, IntoPyObjectExt, Py, PyAny, PyErr, PyResult, PyTypeInfo, Python, pyclass, pymethods,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -22,7 +23,6 @@ pub static IPV6INTERFACE_TYPE: PyImportable = PyImportable::new("ipaddress", "IP
 pub static IPV6NETWORK_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Network");
 pub static UUID_TYPE: PyImportable = PyImportable::new("uuid", "UUID");
 
-
 /// Represents a CBOR semantic tag.
 ///
 /// :param int tag: tag number
@@ -35,7 +35,10 @@ pub struct CBORTag {
 
 impl CBORTag {
     pub fn new_internal(tag: u64, value: Bound<'_, PyAny>) -> Self {
-        Self { tag, value: value.unbind() }
+        Self {
+            tag,
+            value: value.unbind(),
+        }
     }
 }
 
@@ -58,7 +61,7 @@ impl CBORTag {
         if let Ok(other) = other.cast::<CBORTag>() {
             let other_tag = other.borrow().tag;
             if self.tag != other_tag {
-                return op.matches(self.tag.cmp(&other_tag)).into_bound_py_any(py)
+                return op.matches(self.tag.cmp(&other_tag)).into_bound_py_any(py);
             }
             let borrowed_other = other.borrow();
             let bound_self = self.value.bind(py);
@@ -85,9 +88,11 @@ impl CBORTag {
             Ok(value_hash) => {
                 hasher.write_isize(value_hash.extract(py)?);
                 Ok(hasher.finish())
-            },
+            }
             Err(cause) => {
-                let exc = PyRuntimeError::new_err("This CBORTag is not hashable because its value is not hashable");
+                let exc = PyRuntimeError::new_err(
+                    "This CBORTag is not hashable because its value is not hashable",
+                );
                 exc.set_cause(py, Some(cause));
                 Err(exc)
             }
@@ -190,8 +195,42 @@ impl FrozenDict {
         self.dict.bind(py).call_method0("values")
     }
 
-    fn get<'py>(&self, py: Python<'py>, key: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        self.dict.bind(py).call_method1("get", (key,))
+    #[pyo3(signature = (key, /, default = None))]
+    fn get<'py>(
+        &self,
+        py: Python<'py>,
+        key: &Bound<'py, PyAny>,
+        default: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.dict.bind(py).call_method1("get", (key, default))
+    }
+
+    #[classmethod]
+    #[pyo3(signature = (key, /))]
+    fn __class_getitem__<'py>(
+        cls: &Bound<'py, PyType>,
+        key: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let py = key.py();
+
+        // Normalize key to a 2-tuple: MyClass[T1, T2]
+        if let Ok(t) = key.cast::<PyTuple>() {
+            if t.len() != 2 {
+                return Err(PyErr::new::<PyTypeError, _>(
+                    "FrozenDict[...] expects exactly 2 type arguments",
+                ));
+            }
+        } else {
+            // Handle the “one thing” case explicitly if you want, or just error
+            return Err(PyErr::new::<PyTypeError, _>(
+                "FrozenDict[...] expects exactly 2 type arguments",
+            ));
+        };
+
+        // Create a types.GenericAlias: MyClass[T1, T2]
+        let cls_any: &Bound<'_, PyAny> = cls.as_any();
+        let alias = PyGenericAlias::new(py, cls_any, key)?;
+        Ok(alias.into_any())
     }
 
     fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {

@@ -8,10 +8,9 @@ use pyo3::prelude::pymodule;
 /// A Python module implemented in Rust.
 #[pymodule]
 mod _cbor2 {
-    use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
     use pyo3::sync::PyOnceLock;
-    use pyo3::types::{PyBytes, PyDict, PyMapping};
+    use pyo3::types::{PyBytes, PyMapping};
     use std::mem::take;
 
     #[pymodule_export]
@@ -356,17 +355,6 @@ mod _cbor2 {
         py.import("collections.abc")?
             .getattr("Mapping")?
             .call_method1("register", (frozen_dict_type,))?;
-
-        let cbor_encoder_type = py.get_type::<CBOREncoder>();
-        let encoders = PyDict::new(py);
-
-        let register_encoder = |class_name: &str, encoder_func_name: &str| -> PyResult<()> {
-            let (module_name, class_name) = class_name.rsplit_once('.').ok_or_else(|| {
-                PyValueError::new_err(format!("Invalid fully qualified type name: {}", class_name))
-            })?;
-            let py_type = py.import(module_name)?.getattr(class_name)?;
-            encoders.set_item(py_type, cbor_encoder_type.getattr(encoder_func_name)?)
-        };
 
         let undefined = Bound::new(py, UndefinedType)?;
         m.add("undefined", undefined.clone())?;

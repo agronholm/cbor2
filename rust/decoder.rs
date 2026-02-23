@@ -419,12 +419,13 @@ impl CBORDecoder {
     /// if any. If the current shared index is :data:`None`, nothing is done.
     ///
     /// :param value: the shared value
-    fn set_shareable<'py>(&mut self, value: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+    #[pyo3(signature = (obj, /))]
+    fn set_shareable<'py>(&mut self, obj: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
         if let Some(index) = self.share_index {
-            self.shareables[index] = Some(value.clone().unbind().into_any());
+            self.shareables[index] = Some(obj.clone().unbind().into_any());
             self.share_index = None;
         }
-        value.clone()
+        obj.clone()
     }
 
     /// Decode the next value from the stream.

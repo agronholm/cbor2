@@ -119,6 +119,15 @@ class TestCBORSimpleValue:
         assert repr(CBORSimpleValue(1)) == "CBORSimpleValue(1)"
 
 
-def test_frozendict() -> None:
-    assert len(FrozenDict({1: 2, 3: 4})) == 2
-    assert repr(FrozenDict({1: 2})) == "FrozenDict({1: 2})"
+class TestFrozenDict:
+    def test_get(self) -> None:
+        obj = FrozenDict[int, int]({1: 2})
+        assert obj.get(1) == 2
+        assert obj.get(3) is None
+        assert obj.get(3, "foo") == "foo"
+
+    def test_len(self) -> None:
+        assert len(FrozenDict({1: 2, 3: 4})) == 2
+
+    def test_repr(self) -> None:
+        assert repr(FrozenDict({1: 2})) == "FrozenDict({1: 2})"
