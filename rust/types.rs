@@ -1,6 +1,6 @@
 use crate::utils::PyImportable;
 use pyo3::basic::CompareOp;
-use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::PyAnyMethods;
 use pyo3::types::PyTupleMethods;
 use pyo3::types::{
@@ -8,7 +8,8 @@ use pyo3::types::{
     PyString, PyTuple, PyType,
 };
 use pyo3::{
-    Bound, IntoPyObjectExt, Py, PyAny, PyErr, PyResult, PyTypeInfo, Python, pyclass, pymethods,
+    Bound, IntoPyObjectExt, Py, PyAny, PyErr, PyResult, PyTypeInfo, Python, create_exception,
+    pyclass, pymethods,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -22,6 +23,49 @@ pub static IPV6ADDRESS_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6
 pub static IPV6INTERFACE_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Interface");
 pub static IPV6NETWORK_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Network");
 pub static UUID_TYPE: PyImportable = PyImportable::new("uuid", "UUID");
+
+create_exception!(
+    cbor2,
+    CBORError,
+    PyException,
+    "Base class for errors that occur during CBOR encoding or decoding."
+);
+create_exception!(
+    cbor2,
+    CBOREncodeError,
+    CBORError,
+    "Raised for exceptions occurring during CBOR encoding."
+);
+create_exception!(
+    cbor2,
+    CBOREncodeTypeError,
+    CBOREncodeError,
+    "Raised when attempting to encode a type that cannot be serialized."
+);
+create_exception!(
+    cbor2,
+    CBOREncodeValueError,
+    CBOREncodeError,
+    "Raised when the CBOR encoder encounters an invalid value."
+);
+create_exception!(
+    cbor2,
+    CBORDecodeError,
+    CBORError,
+    "Raised for exceptions occurring during CBOR decoding."
+);
+create_exception!(
+    cbor2,
+    CBORDecodeValueError,
+    CBORDecodeError,
+    "Raised when the CBOR stream being decoded contains an invalid value."
+);
+create_exception!(
+    cbor2,
+    CBORDecodeEOF,
+    CBORDecodeError,
+    "Raised when decoding unexpectedly reaches EOF."
+);
 
 /// Represents a CBOR semantic tag.
 ///

@@ -34,6 +34,27 @@ mod _cbor2 {
     use crate::types::BreakMarkerType;
     use crate::types::UndefinedType;
 
+    #[pymodule_export]
+    use crate::types::CBORError;
+
+    #[pymodule_export]
+    use crate::types::CBOREncodeError;
+
+    #[pymodule_export]
+    use crate::types::CBOREncodeTypeError;
+
+    #[pymodule_export]
+    use crate::types::CBOREncodeValueError;
+
+    #[pymodule_export]
+    use crate::types::CBORDecodeValueError;
+
+    #[pymodule_export]
+    use crate::types::CBORDecodeError;
+
+    #[pymodule_export]
+    use crate::types::CBORDecodeEOF;
+
     pub static SYS_MAXSIZE: PyOnceLock<usize> = PyOnceLock::new();
     pub static UNDEFINED: PyOnceLock<Py<UndefinedType>> = PyOnceLock::new();
     pub static BREAK_MARKER: PyOnceLock<Py<BreakMarkerType>> = PyOnceLock::new();

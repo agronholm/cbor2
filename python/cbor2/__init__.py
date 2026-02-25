@@ -1,8 +1,15 @@
 from collections.abc import Callable
 from typing import Any, TypeAlias
 
+from ._cbor2 import CBORDecodeEOF as CBORDecodeEOF
+from ._cbor2 import CBORDecodeError as CBORDecodeError
 from ._cbor2 import CBORDecoder as CBORDecoder
+from ._cbor2 import CBORDecodeValueError as CBORDecodeValueError
+from ._cbor2 import CBOREncodeError as CBOREncodeError
 from ._cbor2 import CBOREncoder as CBOREncoder
+from ._cbor2 import CBOREncodeTypeError as CBOREncodeTypeError
+from ._cbor2 import CBOREncodeValueError as CBOREncodeValueError
+from ._cbor2 import CBORError as CBORError
 from ._cbor2 import CBORSimpleValue as CBORSimpleValue
 from ._cbor2 import CBORTag as CBORTag
 from ._cbor2 import FrozenDict as FrozenDict
@@ -13,13 +20,6 @@ from ._cbor2 import load as load
 from ._cbor2 import loads as loads
 from ._cbor2 import shareable_encoder as shareable_encoder
 from ._cbor2 import undefined as undefined
-from ._types import CBORDecodeEOF as CBORDecodeEOF
-from ._types import CBORDecodeError as CBORDecodeError
-from ._types import CBORDecodeValueError as CBORDecodeValueError
-from ._types import CBOREncodeError as CBOREncodeError
-from ._types import CBOREncodeTypeError as CBOREncodeTypeError
-from ._types import CBOREncodeValueError as CBOREncodeValueError
-from ._types import CBORError as CBORError
 
 TagHook: TypeAlias = Callable[[CBORDecoder, CBORTag], Any]
 MajorDecoderCallback: TypeAlias = Callable[[CBORDecoder, int], Any]

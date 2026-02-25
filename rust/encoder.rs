@@ -1,5 +1,7 @@
-use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, UndefinedType};
-use crate::utils::{PyImportable, raise_cbor_error};
+use crate::types::{
+    BreakMarkerType, CBOREncodeError, CBOREncodeValueError, CBORSimpleValue, CBORTag, UndefinedType,
+};
+use crate::utils::PyImportable;
 use bigdecimal::BigDecimal;
 use half::f16;
 use num_bigint::BigInt;
@@ -212,9 +214,9 @@ impl CBOREncoder {
                     result.map(|_| ())
                 }
             }
-            Some((_, None)) => {
-                raise_cbor_error(py, "CBOREncodeValueError", "cyclic data structure detected")
-            }
+            Some((_, None)) => Err(CBOREncodeValueError::new_err(
+                "cyclic data structure detected",
+            )),
             Some((_, Some(index))) => {
                 // Generate a reference to the previous index instead of
                 // encoding this again
@@ -639,11 +641,9 @@ impl CBOREncoder {
             if let Some(default) = default {
                 default.call1(py, (slf, obj)).map(|_| ())
             } else {
-                raise_cbor_error(
-                    py,
-                    "CBOREncodeError",
-                    format!("cannot encode type {obj_type}").as_str(),
-                )
+                Err(CBOREncodeError::new_err(format!(
+                    "cannot encode type {obj_type}"
+                )))
             }
         }
     }
@@ -1000,11 +1000,9 @@ impl CBOREncoder {
                     let value = obj.call_method("replace", (), Some(&kwargs))?;
                     inner_encode_datetime(&value)
                 }
-                None => raise_cbor_error(
-                    py,
-                    "CBOREncodeError",
+                None => Err(CBOREncodeError::new_err(
                     "naive datetime encountered and no default timezone has been set",
-                ),
+                )),
             }
         } else {
             inner_encode_datetime(obj)
@@ -1069,7 +1067,8 @@ impl CBOREncoder {
 
     fn encode_decimal(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         if obj.call_method0("is_nan")?.is_truthy()? {
-            slf.borrow_mut().write_internal(slf.py(), vec![0xf9, 0x7e, 0x00])
+            slf.borrow_mut()
+                .write_internal(slf.py(), vec![0xf9, 0x7e, 0x00])
         } else if obj.call_method0("is_infinite")?.is_truthy()? {
             let signed = obj.call_method0("is_signed")?.is_truthy()?;
             let middle = if signed { 0xfc } else { 0x7c };
@@ -1176,7 +1175,8 @@ impl CBOREncoder {
             slf.borrow_mut().write_internal(py, vec![0xf9, 0x7e, 0x00])
         } else if value.is_infinite() {
             let middle = if value.is_sign_positive() { 0x7c } else { 0xfc };
-            slf.borrow_mut().write_internal(py, vec![0xf9, middle, 0x00])
+            slf.borrow_mut()
+                .write_internal(py, vec![0xf9, middle, 0x00])
         } else {
             if slf.borrow().canonical {
                 // Find the shortest form that did not lose precision with the cast
@@ -1195,7 +1195,8 @@ impl CBOREncoder {
                 }
             }
             slf.borrow_mut().write_byte(py, 0xfb)?;
-            slf.borrow_mut().write_internal(py, value.to_be_bytes().to_vec())
+            slf.borrow_mut()
+                .write_internal(py, value.to_be_bytes().to_vec())
         }
     }
 

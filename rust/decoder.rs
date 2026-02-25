@@ -1,12 +1,14 @@
 use crate::_cbor2::SYS_MAXSIZE;
 use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
 use crate::_cbor2::{DEFAULT_MAX_DEPTH, DEFAULT_READ_SIZE};
-use crate::types::{BreakMarkerType, CBORSimpleValue, CBORTag, FrozenDict, DECIMAL_TYPE, FRACTION_TYPE, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE};
-use crate::utils::{CBORDecodeError, create_cbor_error, raise_cbor_error, raise_cbor_error_from, wrap_cbor_error, PyImportable};
+use crate::types::{BreakMarkerType, CBORDecodeEOF, CBORDecodeValueError, CBORSimpleValue, CBORTag, DECIMAL_TYPE, FRACTION_TYPE, FrozenDict, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE, CBORDecodeError};
+use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
 use half::f16;
 use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyMapping, PySet, PyString, PyTuple};
+use pyo3::types::{
+    PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyMapping, PySet, PyString, PyTuple,
+};
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::cmp::{max, min};
 use std::mem::{replace, take};
@@ -14,11 +16,12 @@ use std::mem::{replace, take};
 const VALID_STR_ERRORS: [&str; 3] = ["strict", "ignore", "replace"];
 const SEEK_CUR: u8 = 1;
 
-
 static DATE_FROMISOFORMAT: PyImportable = PyImportable::new("datetime", "date.fromisoformat");
 static DATE_FROMORDINAL: PyImportable = PyImportable::new("datetime", "date.fromordinal");
-static DATETIME_FROMISOFORMAT: PyImportable = PyImportable::new("datetime", "datetime.fromisoformat");
-static DATETIME_FROMTIMESTAMP: PyImportable = PyImportable::new("datetime", "datetime.fromtimestamp");
+static DATETIME_FROMISOFORMAT: PyImportable =
+    PyImportable::new("datetime", "datetime.fromisoformat");
+static DATETIME_FROMTIMESTAMP: PyImportable =
+    PyImportable::new("datetime", "datetime.fromtimestamp");
 static EMAIL_PARSER: PyImportable = PyImportable::new("email.parser", "Parser");
 static INT_FROMBYTES: PyImportable = PyImportable::new("builtins", "int.from_bytes");
 static IPADDRESS_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_address");
@@ -160,15 +163,10 @@ impl CBORDecoder {
         } else {
             0
         };
-        raise_cbor_error(
-            py,
-            "CBORDecodeEOF",
-            format!(
-                "premature end of stream (expected to read at least {minimum_amount} \
+        Err(CBORDecodeEOF::new_err(format!(
+            "premature end of stream (expected to read at least {minimum_amount} \
                  bytes, got {num_read_bytes} instead)"
-            )
-            .as_str(),
-        )
+        )))
     }
 
     fn read_exact<const N: usize>(&mut self, py: Python<'_>) -> PyResult<[u8; N]> {
@@ -210,11 +208,9 @@ impl CBORDecoder {
     fn decode_length_finite(&mut self, py: Python<'_>, subtype: u8) -> PyResult<usize> {
         match self.decode_length(py, subtype)? {
             Some(length) => Ok(length),
-            None => raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
+            None => Err(CBORDecodeValueError::new_err(
                 "indefinite length not allowed here",
-            )?,
+            )),
         }
     }
 
@@ -306,9 +302,11 @@ impl CBORDecoder {
             self.buffer = None;
             Ok(())
         } else {
-            let exc = PyValueError::new_err("fp must be a readable file-like object");
-            exc.set_cause(fp.py(), result.err());
-            Err(exc)
+            raise_exc_from(
+                fp.py(),
+                PyValueError::new_err("fp must be a readable file-like object"),
+                result.err(),
+            )
         }
     }
 
@@ -437,15 +435,10 @@ impl CBORDecoder {
         let (major_type, subtype) = this.read_major_and_subtype(py)?;
 
         if this.decode_depth == this.max_depth {
-            return raise_cbor_error(
-                py,
-                "CBORDecodeError",
-                format!(
-                    "maximum container nesting depth ({}) exceeded",
-                    this.max_depth
-                )
-                .as_str(),
-            );
+            return Err(CBORDecodeError::new_err(format!(
+                "maximum container nesting depth ({}) exceeded",
+                this.max_depth
+            )));
         }
 
         if let Some(major_decoders) = &this.major_decoders {
@@ -455,10 +448,10 @@ impl CBORDecoder {
                     drop(this);
                     let result = decoder.call1((slf, subtype));
                     slf.borrow_mut().decode_depth -= 1;
-                    return result
-                },
+                    return result;
+                }
                 Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
-                Err(e) => return Err(e)
+                Err(e) => return Err(e),
             }
         }
 
@@ -488,11 +481,9 @@ impl CBORDecoder {
             }
             7 => this.decode_special(py, subtype),
             _ => {
-                return raise_cbor_error(
-                    py,
-                    "CBORDecodeError",
-                    format!("invalid major type: {major_type}").as_str(),
-                );
+                return Err(CBORDecodeError::new_err(format!(
+                    "invalid major type: {major_type}"
+                )));
             }
         };
         this.decode_depth -= 1;
@@ -520,14 +511,13 @@ impl CBORDecoder {
             if err.is_instance_of::<CBORDecodeError>(py) {
                 err
             } else if err.is_instance_of::<PyValueError>(py) {
-                create_cbor_error(
+                create_exc_from(
                     py,
-                    "CBORDecodeValueError",
-                    err.to_string().as_str(),
+                    CBORDecodeValueError::new_err(err.to_string()),
                     Some(err),
                 )
             } else if err.is_instance_of::<PyException>(py) {
-                create_cbor_error(py, "CBORDecodeError", err.to_string().as_str(), Some(err))
+                create_exc_from(py, CBORDecodeError::new_err(err.to_string()), Some(err))
             } else {
                 err
             }
@@ -584,8 +574,9 @@ impl CBORDecoder {
             27 => Some(u64::from_be_bytes(self.read_exact(py)?) as usize),
             31 => None,
             _ => {
-                let msg = format!("unknown unsigned integer subtype 0x{subtype:x}");
-                raise_cbor_error(py, "CBORDecodeValueError", msg.as_str())?
+                return Err(CBORDecodeValueError::new_err(format!(
+                    "unknown unsigned integer subtype 0x{subtype:x}"
+                )));
             }
         };
         Ok(length)
@@ -627,14 +618,9 @@ impl CBORDecoder {
                         (2, _) => {
                             let length = self.decode_length_finite(py, subtype)?;
                             if length > sys_maxsize {
-                                return raise_cbor_error(
-                                    py,
-                                    "CBORDecodeValueError",
-                                    format!(
-                                        "chunk too long in an indefinite bytestring chunk: {length}"
-                                    )
-                                    .as_str(),
-                                );
+                                return Err(CBORDecodeValueError::new_err(format!(
+                                    "chunk too long in an indefinite bytestring chunk: {length}"
+                                )));
                             }
                             total_length += length;
                             let chunk = self.read(py, length)?;
@@ -642,15 +628,10 @@ impl CBORDecoder {
                         }
                         (7, 31) => break (bytes, total_length), // break marker
                         _ => {
-                            return raise_cbor_error(
-                                py,
-                                "CBORDecodeValueError",
-                                format!(
-                                    "non-byte string (major type {major_type}) found in indefinite \
+                            return Err(CBORDecodeValueError::new_err(format!(
+                                "non-byte string (major type {major_type}) found in indefinite \
                                     length byte string"
-                                )
-                                .as_str(),
-                            );
+                            )));
                         }
                     }
                 }
@@ -695,13 +676,9 @@ impl CBORDecoder {
                         (3, _) => {
                             let length = self.decode_length_finite(py, subtype)?;
                             if length > sys_maxsize {
-                                return raise_cbor_error(
-                                    py,
-                                    "CBORDecodeValueError",
-                                    format!(
-                                        "chunk too long in an indefinite text string chunk: {length}"
-                                    ).as_str(),
-                                );
+                                return Err(CBORDecodeValueError::new_err(format!(
+                                    "chunk too long in an indefinite text string chunk: {length}"
+                                )));
                             }
                             total_length += length;
                             let bytes = self.read(py, length)?;
@@ -712,12 +689,10 @@ impl CBORDecoder {
                                     (intern!(py, "utf-8"), &self.str_errors),
                                 )
                                 .map_err(|e| {
-                                    create_cbor_error(
-                                        py,
-                                        "CBORDecodeValueError",
-                                        "error decoding text string",
-                                        Some(e),
-                                    )
+                                    let exc =
+                                        CBORDecodeValueError::new_err("error decoding text string");
+                                    exc.set_cause(py, Some(e));
+                                    exc
                                 })?
                                 .cast_into()
                                 .map_err(|e| PyErr::from(e))?;
@@ -725,15 +700,10 @@ impl CBORDecoder {
                         }
                         (7, 31) => break (string, total_length), // break marker
                         _ => {
-                            return raise_cbor_error(
-                                py,
-                                "CBORDecodeValueError",
-                                format!(
-                                    "non-text string (major type {major_type}) found in indefinite \
+                            return Err(CBORDecodeValueError::new_err(format!(
+                                "non-text string (major type {major_type}) found in indefinite \
                                     length text string"
-                                )
-                                .as_str(),
-                            );
+                            )));
                         }
                     }
                 }
@@ -748,11 +718,10 @@ impl CBORDecoder {
                 if let Ok(decoded_bytes) = decode_result {
                     (decoded_bytes.cast_into().map_err(PyErr::from)?, length)
                 } else {
-                    return raise_cbor_error_from(
+                    return raise_exc_from(
                         py,
-                        "CBORDecodeValueError",
-                        "error decoding text string",
-                        decode_result.unwrap_err(),
+                        CBORDecodeValueError::new_err("error decoding text string"),
+                        Some(decode_result.unwrap_err()),
                     );
                 }
             }
@@ -775,11 +744,10 @@ impl CBORDecoder {
                     let decoded_chunk: Bound<'_, PyString> = match decode_result {
                         Ok(decoded_chunk) => decoded_chunk.cast_into()?,
                         Err(e) => {
-                            return raise_cbor_error_from(
+                            return raise_exc_from(
                                 py,
-                                "CBORDecodeValueError",
-                                "error decoding text string",
-                                e,
+                                CBORDecodeValueError::new_err("error decoding text string"),
+                                Some(e),
                             );
                         }
                     };
@@ -889,7 +857,11 @@ impl CBORDecoder {
                     return Ok(retval);
                 }
                 Err(e) => {
-                    raise_cbor_error_from(py, "CBORDecodeError", "error calling object hook", e)?;
+                    return raise_exc_from(
+                        py,
+                        CBORDecodeError::new_err("error calling object hook"),
+                        Some(e),
+                    );
                 }
             }
         }
@@ -912,10 +884,10 @@ impl CBORDecoder {
             match semantic_decoders.bind(py).get_item(&tagnum) {
                 Ok(decoder) => {
                     drop(this);
-                    return decoder.call1((slf,))
-                },
+                    return decoder.call1((slf,));
+                }
                 Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
-                Err(e) => return Err(e)
+                Err(e) => return Err(e),
             }
         }
 
@@ -1001,10 +973,9 @@ impl CBORDecoder {
                 f64::from_be_bytes(bytes).into_bound_py_any(py)
             }
             31 => Ok(BREAK_MARKER.get(py).unwrap().into_bound_py_any(py)?),
-            _ => {
-                let msg = format!("undefined reserved major type 7 subtype 0x{subtype:x}");
-                raise_cbor_error(py, "CBORDecodeValueError", msg.as_str())
-            }
+            _ => Err(CBORDecodeValueError::new_err(format!(
+                "undefined reserved major type 7 subtype 0x{subtype:x}"
+            ))),
         }
     }
 
@@ -1018,14 +989,12 @@ impl CBORDecoder {
         let value = Self::decode(slf)?;
         let value_type = value.get_type();
         let mut datetime_str: Bound<PyString> = value.cast_into().map_err(|e| {
-            create_cbor_error(
+            create_exc_from(
                 py,
-                "CBORDecodeValueError",
-                format!(
+                CBORDecodeValueError::new_err(format!(
                     "expected string for tag, got {} instead",
                     value_type.to_string()
-                )
-                .as_str(),
+                )),
                 Some(PyErr::from(e)),
             )
         })?;
@@ -1055,13 +1024,15 @@ impl CBORDecoder {
             datetime_str = temp_str.into_pyobject(py)?;
         }
 
-        let datetime = DATETIME_FROMISOFORMAT.get(py)?
+        let datetime = DATETIME_FROMISOFORMAT
+            .get(py)?
             .call1((&datetime_str,))
             .map_err(|e| {
-                create_cbor_error(
+                create_exc_from(
                     py,
-                    "CBORDecodeValueError",
-                    format!("invalid datetime string: '{datetime_str}'").as_str(),
+                    CBORDecodeValueError::new_err(format!(
+                        "invalid datetime string: '{datetime_str}'"
+                    )),
                     Some(e),
                 )
             })?;
@@ -1073,13 +1044,13 @@ impl CBORDecoder {
         let py = slf.py();
         let value = Self::decode(slf)?;
         let utc = UTC.get(py)?;
-        DATETIME_FROMTIMESTAMP.get(py)?
+        DATETIME_FROMTIMESTAMP
+            .get(py)?
             .call1((value, utc))
             .map_err(|e| {
-                create_cbor_error(
+                create_exc_from(
                     py,
-                    "CBORDecodeValueError",
-                    "error decoding datetime from epoch",
+                    CBORDecodeValueError::new_err("error decoding datetime from epoch"),
                     Some(e),
                 )
             })
@@ -1110,40 +1081,40 @@ impl CBORDecoder {
         let py = slf.py();
         let value = Self::with_immutable(slf, || Self::decode(slf))?;
         let tuple = value.cast::<PyTuple>().map_err(|e| {
-            create_cbor_error(
+            create_exc_from(
                 py,
-                "CBORDecodeValueError",
-                "error decoding decimal fraction: input value must be an array",
+                CBORDecodeValueError::new_err(
+                    "error decoding decimal fraction: input value must be an array",
+                ),
                 Some(PyErr::from(e)),
             )
         })?;
 
         if tuple.len() != 2 {
-            return raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
+            return Err(CBORDecodeValueError::new_err(
                 "error decoding decimal fraction: array must have exactly two elements",
-            );
+            ));
         }
 
         let decimal_class = DECIMAL_TYPE.get(py)?;
-        let decimal = wrap_cbor_error(
-            py,
-            "CBORDecodeValueError",
-            "error decoding decimal fraction",
-            || {
-                let exp = tuple.get_item(0)?;
-                let sig_tuple = decimal_class
-                    .call1((tuple.get_item(1)?,))?
-                    .call_method0(intern!(py, "as_tuple"))?
-                    .cast_into::<PyTuple>()?;
-                let sign = sig_tuple.get_item(0)?;
-                let digits = sig_tuple.get_item(1)?;
-                let args_tuple = PyTuple::new(py, [sign, digits, exp])?;
-                decimal_class.call1((args_tuple,))
-            },
-        )?;
-        Ok(decimal)
+        {
+            let exp = tuple.get_item(0)?;
+            let sig_tuple = decimal_class
+                .call1((tuple.get_item(1)?,))?
+                .call_method0(intern!(py, "as_tuple"))?
+                .cast_into::<PyTuple>()?;
+            let sign = sig_tuple.get_item(0)?;
+            let digits = sig_tuple.get_item(1)?;
+            let args_tuple = PyTuple::new(py, [sign, digits, exp])?;
+            decimal_class.call1((args_tuple,))
+        }
+        .map_err(|e| {
+            create_exc_from(
+                py,
+                CBORDecodeValueError::new_err("error decoding decimal fraction"),
+                Some(e),
+            )
+        })
     }
 
     fn decode_bigfloat<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1151,35 +1122,35 @@ impl CBORDecoder {
         let py = slf.py();
         let value = Self::with_immutable(slf, || Self::decode(slf))?;
         let tuple = value.cast::<PyTuple>().map_err(|e| {
-            create_cbor_error(
+            create_exc_from(
                 py,
-                "CBORDecodeValueError",
-                "error decoding bigfloat: input value must be an array",
+                CBORDecodeValueError::new_err(
+                    "error decoding bigfloat: input value must be an array",
+                ),
                 Some(PyErr::from(e)),
             )
         })?;
 
         if tuple.len() != 2 {
-            return raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
+            return Err(CBORDecodeValueError::new_err(
                 "error decoding bigfloat: array must have exactly two elements",
-            );
+            ));
         }
 
         let decimal_class = DECIMAL_TYPE.get(py)?;
-        let decimal = wrap_cbor_error(
-            py,
-            "CBORDecodeValueError",
-            "error decoding bigfloat",
-            || {
-                let exp = decimal_class.call1((tuple.get_item(0)?,))?;
-                let sig = decimal_class.call1((tuple.get_item(1)?,))?;
-                let exp = PyInt::new(py, 2).pow(exp, py.None())?;
-                sig.mul(exp)
-            },
-        )?;
-        Ok(decimal)
+        {
+            let exp = decimal_class.call1((tuple.get_item(0)?,))?;
+            let sig = decimal_class.call1((tuple.get_item(1)?,))?;
+            let exp = PyInt::new(py, 2).pow(exp, py.None())?;
+            Ok(sig.mul(exp))
+        }
+        .map_err(|e| {
+            create_exc_from(
+                py,
+                CBORDecodeValueError::new_err("error decoding bigfloat"),
+                Some(e),
+            )
+        })?
     }
 
     fn decode_stringref<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
@@ -1189,21 +1160,14 @@ impl CBORDecoder {
 
         let this = slf.borrow();
         let stringref_namespace = this.stringref_namespace.as_ref().ok_or_else(|| {
-            create_cbor_error(
-                py,
-                "CBORDecodeValueError",
-                "string reference outside of namespace",
-                None,
-            )
+            CBORDecodeValueError::new_err("string reference outside of namespace")
         })?;
 
         match stringref_namespace.get(index) {
             Some(value) => Ok(value.clone_ref(py).into_bound(py)),
-            None => raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
-                format!("string reference {index} not found").as_str(),
-            ),
+            None => Err(CBORDecodeValueError::new_err(format!(
+                "string reference {index} not found"
+            ))),
         }
     }
 
@@ -1234,16 +1198,12 @@ impl CBORDecoder {
         let py = slf.py();
         let index: usize = Self::decode(slf)?.extract()?;
         match slf.borrow().shareables.get(index) {
-            None => raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
-                format!("shared reference {index} not found").as_str(),
-            ),
-            Some(None) => raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
-                format!("shared value {index} has not been initialized").as_str(),
-            ),
+            None => Err(CBORDecodeValueError::new_err(format!(
+                "shared reference {index} not found"
+            ))),
+            Some(None) => Err(CBORDecodeValueError::new_err(format!(
+                "shared value {index} has not been initialized"
+            ))),
             Some(Some(shared)) => Ok(shared.clone_ref(py).into_bound(py)),
         }
     }
@@ -1253,27 +1213,28 @@ impl CBORDecoder {
         let py = slf.py();
         let value = Self::with_immutable(slf, || Self::decode(slf))?;
         let tuple = value.cast_into::<PyTuple>().map_err(|e| {
-            create_cbor_error(
+            create_exc_from(
                 py,
-                "CBORDecodeValueError",
-                "error decoding rational: input value must be an array",
+                CBORDecodeValueError::new_err(
+                    "error decoding rational: input value must be an array",
+                ),
                 Some(PyErr::from(e)),
             )
         })?;
 
         if tuple.len() != 2 {
-            return raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
+            return Err(CBORDecodeValueError::new_err(
                 "error decoding rational: array must have exactly two elements",
-            );
+            ));
         }
 
         match FRACTION_TYPE.get(py)?.call1(tuple) {
             Ok(fraction) => Ok(fraction),
-            Err(e) => {
-                raise_cbor_error_from(py, "CBORDecodeValueError", "error decoding rational", e)
-            }
+            Err(e) => raise_exc_from(
+                py,
+                CBORDecodeValueError::new_err("error decoding rational"),
+                Some(e),
+            ),
         }
     }
 
@@ -1283,11 +1244,10 @@ impl CBORDecoder {
         let value = Self::decode(slf)?;
         match RE_COMPILE.get(py)?.call1((value,)) {
             Ok(regexp) => Ok(regexp),
-            Err(e) => raise_cbor_error_from(
+            Err(e) => raise_exc_from(
                 py,
-                "CBORDecodeValueError",
-                "error decoding regular expression",
-                e,
+                CBORDecodeValueError::new_err("error decoding regular expression"),
+                Some(e),
             ),
         }
     }
@@ -1300,7 +1260,7 @@ impl CBORDecoder {
         match parser.call_method1(intern!(py, "parsestr"), (value,)) {
             Ok(message) => Ok(message),
             Err(e) => {
-                raise_cbor_error_from(py, "CBORDecodeValueError", "error decoding MIME message", e)
+                raise_exc_from(py, CBORDecodeValueError::new_err("error decoding MIME message"), Some(e))
             }
         }
     }
@@ -1314,7 +1274,7 @@ impl CBORDecoder {
         match UUID_TYPE.get(py)?.call((), Some(&kwargs)) {
             Ok(uuid) => Ok(uuid),
             Err(e) => {
-                raise_cbor_error_from(py, "CBORDecodeValueError", "error decoding UUID value", e)
+                raise_exc_from(py, CBORDecodeValueError::new_err("error decoding UUID value"), Some(e))
             }
         }
     }
@@ -1345,18 +1305,14 @@ impl CBORDecoder {
             {
                 IPV4INTERFACE_TYPE.get(py)?.call1(((address, prefix),))?
             } else {
-                return raise_cbor_error(
-                    py,
-                    "CBORDecodeValueError",
-                    "error decoding IPv4: invalid types in input array",
+                return Err(
+                    CBORDecodeValueError::new_err("error decoding IPv4: invalid types in input array")
                 );
             }
         } else {
-            return raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
+            return Err(CBORDecodeValueError::new_err(
                 "error decoding IPv4: input value must be a bytestring or an array of 2 elements",
-            );
+            ));
         };
         Ok(addr)
     }
@@ -1394,11 +1350,9 @@ impl CBORDecoder {
             {
                 Ok((IPV6INTERFACE_TYPE.get(py)?, address, prefix))
             } else {
-                raise_cbor_error(
-                    py,
-                    "CBORDecodeValueError",
+                Err(CBORDecodeValueError::new_err(
                     "error decoding IPv6: invalid types in input array",
-                )
+                ))
             }?;
             let addr_obj = ipv6addr_class.call1((addr_bytes,))?;
 
@@ -1411,11 +1365,9 @@ impl CBORDecoder {
                 } else if let Ok(zone_id_int) = zone_id.cast::<PyInt>() {
                     format!("%{zone_id_int}")
                 } else {
-                    return raise_cbor_error(
-                        py,
-                        "CBORDecodeValueError",
+                    return Err(CBORDecodeValueError::new_err(
                         "error decoding IPv6: zone ID must be an integer or a bytestring",
-                    );
+                    ));
                 }
             } else {
                 String::default()
@@ -1424,11 +1376,9 @@ impl CBORDecoder {
             let formatted_addr = format!("{addr_obj}{zone_id_suffix}/{prefix}");
             class.call1((formatted_addr,))?
         } else {
-            return raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
+            return Err(CBORDecodeValueError::new_err(
                 "error decoding IPv6: input value must be a bytestring or an array of 2 elements",
-            );
+            ));
         };
         Ok(addr)
     }
@@ -1470,23 +1420,18 @@ impl CBORDecoder {
         // Semantic tag 260 (deprecated)
         let py = slf.py();
         let value = Self::decode(slf)?.cast_into::<PyBytes>().map_err(|e| {
-            create_cbor_error(
+            create_exc_from(
                 py,
-                "CBORDecodeValueError",
-                "invalid IP address",
+                CBORDecodeValueError::new_err("invalid IP address"),
                 Some(PyErr::from(e)),
             )
         })?;
         let addr_obj = match value.len()? {
-            4 | 16 => {
-                IPADDRESS_FUNC.get(py)?.call1((value,))
-            }
+            4 | 16 => IPADDRESS_FUNC.get(py)?.call1((value,)),
             6 => Ok(Bound::new(py, CBORTag::new_internal(260, value.into_any()))?.into_any()), // MAC address
-            length => raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
-                format!("invalid IP address length ({length})").as_str(),
-            ),
+            length => Err(CBORDecodeValueError::new_err(format!(
+                "invalid IP address length ({length})"
+            ))),
         }?;
         Ok(addr_obj)
     }
@@ -1496,20 +1441,17 @@ impl CBORDecoder {
         let py = slf.py();
         let value: Bound<PyDict> = Self::decode(slf)?.cast_into::<PyDict>()?;
         if value.len() != 1 {
-            return raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
-                format!("invalid input map length for IP network: {}", value.len()).as_str(),
-            );
+            return Err(CBORDecodeValueError::new_err(format!(
+                "invalid input map length for IP network: {}",
+                value.len()
+            )));
         }
         let first_item = value.items().get_item(0)?;
         let mask_length = first_item.get_item(1)?;
         if !mask_length.is_exact_instance_of::<PyInt>() {
-            return raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
-                format!("invalid mask length for IP network: {mask_length}").as_str(),
-            );
+            return Err(CBORDecodeValueError::new_err(format!(
+                "invalid mask length for IP network: {mask_length}"
+            )));
         }
 
         let addr_obj = match IPNETWORK_FUNC.get(py)?.call1((&first_item,)) {
@@ -1539,26 +1481,32 @@ impl CBORDecoder {
         let py = slf.py();
         let value = Self::with_immutable(slf, || Self::decode(slf))?;
         let tuple = value.cast_into::<PyTuple>().map_err(|e| {
-            create_cbor_error(
+            create_exc_from(
                 py,
-                "CBORDecodeValueError",
-                "error decoding complex: input value must be an array",
+                CBORDecodeValueError::new_err(
+                    "error decoding complex: input value must be an array",
+                ),
                 Some(PyErr::from(e)),
             )
         })?;
 
         if tuple.len() != 2 {
-            return raise_cbor_error(
-                py,
-                "CBORDecodeValueError",
+            return Err(CBORDecodeValueError::new_err(
                 "error decoding complex: array must have exactly two elements",
-            );
+            ));
         }
 
-        wrap_cbor_error(py, "CBORDecodeValueError", "error decoding complex", || {
+        {
             let real: f64 = tuple.get_item(0)?.extract()?;
             let imag: f64 = tuple.get_item(1)?.extract()?;
             Ok(PyComplex::from_doubles(py, real, imag).into_any())
+        }
+        .map_err(|e| {
+            create_exc_from(
+                py,
+                CBORDecodeValueError::new_err("error decoding complex"),
+                Some(e),
+            )
         })
     }
 

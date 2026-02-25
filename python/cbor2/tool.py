@@ -18,7 +18,7 @@ from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeAlias, TypeVar
 
-from . import CBORDecoder, CBORSimpleValue, CBORTag, FrozenDict, load, undefined
+from . import CBORDecodeEOF, CBORDecoder, CBORSimpleValue, CBORTag, FrozenDict, load, undefined
 
 if TYPE_CHECKING:
     from . import ObjectHook, TagHook
@@ -77,7 +77,7 @@ def iterdecode(
     try:
         while True:
             yield decoder.decode()
-    except EOFError:
+    except CBORDecodeEOF:
         return
 
 
