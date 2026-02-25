@@ -65,10 +65,8 @@ mod _cbor2 {
     #[cfg(not(PyPy))]
     pub const DEFAULT_MAX_DEPTH: usize = 950;
 
-    ///  Deserialize an object from a bytestring.
+    ///  Deserialize an object from an open file.
     ///
-    ///  :param bytes s:
-    ///      the bytestring to deserialize
     ///  :param tag_hook:
     ///      callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
     ///      to be decoded. This callback is invoked for any tags for which there is no
