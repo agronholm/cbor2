@@ -21,6 +21,7 @@ Types
 
 .. autoclass:: cbor2.CBORSimpleValue
 .. autoclass:: cbor2.CBORTag
+.. autoclass:: cbor2.FrozenDict
 .. data:: cbor2.break_marker
 
     A singleton representing the CBOR break marker, used for encoding
