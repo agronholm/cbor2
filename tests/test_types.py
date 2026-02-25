@@ -1,6 +1,7 @@
 import platform
 
 import pytest
+
 from cbor2 import CBORSimpleValue, CBORTag, FrozenDict, break_marker, undefined
 
 
@@ -120,11 +121,55 @@ class TestCBORSimpleValue:
 
 
 class TestFrozenDict:
+    def test_from_dict(self) -> None:
+        d = {1: 2, "foo": "bar"}
+        obj = FrozenDict[int | str, int | str](d)
+        assert obj[1] == 2
+        assert obj["foo"] == "bar"
+        assert obj == d
+
+    def test_from_kwargs(self) -> None:
+        obj = FrozenDict[str, str | int](foo="bar", xyz=123)
+        assert obj["foo"] == "bar"
+        assert obj["xyz"] == 123
+
+    def test_immutable(self) -> None:
+        d = {1: 2, "foo": "bar"}
+        obj = FrozenDict[int | str, int | str](d)
+        obj_hash = hash(obj)
+
+        d[1] = 3
+        assert obj[1] == 2
+        assert hash(obj) == obj_hash
+
+    def test_items(self) -> None:
+        obj = FrozenDict[int, int]({1: 2, 3: 4})
+        items = obj.items()
+        assert len(items) == 2
+        assert list(items) == [(1, 2), (3, 4)]
+
+    def test_keys(self) -> None:
+        obj = FrozenDict[int, int]({1: 2, 3: 4})
+        keys = obj.keys()
+        assert len(keys) == 2
+        assert list(keys) == [1, 3]
+
+    def test_values(self) -> None:
+        obj = FrozenDict[int, int]({1: 2, 3: 4})
+        values = obj.values()
+        assert len(values) == 2
+        assert list(values) == [2, 4]
+
     def test_get(self) -> None:
         obj = FrozenDict[int, int]({1: 2})
         assert obj.get(1) == 2
         assert obj.get(3) is None
         assert obj.get(3, "foo") == "foo"
+
+    def test_contains(self) -> None:
+        obj = FrozenDict[int, int]({1: 2})
+        assert 1 in obj
+        assert 2 not in obj
 
     def test_len(self) -> None:
         assert len(FrozenDict({1: 2, 3: 4})) == 2

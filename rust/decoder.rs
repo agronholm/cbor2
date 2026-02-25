@@ -897,7 +897,7 @@ impl CBORDecoder {
         // If we're constructing an immutable map, wrap the dict in a FrozenDict
         if slf.borrow().immutable {
             let args = PyTuple::new(py, [dict])?;
-            FrozenDict::new(&args)?.into_bound_py_any(py)
+            FrozenDict::new(&args, None)?.into_bound_py_any(py)
         } else {
             Ok(dict.into_any())
         }

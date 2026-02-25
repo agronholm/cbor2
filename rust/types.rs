@@ -176,10 +176,10 @@ pub struct FrozenDict {
 #[pymethods]
 impl FrozenDict {
     #[new]
-    #[pyo3(signature = (*args))]
-    pub fn new(args: &Bound<'_, PyTuple>) -> PyResult<Self> {
+    #[pyo3(signature = (*args, **kwargs))]
+    pub fn new(args: &Bound<'_, PyTuple>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let dict_type = <PyDict as PyTypeInfo>::type_object(args.py());
-        let dict: Py<PyDict> = dict_type.call1(args)?.cast_into()?.unbind();
+        let dict: Py<PyDict> = dict_type.call(args, kwargs)?.cast_into()?.unbind();
         Ok(Self { dict, hash: None })
     }
 
