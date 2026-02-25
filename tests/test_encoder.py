@@ -21,6 +21,8 @@ from uuid import UUID
 
 import pytest
 from _pytest.fixtures import FixtureRequest, SubRequest
+from hypothesis import given
+
 from cbor2 import (
     CBOREncodeError,
     CBOREncoder,
@@ -33,7 +35,6 @@ from cbor2 import (
     shareable_encoder,
     undefined,
 )
-from hypothesis import given
 
 from .hypothesis_strategies import compound_types_strategy
 
@@ -98,37 +99,31 @@ def test_encode_length() -> None:
         encoder = CBOREncoder(fp)
 
     encoder.encode_length(0, 1)
-    encoder.flush()
     assert fp.getvalue() == b"\x01"
 
     # Array of size 2
     reset_encoder()
     encoder.encode_length(4, 2)
-    encoder.flush()
     assert fp.getvalue() == b"\x82"
 
     # Array of indefinite size
     reset_encoder()
     encoder.encode_length(4, None)
-    encoder.flush()
     assert fp.getvalue() == b"\x9f"
 
     # Map of size 0
     reset_encoder()
     encoder.encode_length(5, 0)
-    encoder.flush()
     assert fp.getvalue() == b"\xa0"
 
     # Map of indefinite size
     reset_encoder()
     encoder.encode_length(5, None)
-    encoder.flush()
     assert fp.getvalue() == b"\xbf"
 
     # Indefinite container break
     reset_encoder()
     encoder.encode_break()
-    encoder.flush()
     assert fp.getvalue() == b"\xff"
 
 
@@ -758,7 +753,8 @@ class TestEncoderReuse:
         shared_obj = ["hello"]
 
         # First encode
-        encoder.encode_to_bytes([shared_obj, shared_obj])
+        result_bytes = encoder.encode_to_bytes([shared_obj, shared_obj])
+        assert result_bytes == unhexlify("d81c82d81c816568656c6c6fd81d01")
 
         # Second encode should produce valid standalone CBOR
         result_bytes = encoder.encode_to_bytes(shared_obj)

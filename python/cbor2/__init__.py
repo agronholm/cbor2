@@ -26,3 +26,5 @@ MajorDecoderCallback: TypeAlias = Callable[[CBORDecoder, int], Any]
 SemanticDecoderCallback: TypeAlias = Callable[[CBORDecoder], Any]
 ObjectHook: TypeAlias = Callable[[CBORDecoder, dict[Any, Any]], Any]
 EncoderHook: TypeAlias = Callable[[CBOREncoder, Any], Any]
+
+del Any, TypeAlias
