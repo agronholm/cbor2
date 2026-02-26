@@ -1,7 +1,11 @@
 use crate::_cbor2::SYS_MAXSIZE;
 use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
 use crate::_cbor2::{DEFAULT_MAX_DEPTH, DEFAULT_READ_SIZE};
-use crate::types::{BreakMarkerType, CBORDecodeEOF, CBORDecodeValueError, CBORSimpleValue, CBORTag, DECIMAL_TYPE, FRACTION_TYPE, FrozenDict, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE, CBORDecodeError};
+use crate::types::{
+    BreakMarkerType, CBORDecodeEOF, CBORDecodeError, CBORDecodeValueError, CBORSimpleValue,
+    CBORTag, DECIMAL_TYPE, FRACTION_TYPE, FrozenDict, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE,
+    IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE,
+};
 use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
 use half::f16;
 use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
@@ -13,7 +17,13 @@ use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::cmp::{max, min};
 use std::mem::{replace, take};
 
-const VALID_STR_ERRORS: [&str; 3] = ["strict", "ignore", "replace"];
+const VALID_STR_ERRORS: [&str; 5] = [
+    "strict",
+    "ignore",
+    "replace",
+    "backslashreplace",
+    "surrogateescape",
+];
 const SEEK_CUR: u8 = 1;
 
 static DATE_FROMISOFORMAT: PyImportable = PyImportable::new("datetime", "date.fromisoformat");
@@ -1259,9 +1269,11 @@ impl CBORDecoder {
         let parser = EMAIL_PARSER.get(py)?.call0()?;
         match parser.call_method1(intern!(py, "parsestr"), (value,)) {
             Ok(message) => Ok(message),
-            Err(e) => {
-                raise_exc_from(py, CBORDecodeValueError::new_err("error decoding MIME message"), Some(e))
-            }
+            Err(e) => raise_exc_from(
+                py,
+                CBORDecodeValueError::new_err("error decoding MIME message"),
+                Some(e),
+            ),
         }
     }
 
@@ -1273,9 +1285,11 @@ impl CBORDecoder {
         kwargs.set_item(intern!(py, "bytes"), value)?;
         match UUID_TYPE.get(py)?.call((), Some(&kwargs)) {
             Ok(uuid) => Ok(uuid),
-            Err(e) => {
-                raise_exc_from(py, CBORDecodeValueError::new_err("error decoding UUID value"), Some(e))
-            }
+            Err(e) => raise_exc_from(
+                py,
+                CBORDecodeValueError::new_err("error decoding UUID value"),
+                Some(e),
+            ),
         }
     }
 
@@ -1305,9 +1319,9 @@ impl CBORDecoder {
             {
                 IPV4INTERFACE_TYPE.get(py)?.call1(((address, prefix),))?
             } else {
-                return Err(
-                    CBORDecodeValueError::new_err("error decoding IPv4: invalid types in input array")
-                );
+                return Err(CBORDecodeValueError::new_err(
+                    "error decoding IPv4: invalid types in input array",
+                ));
             }
         } else {
             return Err(CBORDecodeValueError::new_err(
