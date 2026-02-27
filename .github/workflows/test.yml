@@ -46,9 +46,10 @@ jobs:
       run: |
         eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)"
         pip install --group test -e .
-        tree
     - name: Test with pytest
-      run: coverage run -m pytest -v
+      run: |
+        coverage run -m pytest -v
+        tree
       env:
         RUST_BACKTRACE: "1"
         TZ: America/New_York
