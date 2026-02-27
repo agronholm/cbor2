@@ -28,29 +28,7 @@ from fractions import Fraction
 from math import ceil, log2
 
 import cbor
-
-
-def import_cbor2():
-    # Similar hack to that used in tests/conftest to get separate C and Python
-    # implementations
-    import cbor2
-    import cbor2.decoder
-    import cbor2.encoder
-    import cbor2.types
-
-    class Module:
-        # Mock module class
-        pass
-
-    py_cbor2 = Module()
-    for source in (cbor2.types, cbor2.encoder, cbor2.decoder):
-        for name in dir(source):
-            setattr(py_cbor2, name, getattr(source, name))
-    return cbor2, py_cbor2
-
-
-c_cbor2, py_cbor2 = import_cbor2()
-
+import cbor2
 
 UTC = timezone.utc
 
@@ -94,7 +72,7 @@ TEST_VALUES = [
 ]
 
 
-Codec = namedtuple("Codec", ("cbor", "c_cbor2", "py_cbor2"))
+Codec = namedtuple("Codec", ("cbor", "cbor2"))
 Result = namedtuple("Result", ("encoding", "decoding"))
 Timing = namedtuple("Timing", ("time", "repeat", "count"))
 
@@ -117,11 +95,12 @@ def time(op, repeat=3):
         number = autorange(op, limit=0.02)
     except Exception as e:
         return e
+
     t = timeit.Timer(op)
     return Timing(min(t.repeat(repeat, number)) / number, repeat, number)
 
 
-def format_time(t, suffixes=("s", "ms", "µs", "ns"), zero="0s", template="{time:.1f}{suffix}"):
+def format_time(t, suffixes=("s", "ms", "µs", "ns"), zero="0s", template="{time:.1f} {suffix}"):
     if isinstance(t, Exception):
         return "-"
     else:
@@ -146,6 +125,8 @@ def color_time(t, lim):
     time_str = format_time(t)
     if isinstance(t, Exception):
         return RED + time_str + RESET
+    elif isinstance(lim, Exception):
+        return time_str
     elif t.time <= lim.time * 0.8:
         return GREEN + time_str + RESET
     elif t.time > lim.time * 1.05:
@@ -156,16 +137,14 @@ def color_time(t, lim):
 
 def output_table(results):
     # Build table content
-    head = ("Test",) + ("cbor", "c-cbor2", "py-cbor2") * 2
+    head = ("Test",) + ("cbor", "cbor2") * 2
     rows = [head] + [
         (
             value,
             format_time(result.cbor.encoding),
-            color_time(result.c_cbor2.encoding, result.py_cbor2.encoding),
-            format_time(result.py_cbor2.encoding),
+            color_time(result.cbor2.encoding, result.cbor.encoding),
             format_time(result.cbor.decoding),
-            color_time(result.c_cbor2.decoding, result.py_cbor2.decoding),
-            format_time(result.py_cbor2.decoding),
+            color_time(result.cbor2.decoding, result.cbor.decoding),
         )
         for value, result in results.items()
     ]
@@ -186,9 +165,9 @@ def output_table(results):
                 "  ",
                 " " * col_widths[0],
                 " +-",
-                "-" * (sum(col_widths[1:4]) + 6),
+                "-" * (sum(col_widths[1:3]) + 3),
                 "-+-",
-                "-" * (sum(col_widths[4:7]) + 6),
+                "-" * (sum(col_widths[3:5]) + 3),
                 "-+",
             )
         )
@@ -199,9 +178,9 @@ def output_table(results):
                 "  ",
                 " " * col_widths[0],
                 " | ",
-                "{value:^{width}}".format(value="Encoding", width=sum(col_widths[1:4]) + 6),
+                "{value:^{width}}".format(value="Encoding", width=sum(col_widths[1:3]) + 3),
                 " | ",
-                "{value:^{width}}".format(value="Decoding", width=sum(col_widths[4:7]) + 6),
+                "{value:^{width}}".format(value="Decoding", width=sum(col_widths[3:5]) + 3),
                 " |",
             )
         )
@@ -226,7 +205,7 @@ def output_table(results):
                 (
                     "| ",
                     " | ".join(
-                        "{value:<{width}}".format(
+                        "{value:>{width}}".format(
                             value=value, width=width + len(value) - print_len(value)
                         )
                         for value, width in zip(row, col_widths)
@@ -244,11 +223,9 @@ def output_csv(results):
         (
             "Title",
             "cbor-encode",
-            "c-cbor2-encode",
-            "py-cbor2-encode",
+            "cbor2-encode",
             "cbor-decode",
-            "c-cbor2-decode",
-            "py-cbor2-decode",
+            "cbor2-decode",
         )
     )
     for title, result in results.items():
@@ -256,11 +233,9 @@ def output_csv(results):
             (
                 title,
                 result.cbor.encoding.time if isinstance(result.cbor.encoding, Timing) else None,
-                result.c_cbor2.encoding.time,
-                result.py_cbor2.encoding.time,
+                result.cbor2.encoding.time,
                 result.cbor.decoding.time if isinstance(result.cbor.encoding, Timing) else None,
-                result.c_cbor2.decoding.time,
-                result.py_cbor2.decoding.time,
+                result.cbor2.decoding.time,
             )
         )
 
@@ -270,7 +245,7 @@ def main():
     sys.stderr.write("Testing")
     sys.stderr.flush()
     for name, kwargs, value in TEST_VALUES:
-        encoded = py_cbor2.dumps(value, **kwargs)
+        encoded = cbor2.dumps(value, **kwargs)
         results[name] = Codec(
             **{
                 mod_name: Result(
@@ -279,13 +254,13 @@ def main():
                 )
                 for mod_name, mod in {
                     "cbor": cbor,
-                    "c_cbor2": c_cbor2,
-                    "py_cbor2": py_cbor2,
+                    "cbor2": cbor2,
                 }.items()
             }
         )
         sys.stderr.write(".")
         sys.stderr.flush()
+
     sys.stderr.write("\n")
     sys.stderr.write("\n")
     if len(sys.argv) > 1 and sys.argv[1] == "--csv":

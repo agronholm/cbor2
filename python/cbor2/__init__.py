@@ -1,0 +1,30 @@
+from collections.abc import Callable
+from typing import Any, TypeAlias
+
+from ._cbor2 import CBORDecodeEOF as CBORDecodeEOF
+from ._cbor2 import CBORDecodeError as CBORDecodeError
+from ._cbor2 import CBORDecoder as CBORDecoder
+from ._cbor2 import CBORDecodeValueError as CBORDecodeValueError
+from ._cbor2 import CBOREncodeError as CBOREncodeError
+from ._cbor2 import CBOREncoder as CBOREncoder
+from ._cbor2 import CBOREncodeTypeError as CBOREncodeTypeError
+from ._cbor2 import CBOREncodeValueError as CBOREncodeValueError
+from ._cbor2 import CBORError as CBORError
+from ._cbor2 import CBORSimpleValue as CBORSimpleValue
+from ._cbor2 import CBORTag as CBORTag
+from ._cbor2 import FrozenDict as FrozenDict
+from ._cbor2 import break_marker as break_marker
+from ._cbor2 import dump as dump
+from ._cbor2 import dumps as dumps
+from ._cbor2 import load as load
+from ._cbor2 import loads as loads
+from ._cbor2 import shareable_encoder as shareable_encoder
+from ._cbor2 import undefined as undefined
+
+TagHook: TypeAlias = Callable[[CBORDecoder, CBORTag], Any]
+MajorDecoderCallback: TypeAlias = Callable[[CBORDecoder, int], Any]
+SemanticDecoderCallback: TypeAlias = Callable[[CBORDecoder], Any]
+ObjectHook: TypeAlias = Callable[[CBORDecoder, dict[Any, Any]], Any]
+EncoderHook: TypeAlias = Callable[[CBOREncoder, Any], Any]
+
+del Any, TypeAlias

@@ -19,35 +19,13 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from fractions import Fraction
 
+import cbor2
 import objgraph
-
-
-def import_cbor2():
-    # Similar hack to that used in tests/conftest to get separate C and Python
-    # implementations
-    import cbor2
-    import cbor2.decoder
-    import cbor2.encoder
-    import cbor2.types
-
-    class Module:
-        # Mock module class
-        pass
-
-    py_cbor2 = Module()
-    for source in (cbor2.types, cbor2.encoder, cbor2.decoder):
-        for name in dir(source):
-            setattr(py_cbor2, name, getattr(source, name))
-    return cbor2, py_cbor2
-
-
-c_cbor2, py_cbor2 = import_cbor2()
-
 
 UTC = timezone.utc
 
 TEST_VALUES = [
-    # label,            kwargs, value
+    # label, kwargs, value
     ("None", {}, None),
     ("10e0", {}, 1),
     ("10e12", {}, 1000000000000),
@@ -83,8 +61,8 @@ TEST_VALUES = [
         {"timezone": UTC},
         [{"name": "Foo", "species": "cat", "dob": datetime(2013, 5, 20), "weight": 4.1}] * 100,
     ),
-    ("tag", {}, c_cbor2.CBORTag(1, 1)),
-    ("nestedtag", {}, {c_cbor2.CBORTag(1, 1): 1}),
+    ("tag", {}, cbor2.CBORTag(1, 1)),
+    ("nestedtag", {}, {cbor2.CBORTag(1, 1): 1}),
 ]
 
 Leaks = namedtuple("Leaks", ("count", "comparison"))
@@ -233,11 +211,11 @@ def main():
     sys.stderr.write("Testing")
     sys.stderr.flush()
     for name, kwargs, value in TEST_VALUES:
-        encoded = c_cbor2.dumps(value, **kwargs)
+        encoded = cbor2.dumps(value, **kwargs)
         results[name] = Result(
-            encoding=test(lambda: c_cbor2.dumps(value, **kwargs)),
-            decoding=test(lambda: c_cbor2.loads(encoded)),
-            roundtrip=test(lambda: c_cbor2.loads(c_cbor2.dumps(value, **kwargs))),
+            encoding=test(lambda: cbor2.dumps(value, **kwargs)),
+            decoding=test(lambda: cbor2.loads(encoded)),
+            roundtrip=test(lambda: cbor2.loads(cbor2.dumps(value, **kwargs))),
         )
         sys.stderr.write(".")
         sys.stderr.flush()

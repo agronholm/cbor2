@@ -16,12 +16,12 @@ from collections.abc import Callable, Collection, Iterable, Iterator
 from contextlib import ExitStack
 from datetime import datetime
 from functools import partial
-from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeAlias, TypeVar
 
-from . import CBORDecoder, CBORSimpleValue, CBORTag, FrozenDict, load, undefined
+from . import CBORDecodeEOF, CBORDecoder, CBORSimpleValue, CBORTag, FrozenDict, load, undefined
 
 if TYPE_CHECKING:
-    from typing import Literal, TypeAlias
+    from . import ObjectHook, TagHook
 
 T = TypeVar("T")
 JSONValue: TypeAlias = "str | float | bool | None | list[JSONValue] | dict[str, JSONValue]"
@@ -37,7 +37,7 @@ default_encoders: dict[type, Callable[[Any], Any]] = {
     uuid.UUID: lambda x: x.urn,
     CBORTag: lambda x: {f"CBORTag:{x.tag:d}": x.value},
     set: list,
-    re.compile("").__class__: lambda x: x.pattern,
+    re.Pattern: lambda x: x.pattern,
     ipaddress.IPv4Address: str,
     ipaddress.IPv6Address: str,
     ipaddress.IPv4Network: str,
@@ -69,16 +69,16 @@ class DefaultEncoder(json.JSONEncoder):
 
 def iterdecode(
     f: BinaryIO,
-    tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
-    object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
+    tag_hook: TagHook | None = None,
+    object_hook: ObjectHook | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
 ) -> Iterator[Any]:
     decoder = CBORDecoder(f, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors)
-    while True:
-        try:
+    try:
+        while True:
             yield decoder.decode()
-        except EOFError:
-            return
+    except CBORDecodeEOF:
+        return
 
 
 def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict[str, Any] | T:

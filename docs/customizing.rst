@@ -5,149 +5,280 @@ Customizing encoding and decoding
 
 Both the encoder and decoder can be customized to support a wider range of types.
 
-On the encoder side, this is accomplished by passing a callback as the ``default`` constructor
-argument. This callback will receive an object that the encoder could not serialize on its own.
-The callback should then return a value that the encoder can serialize on its own, although the
-return value is allowed to contain objects that also require the encoder to use the callback, as
-long as it won't result in an infinite loop.
+Customizing the decoder
+-----------------------
 
-On the decoder side, you have two options: ``tag_hook`` and ``object_hook``. The former is called
-by the decoder to process any semantic tags that have no predefined decoders. The latter is called
-for any newly decoded ``dict`` objects, and is mostly useful for implementing a JSON compatible
-custom type serialization scheme. Unless your requirements restrict you to JSON compatible types
-only, it is recommended to use ``tag_hook`` for this purpose.
+There are four ways to customize the decoding behavior, available as keyword arguments to
+:func:`load`, :func:`loads` and :class:`CBORDecoder`:
 
-Using the CBOR tags for custom types
-------------------------------------
+#. ``major_decoders``: lets you override how specific major CBOR types are decoded
+#. ``semantic_decoders``: lets you override how specific semantic tags are decoded
+#. ``tag_hook``: lets you define a catch-all for unhandled semantic tags
+#. ``object_hook``: lets you transform any newly-decoded dicts
 
-The most common way to use ``default`` is to call :meth:`CBOREncoder.encode`
-to add a custom tag in the data stream, with the payload as the value::
+Overriding the decoding of major types
+++++++++++++++++++++++++++++++++++++++
+
+The following example overrides the decoding for major type 3 (text strings)::
+
+    import cbor2
+
+    def string_decoder(decoder: cbor2.CBORDecoder, subtype: int) -> str:
+        # Call the original implementation
+        # (optional if you want to do the low-level decoding yourself)
+        my_string = decoder.decode_string(subtype)
+        return my_string[::-1]
+
+    payload = cbor2.dumps("Hello, world!")
+    assert cbor2.loads(payload, major_decoders={3: string_decoder}) == "!dlrow ,olleH"
+
+.. note:: Overriding major decoders is a niche feature, not needed by most users.
+    Additionally, passing a major decoder lookup mapping has negative consequences
+    for the decoder's performance due to the extra round-trips to the Python interpreter.
+
+Overriding the decoding of semantic tags
+++++++++++++++++++++++++++++++++++++++++
+
+If you want to override how an already supported tag is decoded, this is a good way to do it.
+
+Here's an example decoder implementation for semantic tag 1 (epoch datetime)::
+
+    from datetime import datetime, timezone
+
+    import cbor2
+
+    def decode_epoch_datetime(decoder: cbor2.CBORDecoder) -> datetime:
+        timestamp = decoder.decode()
+        return datetime.fromtimestamp(timestamp, timezone.utc)
+
+    payload = cbor2.dumps(cbor2.CBORTag(1, 1363896240))
+    decoded = cbor2.loads(payload, semantic_decoders={1: decode_epoch_datetime})
+    assert decoded == datetime(2013, 3, 21, 20, 4, tzinfo=timezone.utc)
+
+.. note:: Overriding semantic decoders incurs a slight performance penalty for all semantic
+    tags as it involves a round-trip to the Python interpreter for the decoder callback
+    lookup.
+
+Specifying a "catch-all" for unhandled semantic tags
+++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+By specifying a ``tag_hook``, the decoder will handle otherwise unhandled semantic tags by calling
+this callable with two arguments: the decoder instance and the tag object. Its return value is used
+in place of the :class:`CBORTag` object that would have otherwise been returned.
+
+Here's an example that assumes semantic tag 4000 to contain an array of attributes ``x`` and ``y``
+for a custom ``Point`` class::
+
+    import cbor2
 
     class Point:
-        def __init__(self, x, y):
+        def __init__(self, x: int, y: int):
             self.x = x
             self.y = y
 
-    def default_encoder(encoder, value):
+    def tag_hook(decoder: cbor2.CBORDecoder, tag: cbor2.CBORTag) -> Point | cbor2.CBORTag:
+        if tag.tag == 4000:
+            # we expect tag.value to be an array of [x, y] attributes
+            return Point(*tag.value)
+
+        return tag
+
+    payload = cbor2.dumps(cbor2.CBORTag(4000, [4, 5]))
+    point = cbor2.loads(payload, tag_hook=tag_hook)
+    assert isinstance(point, Point)
+    assert point.x == 4
+    assert point.y == 5
+
+Customizing map decoding
+++++++++++++++++++++++++
+
+The final decoder option allows users to customize how CBOR maps are decoded, using the
+``object_hook`` option. This callback takes two arguments: the decoder instance and a
+:class:`dict`. The callback should return either the dictionary passed to it, or another object
+that should replace it.
+
+Here's an example that decode any dict with the key ``typename`` set to ``Point`` as a ``Point``
+instance::
+
+    from typing import Any
+
+    import cbor2
+
+    class Point:
+        def __init__(self, x: int, y: int):
+            self.x = x
+            self.y = y
+
+    def object_hook(decoder: cbor2.CBORDecoder, value: dict[Any, Any]) -> dict[Any, Any] | Point:
+        if value.get("typename") == "Point":
+            return Point(value["x"], value["y"])
+
+        return value
+
+    payload = cbor2.dumps({"typename": "Point", "x": 4, "y": 5})
+    point = cbor2.loads(payload, object_hook=object_hook)
+    assert isinstance(point, Point)
+    assert point.x == 4
+    assert point.y == 5
+
+.. note:: Make sure you have well defined rules for special handling of dicts so you don't end up
+    trying to convert all CBOR maps the decoder encounters.
+
+Dealing with immutable containers
++++++++++++++++++++++++++++++++++
+
+In rare cases, you may need to decode the next item from the stream as immutable.
+In practice, this means:
+
+* Arrays are decoded as :class:`tuple` instead of :class:`list`
+* Maps are decoded as :class:`~cbor2.FrozenDict` instead of :class:`dict`
+* Sets are decoded as :class:`set` instead of :class:`frozenset`
+
+TODO: write the rest of the section
+
+Customizing the encoder
+-----------------------
+
+There are two ways to customize the encoder behavior available as keyword arguments to
+:func:`dump`, :func:`dumps` and :class:`CBOREncoder`:
+
+* ``encoders``: specifies a mapping of an **exact** Python type to an encoder callable
+* ``default``: specifies a "catch-all" encoder callable for objects not matched with any specific
+  encoder callback
+
+Overriding the encoder for a specific Python type
++++++++++++++++++++++++++++++++++++++++++++++++++
+
+The ``encoders`` option allows users to override the encoding behavior for any Python types.
+The option takes a :class:`dict` or any :class:`mapping type <collections.abc.Mapping>` where the
+keys are Python types and the values are encoder callbacks. The encoder callbacks must take two
+positional arguments: the encoder instance and the object to be encoded.
+
+Here's an example of how to add support for encoding a custom type::
+
+    import cbor2
+
+    class Point:
+        def __init__(self, x: int, y: int):
+            self.x = x
+            self.y = y
+
+    def encode_point(encoder: cbor2.CBOREncoder, value: Point) -> None:
         # Tag number 4000 was chosen arbitrarily
-        encoder.encode(CBORTag(4000, [value.x, value.y]))
+        encoder.encode_semantic(4000, [value.x, value.y])
 
-The corresponding ``tag_hook`` would be::
+    # prints b'\xd9\x0f\xa0\x82\x04\x05'
+    print(cbor2.dumps(Point(4, 5), encoders={Point: encode_point}))
 
-    def tag_hook(decoder, tag, shareable_index=None):
-        if tag.tag != 4000:
-            return tag
+This encodes the two fields, x and y, as an array under the (arbitrarily chosen) semantic tag 4000.
 
-        # tag.value is now the [x, y] list we serialized before
-        return Point(*tag.value)
+.. important:: The encoder matches type **exactly**, so it will not match against subclasses of
+    types in the encoder registry!
 
-Using dicts to carry custom types
----------------------------------
+Specifying a "catch-all" callback for unhandled semantic tags
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-The same could be done with ``object_hook``, except less efficiently::
+The ``default`` option is used by the encoder as the last resort for any objects it could not
+encode otherwise. Just like with the ``encoders`` option, the callback takes two arguments: the
+encoder instance and the object to be encoded.
 
-    def default_encoder(encoder, value):
-        encoder.encode(dict(typename='Point', x=value.x, y=value.y))
+Here's an example that tries to encode arbitrary objects as a combination of the fully qualified
+class name and a dictionary of attribute values::
 
-    def object_hook(decoder, value):
-        if value.get('typename') != 'Point':
-            return value
+    import cbor2
 
-        return Point(value['x'], value['y'])
+    class Point:
+        def __init__(self, x: int, y: int):
+            self.x = x
+            self.y = y
 
-You should make sure that whatever way you decide to use for telling apart your "specially marked"
-dicts from arbitrary data dicts won't mistake on for the other.
+    def default_encoder(encoder: cbor2.CBOREncoder, obj: object) -> None:
+        cls = obj.__class__
+        name = f"{cls.__module__}.{cls.__qualname__}"
+        attributes = {key: getattr(obj, key) for key in dir(obj)}
+        encoder.encode_semantic(50000, [name, attributes])
+
+    # prints b'\xd9\xc3P\x82n__main__.Point\xa2ax\x04ay\x05'
+    print(cbor2.dumps(Point(4, 5), default=default_encoder))
 
 Value sharing with custom types
 -------------------------------
 
 In order to properly encode and decode cyclic references with custom types, some special care has
-to be taken. Suppose you have a custom type as below, where every child object contains a reference
-to its parent and the parent contains a list of children::
+to be taken. Suppose you have a custom type as below, where any child object could contain a
+reference to its parent or any ancestor, you would encounter an error when naively trying to
+serialize such a cyclic object graph::
 
-    from cbor2 import dumps, loads, shareable_encoder, CBORTag
+    from __future__ import annotations
 
+    import cbor2
 
     class MyType:
-        def __init__(self, parent=None):
+        def __init__(self, parent: MyType | None = None):
             self.parent = parent
             self.children = []
             if parent:
                 self.parent.children.append(self)
 
-This would not normally be serializable, as it would lead to an endless loop (in the worst case)
-and raise some exception (in the best case). Now, enter CBOR's extension tags 28 and 29. These tags
-make it possible to add special markers into the data stream which can be later referenced and
-substituted with the object marked earlier.
-
-To do this, in ``default`` hooks used with the encoder you will need to use the
-:meth:`shareable_encoder` decorator on your ``default`` hook function. It will
-automatically automatically add the object to the shared values registry on the encoder and prevent
-it from being serialized twice (instead writing a reference to the data stream)::
-
-    @shareable_encoder
-    def default_encoder(encoder, value):
+    def encode_mytype(encoder: cbor2.CBOREncoder, value: MyType):
         # The state has to be serialized separately so that the decoder would have a chance to
         # create an empty instance before the shared value references are decoded
-        serialized_state = encoder.encode_to_bytes(value.__dict__)
-        encoder.encode(CBORTag(3000, serialized_state))
+        encoder.encode_semantic(3000, value.__dict__)
 
-On the decoder side, you will need to initialize an empty instance for shared value lookup before
-the object's state (which may contain references to it) is decoded.
-This is done with the :meth:`CBORDecoder.set_shareable` method::
-
-    def tag_hook(decoder, tag, shareable_index=None):
-        # Return all other tags as-is
-        if tag.tag != 3000:
-            return tag
-
-        # Create a raw instance before initializing its state to make it possible for cyclic
-        # references to work
-        instance = MyType.__new__(MyType)
-        decoder.set_shareable(shareable_index, instance)
-
-        # Separately decode the state of the new object and then apply it
-        state = decoder.decode_from_bytes(tag.value)
+    def decode_mytype(decoder: cbor2.CBORDecoder) -> MyType:
+        instance = MyType.__new__()
+        state = decoder.decode()
         instance.__dict__.update(state)
         return instance
-
-You could then verify that the cyclic references have been restored after deserialization::
 
     parent = MyType()
     child1 = MyType(parent)
     child2 = MyType(parent)
-    serialized = dumps(parent, default=default_encoder, value_sharing=True)
+    # ERROR: cbor2.CBOREncodeValueError: cyclic data structure detected
+    serialized = cbor2.dumps(parent, encoders={MyType: encode_mytype})
 
-    new_parent = loads(serialized, tag_hook=tag_hook)
+To fix this, a few adjustments need to be made:
+
+#. Value sharing needs to be turned on in the encoder with ``value_sharing=True``
+#. The encoder callback must be decorated with :deco:`shareable_encoder`
+#. The decoder callback must call :meth:`CBORDecoder.set_shareable` with ``instance``
+   (the "empty" instance before its state has been decoded) as the argument
+
+Here is the revised example::
+
+    from __future__ import annotations
+
+    import cbor2
+
+    class MyType:
+        def __init__(self, parent: MyType | None = None):
+            self.parent = parent
+            self.children = []
+            if parent:
+                self.parent.children.append(self)
+
+    @cbor2.shareable_encoder
+    def encode_mytype(encoder: cbor2.CBOREncoder, value: MyType):
+        # The state has to be serialized separately so that the decoder would have a chance to
+        # create an empty instance before the shared value references are decoded
+        encoder.encode_semantic(3000, value.__dict__)
+
+    def decode_mytype(decoder: cbor2.CBORDecoder) -> MyType:
+        # Connects the new MyType instance with the first available shareable index
+        # so that later references to that index can get the same object
+        instance = decoder.set_shareable(MyType.__new__(MyType))
+
+        # The decoded state can now contain references to the empty instance
+        state = decoder.decode()
+        instance.__dict__.update(state)
+        return instance
+
+    parent = MyType()
+    child1 = MyType(parent)
+    child2 = MyType(parent)
+    # Important: value sharing must be enabled
+    serialized = cbor2.dumps(parent, encoders={MyType: encode_mytype}, value_sharing=True)
+
+    new_parent = cbor2.loads(serialized, semantic_decoders={3000: decode_mytype})
     assert new_parent.children[0].parent is new_parent
     assert new_parent.children[1].parent is new_parent
-
-Decoding Tagged items as keys
------------------------------
-
-Since the CBOR specification allows any type to be used as a key in the mapping type, the decoder
-provides a flag that indicates it is expecting an immutable (and by implication hashable) type. If
-your custom class cannot be used this way you can raise an exception if this flag is set::
-
-    def tag_hook(decoder, tag, shareable_index=None):
-        if tag.tag != 3000:
-            return tag
-
-        if decoder.immutable:
-            raise CBORDecodeException('MyType cannot be used as a key or set member')
-
-        return MyType(*tag.value)
-
-An example where the data could be used as a dict key::
-
-    from collections import namedtuple
-
-    Pair = namedtuple('Pair', 'first second')
-
-    def tag_hook(decoder, tag, shareable_index=None):
-        if tag.tag != 4000:
-            return tag
-
-        return Pair(*tag.value)
-
-The ``object_hook`` can check for the immutable flag in the same way.
