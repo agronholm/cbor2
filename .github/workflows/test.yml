@@ -38,7 +38,7 @@ jobs:
     - name: Install the project and its dependencies and run pytest
       shell: bash
       run: |
-        source <(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)
+        eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)"
         pip install --group test -e .
         coverage run -m pytest -v
         cargo llvm-cov report --lcov --manifest-path rust/Cargo.toml --output-path coverage.lcov
