@@ -29,6 +29,7 @@ from uuid import UUID
 
 import pytest
 from _pytest.fixtures import FixtureRequest
+
 from cbor2 import (
     CBORDecodeEOF,
     CBORDecodeError,
@@ -43,7 +44,7 @@ from cbor2 import (
     undefined,
 )
 
-DECODER_MAX_DEPTH = 200 if platform.python_implementation() == "PyPy" else 950
+DECODER_MAX_DEPTH = 100
 
 
 @pytest.fixture

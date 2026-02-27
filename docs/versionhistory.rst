@@ -10,6 +10,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - **MAJOR REWRITE**:
   The Python and C implementations of the encoder and decoder were replaced with a single,
   Rust-based implementation in the interest of maintainability and memory safety
+- **BACKWARD INCOMPATIBLE** Limited the maximum allowed container nesting depth on decoding to 100
+  levels deep (configurable via the ``max_depth`` parameter)
 - **BACKWARD INCOMPATIBLE** Changed the decoding of semantic tag 261 to yield an ``IPv4Interface``
   or ``IPv6Interface`` if the address contains host bits
 - **BACKWARD INCOMPATIBLE** Changed the encoding of IP addresses to use the semantic tags 52 and 54
