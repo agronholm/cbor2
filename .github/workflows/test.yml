@@ -31,25 +31,26 @@ jobs:
         allow-prereleases: true
         cache: pip
         cache-dependency-path: pyproject.toml
-    - name: Install cargo-llvm-cov and llvm-tools
-      run: |
-        rustup component add llvm-tools-preview
-        cargo install cargo-llvm-cov
+    - name: Install cargo-llvm-cov (cached)
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-llvm-cov
     # Setup environment variables for cargo-llvm-cov
-    - name: Install the project and its dependencies (Windows)
+    - name: Install the project and its dependencies and run pytest (Windows)
       if: runner.os == 'Windows'
       run: |
         Invoke-Expression (cargo llvm-cov show-env --manifest-path rust/Cargo.toml --with-pwsh-env-prefix | Out-String)
         pip install --group test -e .
-    - name: Install the project and its dependencies
+        coverage run -m pytest -v
+      env:
+        RUST_BACKTRACE: "1"
+        TZ: America/New_York
+    - name: Install the project and its dependencies and run pytest
       if: runner.os != 'Windows'
       run: |
         eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)"
         pip install --group test -e .
-    - name: Test with pytest
-      run: |
         coverage run -m pytest -v
-        tree
       env:
         RUST_BACKTRACE: "1"
         TZ: America/New_York
