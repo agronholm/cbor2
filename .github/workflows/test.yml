@@ -35,19 +35,8 @@ jobs:
       uses: taiki-e/install-action@v2
       with:
         tool: cargo-llvm-cov
-    # Setup environment variables for cargo-llvm-cov
-    - name: Install the project and its dependencies and run pytest (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        Invoke-Expression (cargo llvm-cov show-env --manifest-path rust/Cargo.toml --with-pwsh-env-prefix | Out-String)
-        pip install --group test -e .
-        coverage run -m pytest -v
-        cargo llvm-cov report --lcov --manifest-path rust/Cargo.toml --output-path coverage.lcov
-      env:
-        RUST_BACKTRACE: "1"
-        TZ: America/New_York
     - name: Install the project and its dependencies and run pytest
-      if: runner.os != 'Windows'
+      shell: bash
       run: |
         eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)"
         pip install --group test -e .
