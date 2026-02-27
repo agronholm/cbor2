@@ -42,6 +42,7 @@ jobs:
         Invoke-Expression (cargo llvm-cov show-env --manifest-path rust/Cargo.toml --with-pwsh-env-prefix | Out-String)
         pip install --group test -e .
         coverage run -m pytest -v
+        cargo llvm-cov report --lcov --manifest-path rust/Cargo.toml --output-path coverage.lcov
       env:
         RUST_BACKTRACE: "1"
         TZ: America/New_York
@@ -51,14 +52,12 @@ jobs:
         eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)"
         pip install --group test -e .
         coverage run -m pytest -v
-        tree
+        cargo llvm-cov report --lcov --manifest-path rust/Cargo.toml --output-path coverage.lcov
       env:
         RUST_BACKTRACE: "1"
         TZ: America/New_York
     - name: Generate Python coverage report
       run: coverage xml
-    - name: Generate LCOV report
-      run: cargo llvm-cov report --lcov --manifest-path rust/Cargo.toml --output-path coverage.lcov
     - name: Upload Coverage
       uses: coverallsapp/github-action@v2
       with:
