@@ -9,6 +9,7 @@ pub struct PyImportable {
 }
 
 impl PyImportable {
+    // LCOV_EXCL_START
     pub const fn new(module: &'static str, attribute: &'static str) -> Self {
         Self {
             lock: PyOnceLock::new(),
@@ -16,6 +17,7 @@ impl PyImportable {
             attribute,
         }
     }
+    // LCOV_EXCL_STOP
 
     pub fn get<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let class = self.lock.get_or_try_init(py, || {
