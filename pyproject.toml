@@ -112,9 +112,6 @@ package = "wheel"
 dependency_groups = ["test"]
 set_env = { TZ = "America/New_York" }
 
-[tool.tox.env.pypy3]
-set_env = { TZ = "America/New_York" }
-
 [tool.tox.env.docs]
 commands = [["sphinx-build", "-W", "-n", "docs", "build/sphinx"]]
 dependency_groups = ["doc"]
