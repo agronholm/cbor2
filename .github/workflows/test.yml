@@ -31,21 +31,35 @@ jobs:
         allow-prereleases: true
         cache: pip
         cache-dependency-path: pyproject.toml
+    - name: Install cargo-llvm-cov and llvm-tools
+      run: |
+        rustup component add llvm-tools-preview
+        cargo install cargo-llvm-cov
+    # Setup environment variables for cargo-llvm-cov
+    - name: Setup cargo-llvm-cov env (Unix)
+      if: runner.os != 'Windows'
+      run: eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --export-prefix)"
+    - name: Setup cargo-llvm-cov env (Windows)
+      if: runner.os == 'Windows'
+      run: Invoke-Expression (cargo llvm-cov show-env --manifest-path rust/Cargo.toml --with-pwsh-env-prefix | Out-String)
     - name: Install the project and its dependencies
       run: pip install --group test -e .
-      env:
-        RUST_BACKTRACE: "1"
+    - if: runner.os != 'Windows'
+      run: env
     - name: Test with pytest
       run: coverage run -m pytest -v
       env:
+        RUST_BACKTRACE: "1"
         TZ: America/New_York
-    - name: Generate coverage report
+    - name: Generate Python coverage report
       run: coverage xml
+    - name: Generate LCOV report
+      run: cargo llvm-cov report --lcov --manifest-path rust/Cargo.toml --output-path coverage.lcov
     - name: Upload Coverage
       uses: coverallsapp/github-action@v2
       with:
         parallel: true
-        file: coverage.xml
+        files: coverage.xml coverage.lcov
 
   coveralls:
     name: Finish Coveralls
