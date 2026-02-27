@@ -38,14 +38,14 @@ jobs:
     # Setup environment variables for cargo-llvm-cov
     - name: Setup cargo-llvm-cov env (Unix)
       if: runner.os != 'Windows'
-      run: eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --export-prefix)"
+      run: eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)"
     - name: Setup cargo-llvm-cov env (Windows)
       if: runner.os == 'Windows'
       run: Invoke-Expression (cargo llvm-cov show-env --manifest-path rust/Cargo.toml --with-pwsh-env-prefix | Out-String)
     - name: Install the project and its dependencies
       run: pip install --group test -e .
     - if: runner.os != 'Windows'
-      run: env
+      run: env | sort
     - name: Test with pytest
       run: coverage run -m pytest -v
       env:
