@@ -36,16 +36,16 @@ jobs:
         rustup component add llvm-tools-preview
         cargo install cargo-llvm-cov
     # Setup environment variables for cargo-llvm-cov
-    - name: Setup cargo-llvm-cov env (Unix)
-      if: runner.os != 'Windows'
-      run: eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)"
-    - name: Setup cargo-llvm-cov env (Windows)
+    - name: Install the project and its dependencies (Windows)
       if: runner.os == 'Windows'
-      run: Invoke-Expression (cargo llvm-cov show-env --manifest-path rust/Cargo.toml --with-pwsh-env-prefix | Out-String)
+      run: |
+        Invoke-Expression (cargo llvm-cov show-env --manifest-path rust/Cargo.toml --with-pwsh-env-prefix | Out-String)
+        pip install --group test -e .
     - name: Install the project and its dependencies
-      run: pip install --group test -e .
-    - if: runner.os != 'Windows'
-      run: env | sort
+      if: runner.os != 'Windows'
+      run: |
+        eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)"
+        pip install --group test -e .
     - name: Test with pytest
       run: coverage run -m pytest -v
       env:
