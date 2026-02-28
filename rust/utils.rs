@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::{PyErr, PyResult, Python, import_exception};
+use pyo3::{PyErr, PyResult, Python};
 
 pub struct PyImportable {
     lock: PyOnceLock<Py<PyAny>>,
