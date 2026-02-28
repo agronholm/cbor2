@@ -100,7 +100,7 @@ pub struct CBORDecoder {
     share_index: Option<usize>,
     shareables: Vec<Option<Py<PyAny>>>,
     stringref_namespace: Option<Vec<Py<PyAny>>>,
-    #[pyo3(get, set)]
+    #[pyo3(get)]
     immutable: bool,
 }
 

@@ -99,9 +99,6 @@ class CBORDecoder:
     tag_hook: TagHook | None
     object_hook: ObjectHook | None
     str_errors: str
-    read_size: int
-    max_depth: int
-    immutable: bool
     def __new__(
         cls,
         fp: IO[bytes],
@@ -114,6 +111,14 @@ class CBORDecoder:
         read_size: int = ...,
         max_depth: int = ...,
     ) -> Self: ...
+
+    # Properties
+    @property
+    def read_size(self) -> int: ...
+    @property
+    def max_depth(self) -> int: ...
+    @property
+    def immutable(self) -> bool: ...
     def decode(self, *, immutable: bool = ...) -> Any: ...
     def decode_from_bytes(self, buf: bytes, /) -> Any: ...
     def read(self, amount: int, /) -> bytes: ...
