@@ -74,6 +74,17 @@ instead encodes a reference to the nth sufficiently long string already encoded.
 .. warning:: Support for string referencing is rare in other CBOR implementations, so think carefully
     whether you want to enable it.
 
+Performance tuning
+------------------
+
+By default, the decoder only reads the exact amount of bytes it needs. But this can negatively
+impact the performance due to the potentially large number of individual read operations.
+To make it faster, you can pass a different ``read_size`` parameter (say, 4096), to :func:`load`,
+:func:`loads` or :class:`CBORDecoder`.
+
+.. warning:: If the input stream contains data other than the CBOR stream, that data (or parts of)
+    may be lost.
+
 Tag support
 -----------
 
