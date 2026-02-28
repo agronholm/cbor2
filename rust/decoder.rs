@@ -3,17 +3,18 @@ use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
 use crate::_cbor2::{DEFAULT_MAX_DEPTH, DEFAULT_READ_SIZE};
 use crate::types::{
     BreakMarkerType, CBORDecodeEOF, CBORDecodeError, CBORDecodeValueError, CBORSimpleValue,
-    CBORTag, DECIMAL_TYPE, FRACTION_TYPE, FrozenDict, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE,
+    CBORTag, FrozenDict, DECIMAL_TYPE, FRACTION_TYPE, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE,
     IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE,
 };
-use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
+use crate::utils::{create_exc_from, raise_exc_from, PyImportable};
 use half::f16;
 use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{
     PyBytes, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyMapping, PySet, PyString, PyTuple,
 };
-use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
+use pyo3::{intern, pyclass, IntoPyObjectExt, Py, PyAny};
 use std::cmp::{max, min};
 use std::mem::{replace, take};
 
@@ -33,6 +34,7 @@ static DATETIME_FROMISOFORMAT: PyImportable =
 static DATETIME_FROMTIMESTAMP: PyImportable =
     PyImportable::new("datetime", "datetime.fromtimestamp");
 static EMAIL_PARSER: PyImportable = PyImportable::new("email.parser", "Parser");
+static INCREMENTAL_UTF8_DECODER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static INT_FROMBYTES: PyImportable = PyImportable::new("builtins", "int.from_bytes");
 static IPADDRESS_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_address");
 static IPNETWORK_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_network");
@@ -733,12 +735,14 @@ impl CBORDecoder {
             }
             Some(mut length) => {
                 // Incrementally decode the string, in chunks of 65536 bytes
-                let decoder = py
-                    .import("codecs")?
+                let decoder_class = INCREMENTAL_UTF8_DECODER.get_or_try_init(py, || -> PyResult<Py<PyAny>> {
+                    let decoder = py.import("codecs")?
                     .getattr("lookup")?
                     .call1(("utf-8",))?
-                    .getattr("incrementaldecoder")?
-                    .call1((self.str_errors.bind(py),))?;
+                    .getattr("incrementaldecoder")?;
+                    Ok(decoder.unbind())
+                })?;
+                let decoder = decoder_class.bind(py).call1((self.str_errors.bind(py),))?;
                 let mut string = PyString::new(py, "");
                 while length > 0 {
                     let chunk_size = min(length, 65536) as usize;
