@@ -134,7 +134,30 @@ In practice, this means:
 * Maps are decoded as :class:`~cbor2.FrozenDict` instead of :class:`dict`
 * Sets are decoded as :class:`set` instead of :class:`frozenset`
 
-TODO: write the rest of the section
+There are two ways your custom decoder callbacks may want to interact with the decoder's
+``immutable`` flag:
+
+#. Use it to decide what data types to instantiate (e.g. :class:`tuple` vs :class:`list`)
+#. Decode an enclosed item as immutable with ``decoder.decode(immutable=True)``
+
+Here's a simplified example that uses this flag to decode the semantic tag 258 as either a
+:class:`set` or a :class:`frozenset`, depending on the value of the flag::
+
+    import cbor2
+
+    def decode_set(decoder: cbor2.CBORDecoder) -> set | frozenset:
+        # Ignore value sharing and indefinite containers (length == None)
+        # for the sake of simplicity
+        items = decoder.decode(immutable=True)  # all set items must be hashable
+        return frozenset(items) if decoder.immutable else set(items)
+
+    # Encode/decode a regular set
+    value = {"aa", "bb"}
+    assert cbor2.loads(cbor2.dumps(value), semantic_decoders={258: decode_set}) == value
+
+    # Encode/decode a dict that uses a set as a key (must be frozenset to be used as a dict key)
+    value = {frozenset(["aa", "bb"]): "value"}
+    assert cbor2.loads(cbor2.dumps(value), semantic_decoders={258: decode_set}) == value
 
 Customizing the encoder
 -----------------------

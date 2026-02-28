@@ -123,7 +123,7 @@ mod _cbor2 {
             max_depth,
         )?;
         let instance = Bound::new(py, decoder)?;
-        CBORDecoder::decode(&instance)
+        CBORDecoder::decode(&instance, false)
     }
 
     ///  Deserialize an object from a bytestring.
@@ -190,7 +190,7 @@ mod _cbor2 {
             max_depth,
         )?;
         let instance = Bound::new(py, decoder)?;
-        CBORDecoder::decode(&instance)
+        CBORDecoder::decode(&instance, false)
     }
 
     /// Serialize an object to a file.

@@ -226,16 +226,99 @@ impl CBORDecoder {
         }
     }
 
-    fn with_immutable<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
+    fn decode_internal<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        let py = slf.py();
         let mut this = slf.borrow_mut();
-        let old_immutable = this.immutable;
-        this.immutable = true;
-        drop(this);
+        let (major_type, subtype) = this.read_major_and_subtype(py)?;
 
-        let result = f();
+        if this.decode_depth == this.max_depth {
+            return Err(CBORDecodeError::new_err(format!(
+                "maximum container nesting depth ({}) exceeded",
+                this.max_depth
+            )));
+        }
 
-        slf.borrow_mut().immutable = old_immutable;
-        result
+        if let Some(major_decoders) = &this.major_decoders {
+            match major_decoders.bind(py).get_item(&major_type) {
+                Ok(decoder) => {
+                    this.decode_depth += 1;
+                    drop(this);
+                    let result = decoder.call1((slf, subtype));
+                    slf.borrow_mut().decode_depth -= 1;
+                    return result;
+                }
+                Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
+                Err(e) => return Err(e),
+            }
+        }
+
+        this.decode_depth += 1;
+        let result = match major_type {
+            0 => this.decode_uint(py, subtype),
+            1 => this.decode_negint(py, subtype),
+            2 => this.decode_bytestring(py, subtype)?.into_bound_py_any(py),
+            3 => this.decode_string(py, subtype)?.into_bound_py_any(py),
+            4 => {
+                drop(this);
+                let result = Self::decode_array(slf, subtype);
+                this = slf.borrow_mut();
+                result
+            }
+            5 => {
+                drop(this);
+                let result = Self::decode_map(slf, subtype);
+                this = slf.borrow_mut();
+                result
+            }
+            6 => {
+                drop(this);
+                let result = Self::decode_semantic(slf, subtype);
+                this = slf.borrow_mut();
+                result
+            }
+            7 => this.decode_special(py, subtype),
+            _ => {
+                return Err(CBORDecodeError::new_err(format!(
+                    "invalid major type: {major_type}"
+                )));
+            }
+        };
+        this.decode_depth -= 1;
+
+        // Clear shareables and string references to prevent any leaks
+        if this.decode_depth == 0 {
+            this.shareables.clear();
+            this.stringref_namespace = None;
+            this.share_index = None;
+
+            // If fp was seekable and excess data has been read, empty the buffer and rewind the
+            // file
+            if this.available_bytes > 0
+                && let Some(fp) = &this.fp
+            {
+                let offset = -(this.available_bytes as isize);
+                fp.call_method1(py, intern!(py, "seek"), (offset, SEEK_CUR))?;
+                this.buffer = None;
+                this.available_bytes = 0;
+                this.read_position = 0;
+            }
+        }
+
+        result.map_err(|err| {
+            if err.is_instance_of::<CBORDecodeError>(py) {
+                err
+            } else if err.is_instance_of::<PyValueError>(py) {
+                create_exc_from(
+                    py,
+                    CBORDecodeValueError::new_err(err.to_string()),
+                    Some(err),
+                )
+            } else if err.is_instance_of::<PyException>(py) {
+                create_exc_from(py, CBORDecodeError::new_err(err.to_string()), Some(err))
+            } else {
+                err
+            }
+        })
     }
 
     fn add_string_to_namespace(&mut self, string: &Bound<PyAny>, length: usize) {
@@ -440,100 +523,19 @@ impl CBORDecoder {
 
     /// Decode the next value from the stream.
     ///
+    /// :param bool immutable: if :data:`True`, decode the next item as an immutable type
+    ///     (e.g. :class:`tuple` instead of a :class:`list`), if possible
+    /// :return: the decoded object
     /// :raises CBORDecodeError: if there is any problem decoding the stream
-    pub fn decode<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
-        let py = slf.py();
+    #[pyo3(signature = (*, immutable = false))]
+    pub fn decode<'py>(slf: &Bound<'py, Self>, immutable: bool) -> PyResult<Bound<'py, PyAny>> {
         let mut this = slf.borrow_mut();
-        let (major_type, subtype) = this.read_major_and_subtype(py)?;
+        let old_immutable = replace(&mut this.immutable, immutable);
+        drop(this);
 
-        if this.decode_depth == this.max_depth {
-            return Err(CBORDecodeError::new_err(format!(
-                "maximum container nesting depth ({}) exceeded",
-                this.max_depth
-            )));
-        }
-
-        if let Some(major_decoders) = &this.major_decoders {
-            match major_decoders.bind(py).get_item(&major_type) {
-                Ok(decoder) => {
-                    this.decode_depth += 1;
-                    drop(this);
-                    let result = decoder.call1((slf, subtype));
-                    slf.borrow_mut().decode_depth -= 1;
-                    return result;
-                }
-                Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
-                Err(e) => return Err(e),
-            }
-        }
-
-        this.decode_depth += 1;
-        let result = match major_type {
-            0 => this.decode_uint(py, subtype),
-            1 => this.decode_negint(py, subtype),
-            2 => this.decode_bytestring(py, subtype)?.into_bound_py_any(py),
-            3 => this.decode_string(py, subtype)?.into_bound_py_any(py),
-            4 => {
-                drop(this);
-                let result = Self::decode_array(slf, subtype);
-                this = slf.borrow_mut();
-                result
-            }
-            5 => {
-                drop(this);
-                let result = Self::decode_map(slf, subtype);
-                this = slf.borrow_mut();
-                result
-            }
-            6 => {
-                drop(this);
-                let result = Self::decode_semantic(slf, subtype);
-                this = slf.borrow_mut();
-                result
-            }
-            7 => this.decode_special(py, subtype),
-            _ => {
-                return Err(CBORDecodeError::new_err(format!(
-                    "invalid major type: {major_type}"
-                )));
-            }
-        };
-        this.decode_depth -= 1;
-
-        // Clear shareables and string references to prevent any leaks
-        if this.decode_depth == 0 {
-            this.shareables.clear();
-            this.stringref_namespace = None;
-            this.share_index = None;
-
-            // If fp was seekable and excess data has been read, empty the buffer and rewind the
-            // file
-            if this.available_bytes > 0
-                && let Some(fp) = &this.fp
-            {
-                let offset = -(this.available_bytes as isize);
-                fp.call_method1(py, intern!(py, "seek"), (offset, SEEK_CUR))?;
-                this.buffer = None;
-                this.available_bytes = 0;
-                this.read_position = 0;
-            }
-        }
-
-        result.map_err(|err| {
-            if err.is_instance_of::<CBORDecodeError>(py) {
-                err
-            } else if err.is_instance_of::<PyValueError>(py) {
-                create_exc_from(
-                    py,
-                    CBORDecodeValueError::new_err(err.to_string()),
-                    Some(err),
-                )
-            } else if err.is_instance_of::<PyException>(py) {
-                create_exc_from(py, CBORDecodeError::new_err(err.to_string()), Some(err))
-            } else {
-                err
-            }
-        })
+        let result = Self::decode_internal(slf);
+        slf.borrow_mut().immutable = old_immutable;
+        result
     }
 
     /// Wrap the given bytestring as a file and call :meth:`decode` with it as
@@ -556,7 +558,7 @@ impl CBORDecoder {
         let buffer = replace(&mut this.buffer, Some(buf.unbind()));
         drop(this);
 
-        let result = Self::decode(slf);
+        let result = Self::decode_internal(slf);
 
         this = slf.borrow_mut();
         this.fp = fp;
@@ -781,7 +783,7 @@ impl CBORDecoder {
                 let mut items = Vec::<Bound<'_, PyAny>>::new();
                 drop(this);
                 loop {
-                    let obj = Self::decode(slf)?;
+                    let obj = Self::decode_internal(slf)?;
                     if obj.is_exact_instance_of::<BreakMarkerType>() {
                         let tuple = PyTuple::new(py, items)?;
                         slf.borrow_mut().set_shareable(&tuple);
@@ -796,7 +798,7 @@ impl CBORDecoder {
                 this.set_shareable(&list);
                 drop(this);
                 loop {
-                    let obj = Self::decode(slf)?;
+                    let obj = Self::decode_internal(slf)?;
                     if obj.is_exact_instance_of::<BreakMarkerType>() {
                         break Ok(list.into_any());
                     } else {
@@ -809,7 +811,7 @@ impl CBORDecoder {
                 drop(this);
                 let mut items = Vec::<Bound<'_, PyAny>>::with_capacity(length);
                 for _ in 0..length {
-                    items.push(Self::decode(slf)?);
+                    items.push(Self::decode_internal(slf)?);
                 }
                 let tuple = PyTuple::new(py, items)?;
                 slf.borrow_mut().set_shareable(&tuple);
@@ -821,7 +823,7 @@ impl CBORDecoder {
                 this.set_shareable(&list);
                 drop(this);
                 for _ in 0..length {
-                    list.append(Self::decode(slf)?)?;
+                    list.append(Self::decode_internal(slf)?)?;
                 }
                 Ok(list.into_any())
             }
@@ -839,19 +841,19 @@ impl CBORDecoder {
                 // Indefinite length
                 drop(this);
                 loop {
-                    let key = Self::with_immutable(slf, || Self::decode(slf))?;
+                    let key = Self::decode(slf, true)?;
                     if key.is_exact_instance_of::<BreakMarkerType>() {
                         break;
                     }
-                    let value = Self::decode(slf)?;
+                    let value = Self::decode_internal(slf)?;
                     dict.set_item(key, value)?;
                 }
             }
             Some(length) => {
                 drop(this);
                 for _ in 0..length {
-                    let key = Self::with_immutable(slf, || Self::decode(slf))?;
-                    let value = Self::decode(slf)?;
+                    let key = Self::decode(slf, true)?;
+                    let value = Self::decode_internal(slf)?;
                     dict.set_item(key, value)?;
                 }
             }
@@ -860,16 +862,16 @@ impl CBORDecoder {
         // If an object hook was specified, call it now with the constructed dictionary and use its
         // return value as the final dictionary
         if let Some(object_hook) = &slf.borrow().object_hook {
-            match object_hook.bind_borrowed(py).call1((&slf, &dict)) {
+            return match object_hook.bind_borrowed(py).call1((&slf, &dict)) {
                 Ok(retval) => {
-                    return Ok(retval);
+                    Ok(retval)
                 }
                 Err(e) => {
-                    return raise_exc_from(
+                    raise_exc_from(
                         py,
                         CBORDecodeError::new_err("error calling object hook"),
                         Some(e),
-                    );
+                    )
                 }
             }
         }
@@ -935,15 +937,13 @@ impl CBORDecoder {
                     Some(tag_hook) => {
                         let tag_hook = tag_hook.clone_ref(py);
                         drop(this);
-                        bound_tag.borrow_mut().value =
-                            Self::with_immutable(slf, || Self::decode(slf))?.unbind();
+                        bound_tag.borrow_mut().value = Self::decode(slf, true)?.unbind();
                         tag_hook.bind(py).call1((slf, bound_tag))
                     }
                     None => {
                         this.set_shareable(&bound_tag);
                         drop(this);
-                        bound_tag.borrow_mut().value =
-                            Self::with_immutable(slf, || Self::decode(slf))?.unbind();
+                        bound_tag.borrow_mut().value = Self::decode(slf, true)?.unbind();
                         Ok(bound_tag.into_any())
                     }
                 }
@@ -993,7 +993,7 @@ impl CBORDecoder {
     fn decode_datetime_string<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 0
         let py = slf.py();
-        let value = Self::decode(slf)?;
+        let value = Self::decode_internal(slf)?;
         let value_type = value.get_type();
         let mut datetime_str: Bound<PyString> = value.cast_into().map_err(|e| {
             create_exc_from(
@@ -1049,7 +1049,7 @@ impl CBORDecoder {
     fn decode_epoch_datetime<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 1
         let py = slf.py();
-        let value = Self::decode(slf)?;
+        let value = Self::decode_internal(slf)?;
         let utc = UTC.get(py)?;
         DATETIME_FROMTIMESTAMP
             .get(py)?
@@ -1067,7 +1067,7 @@ impl CBORDecoder {
         // Semantic tag 2
         let py = slf.py();
         let int_type = py.get_type::<PyInt>();
-        let value = Self::decode(slf)?;
+        let value = Self::decode_internal(slf)?;
         let int = int_type.call_method1(intern!(py, "from_bytes"), (value, intern!(py, "big")))?;
         Ok(int)
     }
@@ -1076,7 +1076,7 @@ impl CBORDecoder {
         // Semantic tag 3
         let py = slf.py();
         let int_type = py.get_type::<PyInt>();
-        let value = Self::decode(slf)?;
+        let value = Self::decode_internal(slf)?;
         let mut int =
             int_type.call_method1(intern!(py, "from_bytes"), (value, intern!(py, "big")))?;
         int = int.neg()?.add(-1)?;
@@ -1086,7 +1086,7 @@ impl CBORDecoder {
     fn decode_fraction<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 4
         let py = slf.py();
-        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let value = Self::decode(slf, true)?;
         let tuple = value.cast::<PyTuple>().map_err(|e| {
             create_exc_from(
                 py,
@@ -1127,7 +1127,7 @@ impl CBORDecoder {
     fn decode_bigfloat<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 5
         let py = slf.py();
-        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let value = Self::decode(slf, true)?;
         let tuple = value.cast::<PyTuple>().map_err(|e| {
             create_exc_from(
                 py,
@@ -1163,7 +1163,7 @@ impl CBORDecoder {
     fn decode_stringref<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 25
         let py = slf.py();
-        let index: usize = Self::decode(slf)?.extract()?;
+        let index: usize = Self::decode_internal(slf)?.extract()?;
 
         let this = slf.borrow();
         let stringref_namespace = this.stringref_namespace.as_ref().ok_or_else(|| {
@@ -1186,7 +1186,7 @@ impl CBORDecoder {
         this.shareables.push(None);
         drop(this);
 
-        match Self::decode(slf) {
+        match Self::decode_internal(slf) {
             Ok(decoded) => {
                 this = slf.borrow_mut();
                 this.set_shareable(&decoded);
@@ -1203,7 +1203,7 @@ impl CBORDecoder {
     fn decode_sharedref<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 29
         let py = slf.py();
-        let index: usize = Self::decode(slf)?.extract()?;
+        let index: usize = Self::decode_internal(slf)?.extract()?;
         match slf.borrow().shareables.get(index) {
             None => Err(CBORDecodeValueError::new_err(format!(
                 "shared reference {index} not found"
@@ -1218,7 +1218,7 @@ impl CBORDecoder {
     fn decode_rational<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 30
         let py = slf.py();
-        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let value = Self::decode(slf, true)?;
         let tuple = value.cast_into::<PyTuple>().map_err(|e| {
             create_exc_from(
                 py,
@@ -1248,7 +1248,7 @@ impl CBORDecoder {
     fn decode_regexp<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 35
         let py = slf.py();
-        let value = Self::decode(slf)?;
+        let value = Self::decode_internal(slf)?;
         match RE_COMPILE.get(py)?.call1((value,)) {
             Ok(regexp) => Ok(regexp),
             Err(e) => raise_exc_from(
@@ -1262,7 +1262,7 @@ impl CBORDecoder {
     fn decode_mime<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 36
         let py = slf.py();
-        let value = Self::decode(slf)?;
+        let value = Self::decode_internal(slf)?;
         let parser = EMAIL_PARSER.get(py)?.call0()?;
         match parser.call_method1(intern!(py, "parsestr"), (value,)) {
             Ok(message) => Ok(message),
@@ -1277,7 +1277,7 @@ impl CBORDecoder {
     fn decode_uuid<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 37
         let py = slf.py();
-        let value = Self::decode(slf)?;
+        let value = Self::decode_internal(slf)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item(intern!(py, "bytes"), value)?;
         match UUID_TYPE.get(py)?.call((), Some(&kwargs)) {
@@ -1293,7 +1293,7 @@ impl CBORDecoder {
     fn decode_ipv4<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 52
         let py = slf.py();
-        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let value = Self::decode(slf, true)?;
         let addr = if let Ok(bytes) = value.cast::<PyBytes>() {
             // The decoded value was a bytestring, so this is an IPv4 address
             IPV4ADDRESS_TYPE.get(py)?.call1((bytes,))?
@@ -1332,7 +1332,7 @@ impl CBORDecoder {
         // Semantic tag 54
         let py = slf.py();
         let ipv6addr_class = IPV6ADDRESS_TYPE.get(py)?;
-        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let value = Self::decode(slf, true)?;
         let addr = if let Ok(bytes) = value.cast::<PyBytes>() {
             // The decoded value was a bytestring, so this is an IPv6 address
             ipv6addr_class.call1((bytes,))?
@@ -1396,7 +1396,7 @@ impl CBORDecoder {
 
     fn decode_epoch_date<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 100
-        let value = Self::decode(slf)?.extract::<i32>()? + 719163;
+        let value = Self::decode_internal(slf)?.extract::<i32>()? + 719163;
         let date = DATE_FROMORDINAL.get(slf.py())?.call1((value,))?;
         Ok(date)
     }
@@ -1408,7 +1408,7 @@ impl CBORDecoder {
         this.stringref_namespace = Some(Vec::new());
         drop(this);
 
-        let value = Self::decode(slf)?;
+        let value = Self::decode_internal(slf)?;
 
         slf.borrow_mut().stringref_namespace = old_namespace;
         Ok(value)
@@ -1417,8 +1417,7 @@ impl CBORDecoder {
     fn decode_set<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 258
         let py = slf.py();
-        let tuple: Bound<'_, PyTuple> =
-            Self::with_immutable(slf, || Self::decode(slf))?.cast_into()?;
+        let tuple: Bound<'_, PyTuple> = Self::decode(slf, true)?.cast_into()?;
         let set = if slf.borrow().immutable {
             PyFrozenSet::new(py, tuple.iter())?.into_any()
         } else {
@@ -1430,7 +1429,7 @@ impl CBORDecoder {
     fn decode_ipaddress<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 260 (deprecated)
         let py = slf.py();
-        let value = Self::decode(slf)?.cast_into::<PyBytes>().map_err(|e| {
+        let value = Self::decode_internal(slf)?.cast_into::<PyBytes>().map_err(|e| {
             create_exc_from(
                 py,
                 CBORDecodeValueError::new_err("invalid IP address"),
@@ -1450,7 +1449,7 @@ impl CBORDecoder {
     fn decode_ipnetwork<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 261 (deprecated)
         let py = slf.py();
-        let value: Bound<PyDict> = Self::decode(slf)?.cast_into::<PyDict>()?;
+        let value: Bound<PyDict> = Self::decode_internal(slf)?.cast_into::<PyDict>()?;
         if value.len() != 1 {
             return Err(CBORDecodeValueError::new_err(format!(
                 "invalid input map length for IP network: {}",
@@ -1482,7 +1481,7 @@ impl CBORDecoder {
 
     fn decode_date_string<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 1004
-        let value = Self::decode(slf)?;
+        let value = Self::decode_internal(slf)?;
         let date = DATE_FROMISOFORMAT.get(slf.py())?.call1((value,))?;
         Ok(date)
     }
@@ -1490,7 +1489,7 @@ impl CBORDecoder {
     fn decode_complex<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 43000
         let py = slf.py();
-        let value = Self::with_immutable(slf, || Self::decode(slf))?;
+        let value = Self::decode(slf, true)?;
         let tuple = value.cast_into::<PyTuple>().map_err(|e| {
             create_exc_from(
                 py,
@@ -1523,6 +1522,6 @@ impl CBORDecoder {
 
     fn decode_self_describe_cbor<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 55799
-        Self::decode(slf)
+        Self::decode_internal(slf)
     }
 }
