@@ -16,6 +16,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   (`#275 <https://github.com/agronholm/cbor2/pull/275>`_; PR by @andreer)
 - Fixed C encoder not respecting string referencing when encoding string-type datetimes (tag 0)
   (`#254 <https://github.com/agronholm/cbor2/issues/254>`_)
+- Fixed a missed check for an exception in the C implementation of ``CBOREncoder.encode_shared()``
+  (`#287 <https://github.com/agronholm/cbor2/issues/287>`_)
 
 **5.8.0** (2025-12-30)
 

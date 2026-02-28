@@ -1322,7 +1322,10 @@ encode_shared(CBOREncoderObject *self, EncodeFunction *encoder,
                 if (tuple) {
                     if (PyDict_SetItem(self->shared, id, tuple) == 0) {
                         ret = encoder(self, value);
-                        PyDict_DelItem(self->shared, id);
+                        if (PyDict_DelItem(self->shared, id) == -1) {
+                            Py_XDECREF(ret);
+                            ret = NULL;
+                        }
                     }
                     Py_DECREF(tuple);
                 }
@@ -1938,10 +1941,12 @@ encode_canonical_map(CBOREncoderObject *self, PyObject *value)
 
     // Don't generate string references when sorting keys
     self->string_referencing = false;
-    if (PyDict_Check(value))
+    if (PyDict_Check(value)) {
         list = dict_to_canonical_list(self, value);
-    else
+    }
+    else {
         list = mapping_to_canonical_list(self, value);
+    }
     self->string_referencing = string_referencing_old;
 
     if (list) {
