@@ -6,6 +6,7 @@
 // Default readahead buffer size for streaming reads.
 // Set to 1 for backwards compatibility (no buffering).
 #define CBOR2_DEFAULT_READ_SIZE 1
+#define CBOR2_DEFAULT_MAX_DEPTH 500
 
 // Forward declaration for function pointer typedef
 struct CBORDecoderObject_;
@@ -21,6 +22,7 @@ typedef struct CBORDecoderObject_ {
     PyObject *shareables;
     PyObject *stringref_namespace;
     PyObject *str_errors;
+    ssize_t max_depth;
     bool immutable;
     Py_ssize_t shared_index;
     Py_ssize_t decode_depth;

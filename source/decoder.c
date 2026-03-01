@@ -153,6 +153,7 @@ CBORDecoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         Py_INCREF(Py_None);
         self->object_hook = Py_None;
         self->str_errors = PyBytes_FromString("strict");
+        self->max_depth = CBOR2_DEFAULT_MAX_DEPTH;
         self->immutable = false;
         self->shared_index = -1;
         self->decode_depth = 0;
@@ -170,19 +171,19 @@ error:
 
 
 // CBORDecoder.__init__(self, fp=None, tag_hook=None, object_hook=None,
-//                      str_errors='strict', read_size=1)
+//                      str_errors='strict', read_size=1, *, max_depth=100)
 int
 CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {
-        "fp", "tag_hook", "object_hook", "str_errors", "read_size", NULL
+        "fp", "tag_hook", "object_hook", "str_errors", "read_size", "max_depth", NULL
     };
     PyObject *fp = NULL, *tag_hook = NULL, *object_hook = NULL,
              *str_errors = NULL;
     Py_ssize_t read_size = CBOR2_DEFAULT_READ_SIZE;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOn", keywords,
-                &fp, &tag_hook, &object_hook, &str_errors, &read_size))
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOnn", keywords,
+                &fp, &tag_hook, &object_hook, &str_errors, &read_size, &self->max_depth))
         return -1;
 
     if (read_size < 1) {
@@ -2184,9 +2185,17 @@ decode(CBORDecoderObject *self, DecodeOptions options)
         self->shared_index = -1;
     }
 
+    if (self->decode_depth == self->max_depth) {
+        PyErr_Format(
+            _CBOR2_CBORDecodeError,
+            "maximum container nesting depth (%u) exceeded", self->max_depth);
+        return NULL;
+    }
+
     if (Py_EnterRecursiveCall(" in CBORDecoder.decode"))
         return NULL;
 
+    self->decode_depth++;
     if (self->fp_read(self, &lead.byte, 1) == 0) {
         switch (lead.major) {
             case 0: ret = decode_uint(self, lead.subtype);       break;
@@ -2202,6 +2211,8 @@ decode(CBORDecoderObject *self, DecodeOptions options)
     }
 
     Py_LeaveRecursiveCall();
+    self->decode_depth--;
+
     if (options & DECODE_IMMUTABLE)
         self->immutable = old_immutable;
     if (options & DECODE_UNSHARED)
@@ -2226,10 +2237,7 @@ PyObject *
 CBORDecoder_decode(CBORDecoderObject *self)
 {
     PyObject *ret;
-    self->decode_depth++;
     ret = decode(self, DECODE_NORMAL);
-    self->decode_depth--;
-    assert(self->decode_depth >= 0);
     if (self->decode_depth == 0) {
         clear_shareable_state(self);
     }
@@ -2253,7 +2261,6 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
     if (!buf)
         return NULL;
 
-    self->decode_depth++;
     save_read = self->read;
     Py_INCREF(save_read);  // Keep alive while we use a different read method
     save_read_pos = self->read_pos;
@@ -2273,7 +2280,6 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
         }
         Py_DECREF(save_read);
         Py_DECREF(buf);
-        self->decode_depth--;
         return NULL;
     }
 
@@ -2282,7 +2288,6 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
     Py_XDECREF(self->read);  // Decrement BytesIO read method
     self->read = save_read;  // Restore saved read (already has correct refcount)
     Py_DECREF(buf);
-    self->decode_depth--;
 
     if (is_nested) {
         PyMem_Free(self->readahead);
@@ -2291,7 +2296,6 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
     self->read_pos = save_read_pos;
     self->read_len = save_read_len;
 
-    assert(self->decode_depth >= 0);
     if (self->decode_depth == 0) {
         clear_shareable_state(self);
     }

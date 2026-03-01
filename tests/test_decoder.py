@@ -138,6 +138,21 @@ def test_stream_position_after_decode(impl):
         assert stream.read() == extra_data
 
 
+class TestMaximumDepth:
+    def test_default(self, impl) -> None:
+        with pytest.raises(
+            impl.CBORDecodeError,
+            match="maximum container nesting depth \\(500\\) exceeded",
+        ):
+            impl.loads(b"\x81" * 1000 + b"\x80")
+
+    def test_explicit(self, impl) -> None:
+        with pytest.raises(
+            impl.CBORDecodeError, match=r"maximum container nesting depth \(9\) exceeded"
+        ):
+            impl.loads(b"\x81" * 10 + b"\x80", max_depth=9)
+
+
 @pytest.mark.parametrize(
     "payload, expected",
     [

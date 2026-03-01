@@ -7,6 +7,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
+  containers (CVE-2026-26209)
 - Changed the default ``read_size`` from 4096 to 1 for backwards compatibility.
   The buffered reads introduced in 5.8.0 could cause issues when code needs to
   access the stream position after decoding. Users can opt-in to faster decoding
