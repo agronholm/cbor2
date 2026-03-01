@@ -16,13 +16,23 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   or ``IPv6Interface`` if the address contains host bits
 - **BACKWARD INCOMPATIBLE** Changed the encoding of IP addresses to use the semantic tags 52 and 54
   instead of the deprecated 260 and 261 (`#232 <https://github.com/agronholm/cbor2/issues/232>`_)
-- Added configurable maximum depth for container nesting (via the ``max_depth`` parameter)
 - Fixed string references to work with indefinite-length (byte/unicode) strings too
 
 **UNRELEASED**
 
+- Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
+  containers (CVE-2026-26209)
+- Changed the default ``read_size`` from 4096 to 1 for backwards compatibility.
+  The buffered reads introduced in 5.8.0 could cause issues when code needs to
+  access the stream position after decoding. Users can opt-in to faster decoding
+  by passing ``read_size=4096`` when they don't need to access the stream directly
+  after decoding. Added a direct read path for ``read_size=1`` to avoid buffer
+  management overhead.
+  (`#275 <https://github.com/agronholm/cbor2/pull/275>`_; PR by @andreer)
 - Fixed C encoder not respecting string referencing when encoding string-type datetimes (tag 0)
   (`#254 <https://github.com/agronholm/cbor2/issues/254>`_)
+- Fixed a missed check for an exception in the C implementation of ``CBOREncoder.encode_shared()``
+  (`#287 <https://github.com/agronholm/cbor2/issues/287>`_)
 
 **5.8.0** (2025-12-30)
 

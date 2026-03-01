@@ -29,6 +29,7 @@ from uuid import UUID
 
 import pytest
 from _pytest.fixtures import FixtureRequest
+
 from cbor2 import (
     CBORDecodeEOF,
     CBORDecodeError,
@@ -150,17 +151,6 @@ def test_decode_from_bytes() -> None:
             decoder.decode_from_bytes("foo")  # type: ignore[arg-type]
 
 
-def test_stream_position_after_decode() -> None:
-    """Test that the stream position is exactly at the end of the decoded CBOR value."""
-    # CBOR: integer 1, followed by non-CBOR data ("extra")
-    stream = BytesIO(b"\x01extra")
-    assert load(stream) == 1
-    # Stream position should be exactly at the end of CBOR data
-    assert stream.tell() == 1
-    # Should be able to read the extra data
-    assert stream.read() == b"extra"
-
-
 def test_non_seekable_fp() -> None:
     sock1, sock2 = socketpair()
     with sock1, sock2:
@@ -185,6 +175,17 @@ class TestMaximumDepth:
             CBORDecodeError, match=r"maximum container nesting depth \(9\) exceeded"
         ):
             loads(b"\x81" * 10 + b"\x80", max_depth=9)
+
+
+def test_stream_position_after_decode() -> None:
+    """Test that the stream position is exactly at the end of the decoded CBOR value."""
+    # CBOR: integer 1, followed by non-CBOR data ("extra")
+    stream = BytesIO(b"\x01extra")
+    assert load(stream) == 1
+    # Stream position should be exactly at the end of CBOR data
+    assert stream.tell() == 1
+    # Should be able to read the extra data
+    assert stream.read() == b"extra"
 
 
 @pytest.mark.parametrize(
