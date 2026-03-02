@@ -1,6 +1,4 @@
-use crate::_cbor2::SYS_MAXSIZE;
-use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
-use crate::_cbor2::{DEFAULT_MAX_DEPTH, DEFAULT_READ_SIZE};
+use crate::_cbor2::{BREAK_MARKER, UNDEFINED, SYS_MAXSIZE};
 use crate::types::{
     BreakMarkerType, CBORDecodeEOF, CBORDecodeError, CBORDecodeValueError, CBORSimpleValue,
     CBORTag, FrozenDict, DECIMAL_TYPE, FRACTION_TYPE, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE,
@@ -73,7 +71,8 @@ static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
 /// :param str_errors:
 ///     determines how to handle unicode decoding errors (see the `Error Handlers`_
 ///     section in the standard library documentation for details)
-/// :param int read_size: minimum amount of bytes to read at once (if ``fp`` is seekable)
+/// :param int read_size: minimum amount of bytes to read at once
+///     (ignored if ``fp`` is not seekable)
 /// :param int max_depth:
 ///     maximum allowed depth for nested containers
 ///
@@ -349,8 +348,8 @@ impl CBORDecoder {
         major_decoders = None,
         semantic_decoders = None,
         str_errors = "strict",
-        read_size = DEFAULT_READ_SIZE,
-        max_depth = DEFAULT_MAX_DEPTH,
+        read_size = 4096,
+        max_depth = 100,
     ))]
     pub fn new(
         py: Python<'_>,

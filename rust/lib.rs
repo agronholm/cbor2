@@ -59,37 +59,36 @@ mod _cbor2 {
     pub static UNDEFINED: PyOnceLock<Py<UndefinedType>> = PyOnceLock::new();
     pub static BREAK_MARKER: PyOnceLock<Py<BreakMarkerType>> = PyOnceLock::new();
 
-    pub const DEFAULT_READ_SIZE: usize = 4096;
-    pub const DEFAULT_MAX_DEPTH: usize = 100;
-
     ///  Deserialize an object from an open file.
     ///
-    ///  :param tag_hook:
-    ///      callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
-    ///      to be decoded. This callback is invoked for any tags for which there is no
-    ///      specific decoder. The return value is substituted for the :class:`.CBORTag`
-    ///      object in the deserialized output
-    ///  :param object_hook:
-    ///      callable that takes 2 arguments: the decoder instance, and a dictionary. This
-    ///      callback is invoked for each deserialized :class:`dict` object. The return value
-    ///      is substituted for the dict in the deserialized output.
-    ///  :param major_decoders:
-    ///      An optional mapping for overriding the decoders for select major types.
-    ///      The value is a mapping of major types (integers 0-7) to callable that take 2
-    ///      arguments: the decoder instance and a numeric subtype.
-    ///  :param semantic_decoders:
-    ///      An optional mapping for overriding the decoding for select semantic tags.
-    ///      The value is a mapping of semantic tags (integers) to callables that take
-    ///      the decoder instance as the sole argument.
-    ///  :param str_errors:
-    ///      determines how to handle unicode decoding errors (see the `Error Handlers`_
-    ///      section in the standard library documentation for details)
-    ///  :param int max_depth:
-    ///      maximum allowed depth for nested containers
-    ///  :return:
-    ///      the deserialized object
+    /// :param tag_hook:
+    ///     callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
+    ///     to be decoded. This callback is invoked for any tags for which there is no
+    ///     specific decoder. The return value is substituted for the :class:`.CBORTag`
+    ///     object in the deserialized output
+    /// :param object_hook:
+    ///     callable that takes 2 arguments: the decoder instance, and a dictionary. This
+    ///     callback is invoked for each deserialized :class:`dict` object. The return value
+    ///     is substituted for the dict in the deserialized output.
+    /// :param major_decoders:
+    ///     An optional mapping for overriding the decoders for select major types.
+    ///     The value is a mapping of major types (integers 0-7) to callable that take 2
+    ///     arguments: the decoder instance and a numeric subtype.
+    /// :param semantic_decoders:
+    ///     An optional mapping for overriding the decoding for select semantic tags.
+    ///     The value is a mapping of semantic tags (integers) to callables that take
+    ///     the decoder instance as the sole argument.
+    /// :param str_errors:
+    ///     determines how to handle unicode decoding errors (see the `Error Handlers`_
+    ///     section in the standard library documentation for details)
+    /// :param int read_size: minimum amount of bytes to read at once
+    ///     (ignored if ``fp`` is not seekable)
+    /// :param int max_depth:
+    ///     maximum allowed depth for nested containers
+    /// :return:
+    ///     the deserialized object
     ///
-    ///  .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
+    /// .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
     #[pyfunction]
     #[pyo3(signature = (
         fp,
@@ -99,7 +98,8 @@ mod _cbor2 {
         major_decoders = None,
         semantic_decoders = None,
         str_errors = "strict",
-        max_depth = DEFAULT_MAX_DEPTH,
+        read_size = 4096,
+        max_depth = 100,
     ))]
     fn load<'py>(
         py: Python<'py>,
@@ -109,6 +109,7 @@ mod _cbor2 {
         major_decoders: Option<&Bound<'py, PyMapping>>,
         semantic_decoders: Option<&Bound<'py, PyMapping>>,
         str_errors: &str,
+        read_size: usize,
         max_depth: usize,
     ) -> PyResult<Bound<'py, PyAny>> {
         let decoder = CBORDecoder::new(
@@ -119,43 +120,43 @@ mod _cbor2 {
             major_decoders,
             semantic_decoders,
             str_errors,
-            DEFAULT_READ_SIZE,
+            read_size,
             max_depth,
         )?;
         let instance = Bound::new(py, decoder)?;
         CBORDecoder::decode(&instance, false)
     }
 
-    ///  Deserialize an object from a bytestring.
+    /// Deserialize an object from a bytestring.
     ///
-    ///  :param bytes data:
-    ///      the bytestring to deserialize
-    ///  :param tag_hook:
-    ///      callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
-    ///      to be decoded. This callback is invoked for any tags for which there is no
-    ///      built-in decoder. The return value is substituted for the :class:`.CBORTag`
-    ///      object in the deserialized output
-    ///  :param object_hook:
-    ///      callable that takes 2 arguments: the decoder instance, and a dictionary. This
-    ///      callback is invoked for each deserialized :class:`dict` object. The return value
-    ///      is substituted for the dict in the deserialized output.
-    ///  :param major_decoders:
-    ///      An optional mapping for overriding the decoders for select major types.
-    ///      The value is a mapping of major types (integers 0-7) to callable that take 2
-    ///      arguments: the decoder instance and a numeric subtype.
-    ///  :param semantic_decoders:
-    ///      An optional mapping for overriding the decoding for select semantic tags.
-    ///      The value is a mapping of semantic tags (integers) to callables that take
-    ///      the decoder instance as the sole argument.
-    ///  :param str_errors:
-    ///      determines how to handle unicode decoding errors (see the `Error Handlers`_
-    ///      section in the standard library documentation for details)
-    ///  :param int max_depth:
-    ///      maximum allowed depth for nested containers
-    ///  :return:
-    ///      the deserialized object
+    /// :param bytes data:
+    ///     the bytestring to deserialize
+    /// :param tag_hook:
+    ///     callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
+    ///     to be decoded. This callback is invoked for any tags for which there is no
+    ///     built-in decoder. The return value is substituted for the :class:`.CBORTag`
+    ///     object in the deserialized output
+    /// :param object_hook:
+    ///     callable that takes 2 arguments: the decoder instance, and a dictionary. This
+    ///     callback is invoked for each deserialized :class:`dict` object. The return value
+    ///     is substituted for the dict in the deserialized output.
+    /// :param major_decoders:
+    ///     An optional mapping for overriding the decoders for select major types.
+    ///     The value is a mapping of major types (integers 0-7) to callable that take 2
+    ///     arguments: the decoder instance and a numeric subtype.
+    /// :param semantic_decoders:
+    ///     An optional mapping for overriding the decoding for select semantic tags.
+    ///     The value is a mapping of semantic tags (integers) to callables that take
+    ///     the decoder instance as the sole argument.
+    /// :param str_errors:
+    ///     determines how to handle unicode decoding errors (see the `Error Handlers`_
+    ///     section in the standard library documentation for details)
+    /// :param int max_depth:
+    ///     maximum allowed depth for nested containers
+    /// :return:
+    ///     the deserialized object
     ///
-    ///  .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
+    /// .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
     #[pyfunction]
     #[pyo3(signature = (
         data,
@@ -165,7 +166,7 @@ mod _cbor2 {
         major_decoders = None,
         semantic_decoders = None,
         str_errors = "strict",
-        max_depth = DEFAULT_MAX_DEPTH,
+        max_depth = 100,
     ))]
     fn loads<'py>(
         py: Python<'py>,
@@ -186,7 +187,7 @@ mod _cbor2 {
             major_decoders,
             semantic_decoders,
             str_errors,
-            DEFAULT_READ_SIZE,
+            0,
             max_depth,
         )?;
         let instance = Bound::new(py, decoder)?;
