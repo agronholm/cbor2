@@ -1,92 +1,102 @@
 import re
 from binascii import unhexlify
 from collections import OrderedDict
+from collections.abc import Set
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from email.mime.text import MIMEText
 from fractions import Fraction
 from io import BytesIO
-from ipaddress import ip_address, ip_network
+from ipaddress import (
+    IPv4Address,
+    IPv4Interface,
+    IPv4Network,
+    IPv6Address,
+    IPv6Interface,
+    IPv6Network,
+)
+from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
+from _pytest.fixtures import FixtureRequest, SubRequest
+from cbor2 import (
+    CBOREncodeError,
+    CBOREncoder,
+    CBORSimpleValue,
+    CBORTag,
+    FrozenDict,
+    dump,
+    dumps,
+    loads,
+    shareable_encoder,
+    undefined,
+)
 from hypothesis import given
-
-from cbor2 import FrozenDict, shareable_encoder
 
 from .hypothesis_strategies import compound_types_strategy
 
 
-def test_fp_attr(impl):
-    with pytest.raises(ValueError):
-        impl.CBOREncoder(None)
-    with pytest.raises(ValueError):
+class TestFpAttribute:
+    def test_none(self) -> None:
+        with pytest.raises(ValueError, match=r"fp must be a writable file-like object"):
+            CBOREncoder(None)  # type: ignore[arg-type]
 
-        class A:
-            pass
+    def test_not_writable(self, tmp_path: Path) -> None:
+        # Test for fp not being writable
+        path = tmp_path.joinpath("foo.cbor")
+        path.touch()
+        with (
+            pytest.raises(ValueError, match=r"fp must be a writable file-like object"),
+            path.open("rb") as fp,
+        ):
+            CBOREncoder(fp)
 
-        foo = A()
-        foo.write = None
-        impl.CBOREncoder(foo)
-    with BytesIO() as stream:
-        encoder = impl.CBOREncoder(stream)
-        assert encoder.fp is stream
+    def test_delete(self) -> None:
+        decoder = CBOREncoder(BytesIO())
         with pytest.raises(AttributeError):
-            del encoder.fp
+            del decoder.fp
 
 
-def test_default_attr(impl):
+def test_default_attr() -> None:
     with BytesIO() as stream:
-        encoder = impl.CBOREncoder(stream)
+        encoder = CBOREncoder(stream)
         assert encoder.default is None
-        with pytest.raises(ValueError):
-            encoder.default = 1
+        with pytest.raises(TypeError):
+            encoder.default = 1  # type: ignore[assignment]
         with pytest.raises(AttributeError):
             del encoder.default
 
 
-def test_timezone_attr(impl):
+def test_timezone_attr() -> None:
     with BytesIO() as stream:
-        encoder = impl.CBOREncoder(stream)
+        encoder = CBOREncoder(stream)
         assert encoder.timezone is None
-        with pytest.raises(ValueError):
-            encoder.timezone = 1
+        with pytest.raises(TypeError):
+            encoder.timezone = 1  # type: ignore[assignment]
         with pytest.raises(AttributeError):
             del encoder.timezone
 
 
-def test_write(impl):
+def test_write() -> None:
     with BytesIO() as stream:
-        encoder = impl.CBOREncoder(stream)
+        encoder = CBOREncoder(stream)
         encoder.write(b"foo")
         assert stream.getvalue() == b"foo"
         with pytest.raises(TypeError):
-            encoder.write(1)
+            encoder.write(1)  # type: ignore[arg-type]
 
 
-def test_encoders_load_type(impl):
-    with BytesIO() as stream:
-        encoder = impl.CBOREncoder(stream)
-        encoder._encoders[(1, 2, 3)] = lambda self, value: None
-        with pytest.raises(ValueError) as exc:
-            encoder.encode(object())
-            assert str(exc.value).endswith(
-                "invalid deferred encoder type (1, 2, 3) (must be a 2-tuple "
-                "of module name and type name, e.g. ('collections', "
-                "'defaultdict'))"
-            )
+def test_encode_length() -> None:
+    fp = BytesIO()
+    encoder = CBOREncoder(fp)
 
-
-def test_encode_length(impl):
-    fp = None
-    encoder = None
-
-    def reset_encoder():
+    def reset_encoder() -> None:
         nonlocal fp, encoder
         fp = BytesIO()
-        encoder = impl.CBOREncoder(fp)
+        encoder = CBOREncoder(fp)
 
-    reset_encoder()
     encoder.encode_length(0, 1)
     assert fp.getvalue() == b"\x01"
 
@@ -116,24 +126,13 @@ def test_encode_length(impl):
     assert fp.getvalue() == b"\xff"
 
 
-def test_canonical_attr(impl):
+def test_canonical_attr() -> None:
     # Another test purely for coverage in the C variant
     with BytesIO() as stream:
-        enc = impl.CBOREncoder(stream)
+        enc = CBOREncoder(stream)
         assert not enc.canonical
-        enc = impl.CBOREncoder(stream, canonical=True)
+        enc = CBOREncoder(stream, canonical=True)
         assert enc.canonical
-
-
-def test_dump(impl):
-    with pytest.raises(TypeError):
-        impl.dump()
-    with pytest.raises(TypeError):
-        impl.dumps()
-    assert impl.dumps(obj=1) == b"\x01"
-    with BytesIO() as stream:
-        impl.dump(fp=stream, obj=1)
-        assert stream.getvalue() == b"\x01"
 
 
 @pytest.mark.parametrize(
@@ -158,9 +157,8 @@ def test_dump(impl):
         (-1000, "3903e7"),
     ],
 )
-def test_integer(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
+def test_integer(value: int, expected: str) -> None:
+    assert dumps(value) == unhexlify(expected)
 
 
 @pytest.mark.parametrize(
@@ -174,9 +172,8 @@ def test_integer(impl, value, expected):
         (float("-inf"), "f9fc00"),
     ],
 )
-def test_float(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
+def test_float(value: float, expected: str) -> None:
+    assert dumps(value) == unhexlify(expected)
 
 
 @pytest.mark.parametrize(
@@ -186,14 +183,13 @@ def test_float(impl, value, expected):
         (b"\x01\x02\x03\x04", "4401020304"),
     ],
 )
-def test_bytestring(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
+def test_bytestring(value: bytes, expected: str) -> None:
+    assert dumps(value) == unhexlify(expected)
 
 
-def test_bytearray(impl):
+def test_bytearray() -> None:
     expected = unhexlify("4401020304")
-    assert impl.dumps(bytearray(b"\x01\x02\x03\x04")) == expected
+    assert dumps(bytearray(b"\x01\x02\x03\x04")) == expected
 
 
 @pytest.mark.parametrize(
@@ -207,43 +203,45 @@ def test_bytearray(impl):
         ("\u6c34", "63e6b0b4"),
     ],
 )
-def test_string(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
+def test_string(value: str, expected: str) -> None:
+    assert dumps(value) == unhexlify(expected)
 
 
 @pytest.fixture(
-    params=[(False, "f4"), (True, "f5"), (None, "f6"), ("undefined", "f7")],
-    ids=["false", "true", "null", "undefined"],
+    params=[
+        pytest.param((False, "f4"), id="false"),
+        pytest.param((True, "f5"), id="true"),
+        pytest.param((None, "f6"), id="null"),
+        pytest.param((undefined, "f7"), id="undefined"),
+    ]
 )
-def special_values(request, impl):
+def special_values(request: FixtureRequest) -> tuple[object, str]:
     value, expected = request.param
     if value == "undefined":
-        value = impl.undefined
+        value = undefined
+
     return value, expected
 
 
-def test_special(impl, special_values):
+def test_special(special_values: tuple[object, str]) -> None:
     value, expected = special_values
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
+    assert dumps(value) == unhexlify(expected)
 
 
 @pytest.fixture(params=[(0, "e0"), (2, "e2"), (23, "f7"), (32, "f820")])
-def simple_values(request, impl):
+def simple_values(request: SubRequest) -> tuple[CBORSimpleValue, str]:
     value, expected = request.param
-    return impl.CBORSimpleValue(value), expected
+    return CBORSimpleValue(value), expected
 
 
-def test_simple_value(impl, simple_values):
+def test_simple_value(simple_values: tuple[CBORSimpleValue, str]) -> None:
     value, expected = simple_values
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
+    assert dumps(value) == unhexlify(expected)
 
 
-def test_simple_val_as_key(impl):
-    payload = {impl.CBORSimpleValue(99): 1}
-    result = impl.dumps(payload)
+def test_simple_val_as_key() -> None:
+    payload = {CBORSimpleValue(99): 1}
+    result = dumps(payload)
     assert result == unhexlify("A1F86301")
 
 
@@ -255,83 +253,86 @@ def test_simple_val_as_key(impl):
 @pytest.mark.parametrize(
     "value, as_timestamp, expected",
     [
-        (
+        pytest.param(
             datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc),
             False,
             "c074323031332d30332d32315432303a30343a30305a",
+            id="datetime/utc",
         ),
-        (
+        pytest.param(
             datetime(2013, 3, 21, 20, 4, 0, 380841, tzinfo=timezone.utc),
             False,
             "c0781b323031332d30332d32315432303a30343a30302e3338303834315a",
+            id="datetime+micro/utc",
         ),
-        (
+        pytest.param(
             datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))),
             False,
             "c07819323031332d30332d32315432323a30343a30302b30323a3030",
+            id="datetime/eet",
         ),
-        (
+        pytest.param(
             datetime(2013, 3, 21, 20, 4, 0),
             False,
             "c074323031332d30332d32315432303a30343a30305a",
+            id="naive",
         ),
-        (datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc), True, "c11a514b67b0"),
-        (
+        pytest.param(
+            datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc),
+            True,
+            "c11a514b67b0",
+            id="timestamp/utc",
+        ),
+        pytest.param(
             datetime(2013, 3, 21, 20, 4, 0, 123456, tzinfo=timezone.utc),
             True,
             "c1fb41d452d9ec07e6b4",
+            id="timestamp+micro/utc",
         ),
-        (
+        pytest.param(
             datetime(2013, 3, 21, 22, 4, 0, tzinfo=timezone(timedelta(hours=2))),
             True,
             "c11a514b67b0",
+            id="timestamp/eet",
         ),
     ],
-    ids=[
-        "datetime/utc",
-        "datetime+micro/utc",
-        "datetime/eet",
-        "naive",
-        "timestamp/utc",
-        "timestamp+micro/utc",
-        "timestamp/eet",
-    ],
 )
-def test_datetime(impl, value, as_timestamp, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc) == expected
+def test_datetime(value: datetime, as_timestamp: bool, expected: str) -> None:
+    assert dumps(value, datetime_as_timestamp=as_timestamp, timezone=timezone.utc) == unhexlify(
+        expected
+    )
 
 
 @pytest.mark.parametrize(
     "value, as_timestamp, expected",
     [
-        (
+        pytest.param(
             date(2013, 3, 21),
             False,
             "d903ec6a323031332d30332d3231",
+            id="date/string",
         ),
-        (
+        pytest.param(
             date(2018, 12, 31),
             True,
             "d8641945e8",
+            id="date/timestamp",
         ),
     ],
-    ids=["date/string", "date/timestamp"],
 )
-def test_date(impl, value, as_timestamp, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value, datetime_as_timestamp=as_timestamp) == expected
+def test_date(value: date, as_timestamp: bool, expected: str) -> None:
+    assert dumps(value, datetime_as_timestamp=as_timestamp) == unhexlify(expected)
 
 
-def test_date_as_datetime(impl):
+def test_date_as_datetime() -> None:
     expected = unhexlify("c074323031332d30332d32315430303a30303a30305a")
-    assert impl.dumps(date(2013, 3, 21), timezone=timezone.utc, date_as_datetime=True) == expected
+    assert dumps(date(2013, 3, 21), timezone=timezone.utc, date_as_datetime=True) == expected
 
 
-def test_naive_datetime(impl):
+def test_naive_datetime() -> None:
     """Test that naive datetimes are gracefully rejected when no timezone has been set."""
-    with pytest.raises(impl.CBOREncodeError) as exc:
-        impl.dumps(datetime(2013, 3, 21))
+    with pytest.raises(CBOREncodeError) as exc:
+        dumps(datetime(2013, 3, 21))
         exc.match(
             "naive datetime datetime.datetime(2013, 3, 21) encountered "
             "and no default timezone has been set"
@@ -342,17 +343,15 @@ def test_naive_datetime(impl):
 @pytest.mark.parametrize(
     "value, expected",
     [
-        (Decimal("14.123"), "c4822219372b"),
-        (Decimal("-14.123"), "C4822239372A"),
-        (Decimal("NaN"), "f97e00"),
-        (Decimal("Infinity"), "f97c00"),
-        (Decimal("-Infinity"), "f9fc00"),
+        pytest.param(Decimal("14.123"), "c4822219372b", id="normal"),
+        pytest.param(Decimal("-14.123"), "C4822239372A", id="negative"),
+        pytest.param(Decimal("NaN"), "f97e00", id="nan"),
+        pytest.param(Decimal("Infinity"), "f97c00", id="inf"),
+        pytest.param(Decimal("-Infinity"), "f9fc00", id="neginf"),
     ],
-    ids=["normal", "negative", "nan", "inf", "neginf"],
 )
-def test_decimal(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
+def test_decimal(value: Decimal, expected: str) -> None:
+    assert dumps(value) == unhexlify(expected)
 
 
 @pytest.mark.parametrize(
@@ -366,354 +365,355 @@ def test_decimal(impl, value, expected):
         (complex(float("nan"), float("inf")), "d9a7f882f97e00f97c00"),
     ],
 )
-def test_complex(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
+def test_complex(value: complex, expected: str) -> None:
+    assert dumps(value) == unhexlify(expected)
 
 
-def test_rational(impl):
-    expected = unhexlify("d81e820205")
-    assert impl.dumps(Fraction(2, 5)) == expected
+def test_rational() -> None:
+    assert dumps(Fraction(2, 5)) == unhexlify("d81e820205")
 
 
-def test_regex(impl):
+def test_regex() -> None:
     expected = unhexlify("d8236d68656c6c6f2028776f726c6429")
-    assert impl.dumps(re.compile("hello (world)")) == expected
+    assert dumps(re.compile("hello (world)")) == expected
 
 
-def test_mime(impl):
+def test_mime() -> None:
     expected = unhexlify(
         "d824787b436f6e74656e742d547970653a20746578742f706c61696e3b20636861727365743d2269736f2d38"
         "3835392d3135220a4d494d452d56657273696f6e3a20312e300a436f6e74656e742d5472616e736665722d456"
         "e636f64696e673a2071756f7465642d7072696e7461626c650a0a48656c6c6f203d413475726f"
     )
     message = MIMEText("Hello \u20acuro", "plain", "iso-8859-15")
-    assert impl.dumps(message) == expected
+    assert dumps(message) == expected
 
 
-def test_uuid(impl):
+def test_uuid() -> None:
     expected = unhexlify("d825505eaffac8b51e480581277fdcc7842faf")
-    assert impl.dumps(UUID(hex="5eaffac8b51e480581277fdcc7842faf")) == expected
+    assert dumps(UUID(hex="5eaffac8b51e480581277fdcc7842faf")) == expected
 
 
 @pytest.mark.parametrize(
     "value, expected",
     [
-        (ip_address("192.10.10.1"), "d9010444c00a0a01"),
-        (
-            ip_address("2001:db8:85a3::8a2e:370:7334"),
-            "d901045020010db885a3000000008a2e03707334",
+        pytest.param(IPv4Address("192.0.2.1"), "d83444c0000201", id="ipv4addr"),
+        pytest.param(IPv4Network("192.0.2.0/24"), "d83482181843c00002", id="ipv4net"),
+        pytest.param(IPv4Interface("192.0.2.1/24"), "d8348244c00002011818", id="ipv4if"),
+        pytest.param(
+            IPv6Address("2001:0db8:1234:deed:beef:cafe:face:feed"),
+            "d8365020010db81234deedbeefcafefacefeed",
+            id="ipv6addr",
+        ),
+        pytest.param(
+            IPv6Network("2001:db8:1234::/48"),
+            "d8368218304620010db81234",
+            id="ipv6net",
+        ),
+        pytest.param(
+            IPv6Interface("fe80::202:2ff:ffff:fe03:303%eth0/64"),
+            "d8368350fe8000000000020202fffffffe03030318404465746830",
+            id="ipv6if",
         ),
     ],
-    ids=[
-        "ipv4",
-        "ipv6",
-    ],
 )
-def test_ipaddress(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
+def test_ipaddress(value: object, expected: str) -> None:
+    assert dumps(value) == unhexlify(expected)
 
 
-@pytest.mark.parametrize(
-    "value, expected",
-    [
-        (ip_network("192.168.0.100/24", False), "d90105a144c0a800001818"),
-        (
-            ip_network("2001:db8:85a3:0:0:8a2e::/96", False),
-            "d90105a15020010db885a3000000008a2e000000001860",
-        ),
-    ],
-    ids=[
-        "ipv4",
-        "ipv6",
-    ],
-)
-def test_ipnetwork(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value) == expected
-
-
-def test_custom_tag(impl):
+def test_custom_tag() -> None:
     expected = unhexlify("d917706548656c6c6f")
-    assert impl.dumps(impl.CBORTag(6000, "Hello")) == expected
+    assert dumps(CBORTag(6000, "Hello")) == expected
 
 
-def test_cyclic_array(impl):
+def test_cyclic_array() -> None:
     """Test that an array that contains itself can be serialized with value sharing enabled."""
     expected = unhexlify("d81c81d81c81d81d00")
-    a = [[]]
+    a: list[list[Any]] = [[]]
     a[0].append(a)
-    assert impl.dumps(a, value_sharing=True) == expected
+    assert dumps(a, value_sharing=True) == expected
 
 
-def test_cyclic_array_nosharing(impl):
+def test_cyclic_array_nosharing() -> None:
     """Test that serializing a cyclic structure w/o value sharing will blow up gracefully."""
-    a = []
+    a: list[list[Any]] = []
     a.append(a)
-    with pytest.raises(impl.CBOREncodeError) as exc:
-        impl.dumps(a)
+    with pytest.raises(CBOREncodeError) as exc:
+        dumps(a)
         exc.match("cyclic data structure detected but value sharing is disabled")
         assert isinstance(exc, ValueError)
 
 
-def test_cyclic_map(impl):
+def test_cyclic_map() -> None:
     """Test that a dict that contains itself can be serialized with value sharing enabled."""
     expected = unhexlify("d81ca100d81d00")
-    a = {}
+    a: dict[int, dict[int, Any]] = {}
     a[0] = a
-    assert impl.dumps(a, value_sharing=True) == expected
+    assert dumps(a, value_sharing=True) == expected
 
 
-def test_cyclic_map_nosharing(impl):
+def test_cyclic_map_nosharing() -> None:
     """Test that serializing a cyclic structure w/o value sharing will fail gracefully."""
-    a = {}
+    a: dict[int, dict[int, Any]] = {}
     a[0] = a
-    with pytest.raises(impl.CBOREncodeError) as exc:
-        impl.dumps(a)
+    with pytest.raises(CBOREncodeError) as exc:
+        dumps(a)
         exc.match("cyclic data structure detected but value sharing is disabled")
         assert isinstance(exc, ValueError)
 
 
 @pytest.mark.parametrize(
     "value_sharing, expected",
-    [(False, "828080"), (True, "d81c82d81c80d81d01")],
-    ids=["nosharing", "sharing"],
+    [
+        pytest.param(False, "828080", id="nosharing"),
+        pytest.param(True, "d81c82d81c80d81d01", id="sharing"),
+    ],
 )
-def test_not_cyclic_same_object(impl, value_sharing, expected):
+def test_not_cyclic_same_object(value_sharing: bool, expected: str) -> None:
     """Test that the same shareable object can be included twice if not in a cyclic structure."""
-    expected = unhexlify(expected)
-    a = []
+    a: list[Any] = []
     b = [a, a]
-    assert impl.dumps(b, value_sharing=value_sharing) == expected
+    assert dumps(b, value_sharing=value_sharing) == unhexlify(expected)
 
 
-def test_unsupported_type(impl):
-    with pytest.raises(impl.CBOREncodeError) as exc:
-        impl.dumps(lambda: None)
+def test_unsupported_type() -> None:
+    with pytest.raises(CBOREncodeError) as exc:
+        dumps(lambda: None)
         exc.match("cannot serialize type function")
         assert isinstance(exc, TypeError)
 
 
-def test_default(impl):
+def test_default() -> None:
     class DummyType:
-        def __init__(self, state):
+        def __init__(self, state: object):
             self.state = state
 
-    def default_encoder(encoder, value):
+    def default_encoder(encoder: CBOREncoder, value: Any) -> None:
         encoder.encode(value.state)
 
     expected = unhexlify("820305")
     obj = DummyType([3, 5])
-    serialized = impl.dumps(obj, default=default_encoder)
+    serialized = dumps(obj, default=default_encoder)
     assert serialized == expected
 
 
-def test_default_cyclic(impl):
+def test_default_cyclic() -> None:
     class DummyType:
-        def __init__(self, value=None):
+        def __init__(self, value: object = None):
             self.value = value
 
     @shareable_encoder
-    def default_encoder(encoder, value):
+    def default_encoder(encoder: CBOREncoder, value: Any) -> None:
         state = encoder.encode_to_bytes(value.value)
-        encoder.encode(impl.CBORTag(3000, state))
+        encoder.encode(CBORTag(3000, state))
 
     expected = unhexlify("D81CD90BB849D81CD90BB843D81D00")
     obj = DummyType()
     obj2 = DummyType(obj)
     obj.value = obj2
-    serialized = impl.dumps(obj, value_sharing=True, default=default_encoder)
+    serialized = dumps(obj, value_sharing=True, default=default_encoder)
     assert serialized == expected
 
 
-def test_dump_to_file(impl, tmpdir):
-    path = tmpdir.join("testdata.cbor")
+def test_dump_to_file(tmp_path: Path) -> None:
+    path = tmp_path / "testdata.cbor"
     with path.open("wb") as fp:
-        impl.dump([1, 10], fp)
+        dump([1, 10], fp)
 
-    assert path.read_binary() == b"\x82\x01\x0a"
-
-
-@pytest.mark.parametrize(
-    "value, expected",
-    [
-        ({}, "a0"),
-        (OrderedDict([(b"a", b""), (b"b", b"")]), "A2416140416240"),
-        (OrderedDict([(b"b", b""), (b"a", b"")]), "A2416140416240"),
-        (OrderedDict([("a", ""), ("b", "")]), "a2616160616260"),
-        (OrderedDict([("b", ""), ("a", "")]), "a2616160616260"),
-        (OrderedDict([(b"00001", ""), (b"002", "")]), "A2433030326045303030303160"),
-        (OrderedDict([(255, 0), (2, 0)]), "a2020018ff00"),
-        (FrozenDict([(b"a", b""), (b"b", b"")]), "A2416140416240"),
-    ],
-    ids=[
-        "empty",
-        "bytes in order",
-        "bytes out of order",
-        "text in order",
-        "text out of order",
-        "byte length",
-        "integer keys",
-        "frozendict",
-    ],
-)
-def test_ordered_map(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value, canonical=True) == expected
+    assert path.read_bytes() == b"\x82\x01\x0a"
 
 
 @pytest.mark.parametrize(
     "value, expected",
     [
-        (3.5, "F94300"),
-        (100000.0, "FA47C35000"),
-        (3.8, "FB400E666666666666"),
-        (float("inf"), "f97c00"),
-        (float("nan"), "f97e00"),
-        (float("-inf"), "f9fc00"),
-        (float.fromhex("0x1.0p-24"), "f90001"),
-        (float.fromhex("0x1.4p-24"), "fa33a00000"),
-        (float.fromhex("0x1.ff8p-63"), "fa207fc000"),
-        (1e300, "fb7e37e43c8800759c"),
-    ],
-    ids=[
-        "float 16",
-        "float 32",
-        "float 64",
-        "inf",
-        "nan",
-        "-inf",
-        "float 16 minimum positive subnormal",
-        "mantissa o/f to 32",
-        "exponent o/f to 32",
-        "oversize float",
+        pytest.param({}, "a0", id="empty"),
+        pytest.param(
+            OrderedDict([(b"a", b""), (b"b", b"")]), "A2416140416240", id="bytes in order"
+        ),
+        pytest.param(
+            OrderedDict([(b"b", b""), (b"a", b"")]), "A2416140416240", id="bytes out of order"
+        ),
+        pytest.param(OrderedDict([("a", ""), ("b", "")]), "a2616160616260", id="text in order"),
+        pytest.param(
+            OrderedDict([("b", ""), ("a", "")]), "a2616160616260", id="text out of order"
+        ),
+        pytest.param(
+            OrderedDict([(b"00001", ""), (b"002", "")]),
+            "A2433030326045303030303160",
+            id="byte length",
+        ),
+        pytest.param(OrderedDict([(255, 0), (2, 0)]), "a2020018ff00", id="integer keys"),
+        pytest.param(FrozenDict([(b"a", b""), (b"b", b"")]), "A2416140416240", id="frozendict"),
     ],
 )
-def test_minimal_floats(impl, value, expected):
-    expected = unhexlify(expected)
-    assert impl.dumps(value, canonical=True) == expected
+def test_ordered_map(value: object, expected: str) -> None:
+    assert dumps(value, canonical=True) == unhexlify(expected)
 
 
-def test_tuple_key(impl):
-    assert impl.dumps({(2, 1): ""}) == unhexlify("a182020160")
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        pytest.param(3.5, "F94300", id="float 16"),
+        pytest.param(100000.0, "FA47C35000", id="float 32"),
+        pytest.param(3.8, "FB400E666666666666", id="float 64"),
+        pytest.param(float("inf"), "f97c00", id="inf"),
+        pytest.param(float("nan"), "f97e00", id="nan"),
+        pytest.param(float("-inf"), "f9fc00", id="-inf"),
+        pytest.param(
+            float.fromhex("0x1.0p-24"),
+            "f90001",
+            id="float 16 minimum positive subnormal",
+        ),
+        pytest.param(
+            float.fromhex("0x1.4p-24"),
+            "fa33a00000",
+            id="mantissa o/f to 32",
+        ),
+        pytest.param(
+            float.fromhex("0x1.ff8p-63"),
+            "fa207fc000",
+            id="exponent o/f to 32",
+        ),
+        pytest.param(1e300, "fb7e37e43c8800759c", id="oversize float"),
+    ],
+)
+def test_minimal_floats(value: float, expected: str) -> None:
+    assert dumps(value, canonical=True) == unhexlify(expected)
 
 
-def test_dict_key(impl):
-    assert impl.dumps({FrozenDict({2: 1}): ""}) == unhexlify("a1a1020160")
+def test_tuple_key() -> None:
+    assert dumps({(2, 1): ""}) == unhexlify("a182020160")
 
 
-@pytest.mark.parametrize("frozen", [False, True], ids=["set", "frozenset"])
-def test_set(impl, frozen):
-    value = {"a", "b", "c"}
+def test_dict_key() -> None:
+    assert dumps({FrozenDict({2: 1}): ""}) == unhexlify("a1a1020160")
+
+
+@pytest.mark.parametrize(
+    "frozen",
+    [
+        pytest.param(False, id="set"),
+        pytest.param(True, id="frozenset"),
+    ],
+)
+def test_set(frozen: bool) -> None:
+    value: Set[str] = {"a", "b", "c"}
     if frozen:
         value = frozenset(value)
 
-    serialized = impl.dumps(value)
+    serialized = dumps(value)
     assert len(serialized) == 10
     assert serialized.startswith(unhexlify("d9010283"))
 
 
-@pytest.mark.parametrize("frozen", [False, True], ids=["set", "frozenset"])
-def test_canonical_set(impl, frozen):
-    value = {"y", "x", "aa", "a"}
+@pytest.mark.parametrize(
+    "frozen",
+    [
+        pytest.param(False, id="set"),
+        pytest.param(True, id="frozenset"),
+    ],
+)
+def test_canonical_set(frozen: bool) -> None:
+    value: Set[str] = {"y", "x", "aa", "a"}
     if frozen:
         value = frozenset(value)
 
-    serialized = impl.dumps(value, canonical=True)
+    serialized = dumps(value, canonical=True)
     assert serialized == unhexlify("d9010284616161786179626161")
 
 
 @pytest.mark.parametrize(
     "value",
     [
-        "",
-        "a",
-        "abcde",
-        b"\x01\x02\x03\x04",
-        ["a", "bb", "a", "bb"],
-        ["a", "bb", "ccc", "dddd", "a", "bb"],
-        {"a": "m", "bb": "nn", "e": "m", "ff": "nn"},
-        {"a": "m", "bb": "nn", "ccc": "ooo", "dddd": "pppp", "e": "m", "ff": "nn"},
-    ],
-    ids=[
-        "empty string",
-        "short string",
-        "long string",
-        "bytestring",
-        "array of short strings",
-        "no repeated long strings",
-        "dict with short keys and strings",
-        "dict with no repeated long strings",
+        pytest.param("", id="empty string"),
+        pytest.param("a", id="short string"),
+        pytest.param("abcde", id="long string"),
+        pytest.param(b"\x01\x02\x03\x04", id="bytestring"),
+        pytest.param(["a", "bb", "a", "bb"], id="array of short strings"),
+        pytest.param(["a", "bb", "ccc", "dddd", "a", "bb"], id="no repeated long strings"),
+        pytest.param(
+            {"a": "m", "bb": "nn", "e": "m", "ff": "nn"}, id="dict with short keys and strings"
+        ),
+        pytest.param(
+            {"a": "m", "bb": "nn", "ccc": "ooo", "dddd": "pppp", "e": "m", "ff": "nn"},
+            id="dict with no repeated long strings",
+        ),
     ],
 )
-def test_encode_stringrefs_unchanged(impl, value):
-    expected = impl.dumps(value)
+def test_encode_stringrefs_unchanged(value: object) -> None:
+    expected = dumps(value)
     if isinstance(value, list) or isinstance(value, dict):
         expected = b"\xd9\x01\x00" + expected
-    assert impl.dumps(value, string_referencing=True) == expected
+
+    assert dumps(value, string_referencing=True) == expected
 
 
-def test_encode_stringrefs_array(impl):
+def test_encode_stringrefs_array() -> None:
     value = ["aaaa", "aaaa", "bbbb", "aaaa", "bbbb"]
     equivalent = [
         "aaaa",
-        impl.CBORTag(25, 0),
+        CBORTag(25, 0),
         "bbbb",
-        impl.CBORTag(25, 0),
-        impl.CBORTag(25, 1),
+        CBORTag(25, 0),
+        CBORTag(25, 1),
     ]
-    assert impl.dumps(value, string_referencing=True) == b"\xd9\x01\x00" + impl.dumps(equivalent)
+    assert dumps(value, string_referencing=True) == b"\xd9\x01\x00" + dumps(equivalent)
 
 
-def test_encode_stringrefs_dict(impl):
+def test_encode_stringrefs_dict() -> None:
     value = {"aaaa": "mmmm", "bbbb": "bbbb", "cccc": "aaaa", "mmmm": "aaaa"}
     expected = unhexlify(
         "d90100a46461616161646d6d6d6d6462626262d819026463636363d81900d81901d81900"
     )
-    assert impl.dumps(value, string_referencing=True, canonical=True) == expected
+    assert dumps(value, string_referencing=True, canonical=True) == expected
 
 
-def test_encode_stringrefs_datetime(impl):
+def test_encode_stringrefs_datetime() -> None:
     value = [datetime(2026, 1, 19, tzinfo=timezone.utc), "abc", "abc"]
     expected = unhexlify("D9010083C074323032362D30312D31395430303A30303A30305A63616263D81901")
-    assert impl.dumps(value, string_referencing=True) == expected
+    assert dumps(value, string_referencing=True) == expected
 
 
-@pytest.mark.parametrize("tag", [-1, 2**64, "f"], ids=["too small", "too large", "wrong type"])
-def test_invalid_tag(impl, tag):
+@pytest.mark.parametrize(
+    "tag",
+    [
+        pytest.param(-1, id="too small"),
+        pytest.param(2**64, id="too large"),
+        pytest.param("f", id="wrong type"),
+    ],
+)
+def test_invalid_tag(tag: object) -> None:
     with pytest.raises(TypeError):
-        impl.dumps(impl.CBORTag(tag, "value"))
+        dumps(CBORTag(tag, "value"))  # type: ignore[arg-type]
 
 
-def test_largest_tag(impl):
+def test_largest_tag() -> None:
     expected = unhexlify("dbffffffffffffffff6176")
-    assert impl.dumps(impl.CBORTag(2**64 - 1, "v")) == expected
+    assert dumps(CBORTag(2**64 - 1, "v")) == expected
 
 
 @given(compound_types_strategy)
-def test_invariant_encode_decode(impl, val):
+def test_invariant_encode_decode(val: object) -> None:
     """
     Tests that an encode and decode is invariant (the value is the same after
     undergoing an encode and decode)
     """
-    assert impl.loads(impl.dumps(val)) == val
+    assert loads(dumps(val)) == val
 
 
-def test_indefinite_containers(impl):
+def test_indefinite_containers() -> None:
     expected = b"\x82\x00\x01"
-    assert impl.dumps([0, 1]) == expected
+    assert dumps([0, 1]) == expected
 
     expected = b"\x9f\x00\x01\xff"
-    assert impl.dumps([0, 1], indefinite_containers=True) == expected
-    assert impl.dumps([0, 1], indefinite_containers=True, canonical=True) == expected
+    assert dumps([0, 1], indefinite_containers=True) == expected
+    assert dumps([0, 1], indefinite_containers=True, canonical=True) == expected
 
     expected = b"\xa0"
-    assert impl.dumps({}) == expected
+    assert dumps({}) == expected
 
     expected = b"\xbf\xff"
-    assert impl.dumps({}, indefinite_containers=True) == expected
-    assert impl.dumps({}, indefinite_containers=True, canonical=True) == expected
+    assert dumps({}, indefinite_containers=True) == expected
+    assert dumps({}, indefinite_containers=True, canonical=True) == expected
 
 
 class TestEncoderReuse:
@@ -721,13 +721,13 @@ class TestEncoderReuse:
     Tests for correct behavior when reusing CBOREncoder instances.
     """
 
-    def test_encoder_reuse_resets_shared_containers(self, impl):
+    def test_encoder_reuse_resets_shared_containers(self) -> None:
         """
         Shared container tracking should be scoped to a single encode operation,
         not persist across multiple encodes on the same encoder instance.
         """
         fp = BytesIO()
-        encoder = impl.CBOREncoder(fp, value_sharing=True)
+        encoder = CBOREncoder(fp, value_sharing=True)
         shared_obj = ["hello"]
 
         # First encode: object is tracked in shared containers
@@ -735,52 +735,53 @@ class TestEncoderReuse:
 
         # Second encode on new fp: should produce valid standalone CBOR
         # (not a sharedref pointing to stale first-encode data)
-        encoder.fp = BytesIO()
+        encoder.fp = fp = BytesIO()
         encoder.encode(shared_obj)
-        second_output = encoder.fp.getvalue()
+        second_output = fp.getvalue()
 
         # The second output must be decodable on its own
-        result = impl.loads(second_output)
+        result = loads(second_output)
         assert result == ["hello"]
 
-    def test_encode_to_bytes_resets_shared_containers(self, impl):
+    def test_encode_to_bytes_resets_shared_containers(self) -> None:
         """
         encode_to_bytes should also reset shared container tracking between calls.
         """
         fp = BytesIO()
-        encoder = impl.CBOREncoder(fp, value_sharing=True)
+        encoder = CBOREncoder(fp, value_sharing=True)
         shared_obj = ["hello"]
 
         # First encode
-        encoder.encode_to_bytes([shared_obj, shared_obj])
+        result_bytes = encoder.encode_to_bytes([shared_obj, shared_obj])
+        assert result_bytes == unhexlify("d81c82d81c816568656c6c6fd81d01")
 
         # Second encode should produce valid standalone CBOR
         result_bytes = encoder.encode_to_bytes(shared_obj)
-        result = impl.loads(result_bytes)
+        result = loads(result_bytes)
         assert result == ["hello"]
 
-    def test_encoder_hook_does_not_reset_state(self, impl):
+    def test_encoder_hook_does_not_reset_state(self) -> None:
         """
         When a custom encoder hook calls encode(), the shared container
         tracking should be preserved (not reset mid-operation).
         """
 
         class Custom:
-            def __init__(self, value):
+            def __init__(self, value: object):
                 self.value = value
 
-        def custom_encoder(encoder, obj):
+        def custom_encoder(encoder: CBOREncoder, obj: Any) -> None:
             # Hook encodes the wrapped value
             encoder.encode(obj.value)
 
         # Encode a Custom wrapping a list
-        data = impl.dumps(Custom(["a", "b"]), default=custom_encoder)
+        data = dumps(Custom(["a", "b"]), default=custom_encoder)
 
         # Verify the output decodes correctly
-        result = impl.loads(data)
+        result = loads(data)
         assert result == ["a", "b"]
 
         # Test nested Custom objects - hook should work recursively
-        data2 = impl.dumps(Custom(Custom(["x"])), default=custom_encoder)
-        result2 = impl.loads(data2)
+        data2 = dumps(Custom(Custom(["x"])), default=custom_encoder)
+        result2 = loads(data2)
         assert result2 == ["x"]
