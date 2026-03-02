@@ -4,14 +4,14 @@ import re
 import struct
 import sys
 from codecs import getincrementaldecoder
-from collections.abc import Callable, Generator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, Literal, TypeVar, cast, overload
 
 from ._types import (
     CBORDecodeEOF,
+    CBORDecodeError,
     CBORDecodeValueError,
     CBORSimpleValue,
     CBORTag,
@@ -59,6 +59,7 @@ class CBORDecoder:
         "_immutable",
         "_str_errors",
         "_stringref_namespace",
+        "_max_depth",
         "_decode_depth",
     )
 
@@ -72,6 +73,8 @@ class CBORDecoder:
         object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
         str_errors: Literal["strict", "error", "replace"] = "strict",
         read_size: int = 1,
+        *,
+        max_depth: int = 100,
     ):
         """
         :param fp:
@@ -97,6 +100,8 @@ class CBORDecoder:
             position beyond the decoded data. This only matters if you need to reuse the
             stream after decoding.
             Ignored in the pure Python implementation, but included for API compatibility.
+        :param max_depth:
+            the maximum allowed container nesting depth
 
         .. _Error Handlers: https://docs.python.org/3/library/codecs.html#error-handlers
 
@@ -109,6 +114,7 @@ class CBORDecoder:
         self._shareables: list[object] = []
         self._stringref_namespace: list[str | bytes] | None = None
         self._immutable = False
+        self._max_depth = max_depth
         self._decode_depth = 0
 
     @property
@@ -216,13 +222,24 @@ class CBORDecoder:
 
         return data
 
-    def _decode(self, immutable: bool = False, unshared: bool = False) -> Any:
+    def decode(self, immutable: bool = False, unshared: bool = False) -> Any:
+        """
+        Decode the next value from the stream.
+
+        :raises CBORDecodeError: if there is any problem decoding the stream
+
+        """
+        if self._decode_depth > self._max_depth:
+            raise CBORDecodeError(f"maximum container nesting depth ({self._max_depth}) exceeded")
+
         if immutable:
             old_immutable = self._immutable
             self._immutable = True
         if unshared:
             old_index = self._share_index
             self._share_index = None
+
+        self._decode_depth += 1
         try:
             initial_byte = self.read(1)[0]
             major_type = initial_byte >> 5
@@ -235,33 +252,11 @@ class CBORDecoder:
             if unshared:
                 self._share_index = old_index
 
-    @contextmanager
-    def _decoding_context(self) -> Generator[None]:
-        """
-        Context manager for tracking decode depth and clearing shared state.
-
-        Shared state is cleared at the end of each top-level decode to prevent
-        shared references from leaking between independent decode operations.
-        Nested calls (from hooks) must preserve the state.
-        """
-        self._decode_depth += 1
-        try:
-            yield
-        finally:
             self._decode_depth -= 1
             assert self._decode_depth >= 0
             if self._decode_depth == 0:
                 self._shareables.clear()
                 self._share_index = None
-
-    def decode(self) -> object:
-        """
-        Decode the next value from the stream.
-
-        :raises CBORDecodeError: if there is any problem decoding the stream
-        """
-        with self._decoding_context():
-            return self._decode()
 
     def decode_from_bytes(self, buf: bytes) -> object:
         """
@@ -272,13 +267,12 @@ class CBORDecoder:
         object needs to be decoded separately from the rest but while still
         taking advantage of the shared value registry.
         """
-        with self._decoding_context():
-            with BytesIO(buf) as fp:
-                old_fp = self.fp
-                self.fp = fp
-                retval = self._decode()
-                self.fp = old_fp
-                return retval
+        with BytesIO(buf) as fp:
+            old_fp = self.fp
+            self.fp = fp
+            retval = self.decode()
+            self.fp = old_fp
+            return retval
 
     @overload
     def _decode_length(self, subtype: int) -> int: ...
@@ -429,7 +423,7 @@ class CBORDecoder:
             if not self._immutable:
                 self.set_shareable(items)
             while True:
-                value = self._decode(unshared=True)
+                value = self.decode(unshared=True)
                 if value is break_marker:
                     break
                 else:
@@ -443,7 +437,7 @@ class CBORDecoder:
                 self.set_shareable(items)
 
             for index in range(length):
-                items.append(self._decode(unshared=True))
+                items.append(self.decode(unshared=True))
 
         if self._immutable:
             items_tuple = tuple(items)
@@ -460,17 +454,17 @@ class CBORDecoder:
             dictionary: dict[Any, Any] = {}
             self.set_shareable(dictionary)
             while True:
-                key = self._decode(immutable=True, unshared=True)
+                key = self.decode(immutable=True, unshared=True)
                 if key is break_marker:
                     break
                 else:
-                    dictionary[key] = self._decode(unshared=True)
+                    dictionary[key] = self.decode(unshared=True)
         else:
             dictionary = {}
             self.set_shareable(dictionary)
             for _ in range(length):
-                key = self._decode(immutable=True, unshared=True)
-                dictionary[key] = self._decode(unshared=True)
+                key = self.decode(immutable=True, unshared=True)
+                dictionary[key] = self.decode(unshared=True)
 
         if self._object_hook:
             dictionary = self._object_hook(self, dictionary)
@@ -490,7 +484,7 @@ class CBORDecoder:
 
         tag = CBORTag(tagnum, None)
         self.set_shareable(tag)
-        tag.value = self._decode(unshared=True)
+        tag.value = self.decode(unshared=True)
         if self._tag_hook:
             tag = self._tag_hook(self, tag)
 
@@ -515,17 +509,17 @@ class CBORDecoder:
     #
     def decode_epoch_date(self) -> date:
         # Semantic tag 100
-        value = self._decode()
+        value = self.decode()
         return self.set_shareable(date.fromordinal(value + 719163))
 
     def decode_date_string(self) -> date:
         # Semantic tag 1004
-        value = self._decode()
+        value = self.decode()
         return self.set_shareable(date.fromisoformat(value))
 
     def decode_datetime_string(self) -> datetime:
         # Semantic tag 0
-        value = self._decode()
+        value = self.decode()
         match = timestamp_re.match(value)
         if match:
             (
@@ -573,7 +567,7 @@ class CBORDecoder:
 
     def decode_epoch_datetime(self) -> datetime:
         # Semantic tag 1
-        value = self._decode()
+        value = self.decode()
 
         try:
             tmp = datetime.fromtimestamp(value, timezone.utc)
@@ -586,7 +580,7 @@ class CBORDecoder:
         # Semantic tag 2
         from binascii import hexlify
 
-        value = self._decode()
+        value = self.decode()
         if not isinstance(value, bytes):
             raise CBORDecodeValueError("invalid bignum value " + str(value))
 
@@ -601,7 +595,7 @@ class CBORDecoder:
         from decimal import Decimal
 
         try:
-            exp, sig = self._decode()
+            exp, sig = self.decode()
         except (TypeError, ValueError) as e:
             raise CBORDecodeValueError("Incorrect tag 4 payload") from e
         tmp = Decimal(sig).as_tuple()
@@ -612,7 +606,7 @@ class CBORDecoder:
         from decimal import Decimal
 
         try:
-            exp, sig = self._decode()
+            exp, sig = self.decode()
         except (TypeError, ValueError) as e:
             raise CBORDecodeValueError("Incorrect tag 5 payload") from e
 
@@ -623,7 +617,7 @@ class CBORDecoder:
         if self._stringref_namespace is None:
             raise CBORDecodeValueError("string reference outside of namespace")
 
-        index: int = self._decode()
+        index: int = self.decode()
         try:
             value = self._stringref_namespace[index]
         except IndexError:
@@ -637,13 +631,13 @@ class CBORDecoder:
         self._share_index = len(self._shareables)
         self._shareables.append(None)
         try:
-            return self._decode()
+            return self.decode()
         finally:
             self._share_index = old_index
 
     def decode_sharedref(self) -> Any:
         # Semantic tag 29
-        value = self._decode(unshared=True)
+        value = self.decode(unshared=True)
         try:
             shared = self._shareables[value]
         except IndexError:
@@ -656,7 +650,7 @@ class CBORDecoder:
 
     def decode_complex(self) -> complex:
         # Semantic tag 43000
-        inputval = self._decode(immutable=True, unshared=True)
+        inputval = self.decode(immutable=True, unshared=True)
         try:
             value = complex(*inputval)
         except TypeError as exc:
@@ -673,7 +667,7 @@ class CBORDecoder:
         # Semantic tag 30
         from fractions import Fraction
 
-        inputval = self._decode(immutable=True, unshared=True)
+        inputval = self.decode(immutable=True, unshared=True)
         try:
             value = Fraction(*inputval)
         except (TypeError, ZeroDivisionError) as exc:
@@ -689,7 +683,7 @@ class CBORDecoder:
     def decode_regexp(self) -> re.Pattern[str]:
         # Semantic tag 35
         try:
-            value = re.compile(self._decode())
+            value = re.compile(self.decode())
         except re.error as exc:
             raise CBORDecodeValueError("error decoding regular expression") from exc
 
@@ -700,7 +694,7 @@ class CBORDecoder:
         from email.parser import Parser
 
         try:
-            value = Parser().parsestr(self._decode())
+            value = Parser().parsestr(self.decode())
         except TypeError as exc:
             raise CBORDecodeValueError("error decoding MIME message") from exc
 
@@ -711,7 +705,7 @@ class CBORDecoder:
         from uuid import UUID
 
         try:
-            value = UUID(bytes=self._decode())
+            value = UUID(bytes=self.decode())
         except (TypeError, ValueError) as exc:
             raise CBORDecodeValueError("error decoding UUID value") from exc
 
@@ -721,16 +715,16 @@ class CBORDecoder:
         # Semantic tag 256
         old_namespace = self._stringref_namespace
         self._stringref_namespace = []
-        value = self._decode()
+        value = self.decode()
         self._stringref_namespace = old_namespace
         return value
 
     def decode_set(self) -> set[Any] | frozenset[Any]:
         # Semantic tag 258
         if self._immutable:
-            return self.set_shareable(frozenset(self._decode(immutable=True)))
+            return self.set_shareable(frozenset(self.decode(immutable=True)))
         else:
-            return self.set_shareable(set(self._decode(immutable=True)))
+            return self.set_shareable(set(self.decode(immutable=True)))
 
     def decode_ipaddress(self) -> IPv4Address | IPv6Address | CBORTag:
         # Semantic tag 260
@@ -763,7 +757,7 @@ class CBORDecoder:
 
     def decode_self_describe_cbor(self) -> Any:
         # Semantic tag 55799
-        return self._decode()
+        return self.decode()
 
     #
     # Special decoders (major tag 7)
@@ -837,6 +831,8 @@ def loads(
     object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
     read_size: int = 1,
+    *,
+    max_depth: int = 100,
 ) -> Any:
     """
     Deserialize an object from a bytestring.
@@ -859,6 +855,8 @@ def loads(
         the minimum number of bytes to read at a time.
         Setting this to a higher value like 4096 improves performance.
         Ignored in the pure Python implementation, but included for API compatibility.
+    :param max_depth:
+        the maximum allowed container nesting depth
     :return:
         the deserialized object
 
@@ -872,6 +870,7 @@ def loads(
             object_hook=object_hook,
             str_errors=str_errors,
             read_size=read_size,
+            max_depth=max_depth,
         ).decode()
 
 
@@ -881,6 +880,8 @@ def load(
     object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
     read_size: int = 1,
+    *,
+    max_depth: int = 100,
 ) -> Any:
     """
     Deserialize an object from an open file.
@@ -906,6 +907,8 @@ def load(
         position beyond the decoded data. This only matters if you need to reuse the
         stream after decoding.
         Ignored in the pure Python implementation, but included for API compatibility.
+    :param max_depth:
+        the maximum allowed container nesting depth
     :return:
         the deserialized object
 
@@ -918,4 +921,5 @@ def load(
         object_hook=object_hook,
         str_errors=str_errors,
         read_size=read_size,
+        max_depth=max_depth,
     ).decode()
