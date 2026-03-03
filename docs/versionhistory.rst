@@ -10,8 +10,6 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - **MAJOR REWRITE**:
   The Python and C implementations of the encoder and decoder were replaced with a single,
   Rust-based implementation in the interest of maintainability and memory safety
-- **BACKWARD INCOMPATIBLE** Limited the maximum allowed container nesting depth on decoding to 100
-  levels deep (configurable via the ``max_depth`` parameter)
 - **BACKWARD INCOMPATIBLE** Changed the decoding of semantic tag 261 to yield an ``IPv4Interface``
   or ``IPv6Interface`` if the address contains host bits
 - **BACKWARD INCOMPATIBLE** Changed the encoding of IP addresses to use the semantic tags 52 and 54
@@ -21,7 +19,7 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 **UNRELEASED**
 
 - Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
-  containers (CVE-2026-26209)
+  containers, with a default value of 100 levels (CVE-2026-26209)
 - Changed the default ``read_size`` from 4096 to 1 for backwards compatibility.
   The buffered reads introduced in 5.8.0 could cause issues when code needs to
   access the stream position after decoding. Users can opt-in to faster decoding
