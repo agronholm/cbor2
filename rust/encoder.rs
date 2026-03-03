@@ -59,9 +59,9 @@ pub fn shareable_encoder<'py>(
 }
 
 /// The CBOREncoder class implements a fully featured CBOR encoder with several extensions for
-/// handling shared references, big integers, rational numbers and so on. Typically the class is not
-/// used directly, but the dump() and dumps() functions are called to indirectly construct and use
-/// the class.
+/// handling shared references, big integers, rational numbers, and so on. Typically, the class is
+/// not used directly, but the dump() and dumps() functions are called to indirectly construct and
+/// use the class.
 ///
 /// When the class is constructed manually, the main entry points are :meth:`encode` and
 /// :meth:`encode_to_bytes`.
