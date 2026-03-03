@@ -21,6 +21,8 @@ from uuid import UUID
 
 import pytest
 from _pytest.fixtures import FixtureRequest, SubRequest
+from hypothesis import given
+
 from cbor2 import (
     CBOREncodeError,
     CBOREncoder,
@@ -33,7 +35,6 @@ from cbor2 import (
     shareable_encoder,
     undefined,
 )
-from hypothesis import given
 
 from .hypothesis_strategies import compound_types_strategy
 
