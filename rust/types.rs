@@ -69,7 +69,7 @@ create_exception!(
 
 /// Represents a CBOR semantic tag.
 ///
-/// :param int tag: tag number
+/// :param tag: tag number
 /// :param value: encapsulated value (any object)
 #[pyclass(get_all, module = "cbor2")]
 pub struct CBORTag {
@@ -154,7 +154,7 @@ impl CBORTag {
 
 /// Represents a CBOR "simple value".
 ///
-/// :param int value: the value (0-255)
+/// :param value: the value (0-255)
 #[pyclass(frozen, str = "{0}", module = "cbor2")]
 #[derive(PartialEq, PartialOrd, Hash)]
 pub struct CBORSimpleValue(pub u8);

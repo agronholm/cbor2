@@ -66,16 +66,16 @@ pub fn shareable_encoder<'py>(
 /// When the class is constructed manually, the main entry points are :meth:`encode` and
 /// :meth:`encode_to_bytes`.
 ///
-/// :param ~typing.IO[bytes] fp:
+/// :param fp:
 ///     the file to write to (any file-like object opened for writing in binary mode)
-/// :param bool datetime_as_timestamp:
+/// :param datetime_as_timestamp:
 ///     set to :data:`True` to serialize datetimes as UNIX timestamps (this makes datetimes
 ///     more concise on the wire, but loses the timezone information)
-/// :param ~datetime.tzinfo timezone:
+/// :param timezone:
 ///     the default timezone to use for serializing naive datetimes; if this is not
 ///     specified naive datetimes will throw a :exc:`ValueError` when encoding is
 ///     attempted
-/// :param bool value_sharing:
+/// :param value_sharing:
 ///     set to :data:`True` to allow more efficient serializing of repeated values
 ///     and, more importantly, cyclic data structures, at the cost of extra
 ///     line overhead
@@ -83,24 +83,21 @@ pub fn shareable_encoder<'py>(
 ///     An optional mapping for overriding the encoding for select Python types.
 ///     Each key in this mapping should be a Python type object, and the value a callable
 ///     that takes two arguments: the encoder object and the object to encode.
-/// :type encoders: ~collections.abc.Mapping[type,
-///     ~collections.abc.Callable[[CBOREncoder, typing.Any], typing.Any]]
 /// :param default:
 ///     a callable that is called by the encoder with two arguments (the encoder
 ///     instance and the value being encoded) when no suitable encoder has been found,
 ///     and should use the methods on the encoder to encode any objects it wants to add
 ///     to the data stream
-/// :type default: ~collections.abc.Callable[[CBOREncoder, typing.Any], None] | None
-/// :param bool canonical:
+/// :param canonical:
 ///     when :data:`True`, use "canonical" CBOR representation; this typically involves
 ///     sorting maps, sets, etc. into a pre-determined order ensuring that
 ///     serializations are comparable without decoding
-/// :param bool date_as_datetime:
+/// :param date_as_datetime:
 ///     set to :data:`True` to serialize date objects as datetimes (CBOR tag 0), which was
 ///     the default behavior in previous releases (cbor2 <= 4.1.2).
-/// :param bool string_referencing:
+/// :param string_referencing:
 ///     set to :data:`True` to allow more efficient serializing of repeated string values
-/// :param bool indefinite_containers:
+/// :param indefinite_containers:
 ///     encode containers as indefinite (use stop code instead of specifying length)
 #[pyclass(module = "cbor2")]
 pub struct CBOREncoder {
@@ -462,9 +459,8 @@ impl CBOREncoder {
 
     /// Write bytes to the data stream.
     ///
-    /// :param bytes buf: the bytes to write
+    /// :param buf: the bytes to write
     /// :returns: the number of bytes written
-    /// :rtype: int
     ///
     /// .. note:: During the encoding of an object, this method may write the given bytes to the
     ///    internal buffer without flushing to the actual output stream. When called outside the
@@ -675,7 +671,6 @@ impl CBOREncoder {
     /// taking advantage of the shared value registry.
     ///
     /// :param obj: the object to encode
-    /// :rtype: bytes
     #[pyo3(signature = (obj, /))]
     pub fn encode_to_bytes<'py>(
         slf: &Bound<'py, Self>,
@@ -717,7 +712,6 @@ impl CBOREncoder {
     /// This is used as the sorting key in CBOR's canonical representations.
     ///
     /// :param item: a (key, value) tuple
-    /// :type item: tuple[Any, Any]
     fn encode_sortable_item<'py>(
         slf: &Bound<'py, Self>,
         item: &Bound<'py, PyTuple>,
@@ -906,7 +900,7 @@ impl CBOREncoder {
 
     /// Encode a value with a semantic tag.
     ///
-    /// :param int tag: a numeric tag value
+    /// :param tag: a numeric tag value
     /// :param value: the object to be encoded
     fn encode_semantic(slf: &Bound<'_, Self>, tag: u64, value: &Bound<'_, PyAny>) -> PyResult<()> {
         let old_string_referencing = slf.borrow().string_referencing;

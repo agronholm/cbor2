@@ -49,7 +49,7 @@ static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
 /// When the class is constructed manually, the main entry points are
 /// :meth:`decode` and :meth:`decode_from_bytes`.
 ///
-/// :param bytes data:
+/// :param data:
 ///     the bytestring to deserialize
 /// :param tag_hook:
 ///     callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
@@ -71,9 +71,9 @@ static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
 /// :param str_errors:
 ///     determines how to handle unicode decoding errors (see the `Error Handlers`_
 ///     section in the standard library documentation for details)
-/// :param int read_size: minimum amount of bytes to read at once
+/// :param read_size: minimum amount of bytes to read at once
 ///     (ignored if ``fp`` is not seekable)
-/// :param int max_depth:
+/// :param max_depth:
 ///     maximum allowed depth for nested containers
 ///
 /// .. _CBOR: https://cbor.io/
@@ -469,8 +469,7 @@ impl CBORDecoder {
 
     /// Read bytes from the data stream.
     ///
-    /// :param int amount: the number of bytes to read
-    /// :rtype: bytes
+    /// :param amount: the number of bytes to read
     #[pyo3(signature = (amount, /))]
     fn read(&mut self, py: Python<'_>, amount: usize) -> PyResult<Vec<u8>> {
         if amount == 0 {
@@ -522,7 +521,7 @@ impl CBORDecoder {
 
     /// Decode the next value from the stream.
     ///
-    /// :param bool immutable: if :data:`True`, decode the next item as an immutable type
+    /// :param immutable: if :data:`True`, decode the next item as an immutable type
     ///     (e.g. :class:`tuple` instead of a :class:`list`), if possible
     /// :return: the decoded object
     /// :raises CBORDecodeError: if there is any problem decoding the stream
@@ -544,7 +543,7 @@ impl CBORDecoder {
     /// object needs to be decoded separately from the rest but while still
     /// taking advantage of the shared value registry.
     ///
-    /// :param bytes buf: the buffer from which to decode a CBOR object
+    /// :param buf: the buffer from which to decode a CBOR object
     #[pyo3(signature = (buf, /))]
     pub fn decode_from_bytes<'py>(
         slf: &Bound<'py, Self>,
@@ -575,9 +574,8 @@ impl CBORDecoder {
     ///
     /// This is a low-level operation that may be needed by custom decoder callbacks.
     ///
-    /// :param int subtype:
+    /// :param subtype:
     /// :return: the length of the item, or :data:`None` to indicate an indefinite-length item
-    /// :rtype: int | None
     fn decode_length(&mut self, py: Python<'_>, subtype: u8) -> PyResult<Option<usize>> {
         let length = match subtype {
             ..24 => Some(subtype as usize),
