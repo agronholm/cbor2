@@ -1062,21 +1062,16 @@ impl CBORDecoder {
     fn decode_positive_bignum<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 2
         let py = slf.py();
-        let int_type = py.get_type::<PyInt>();
         let value = Self::decode_internal(slf)?;
-        let int = int_type.call_method1(intern!(py, "from_bytes"), (value, intern!(py, "big")))?;
-        Ok(int)
+        INT_FROMBYTES.get(py)?.call1((value, intern!(py, "big")))
     }
 
     fn decode_negative_bignum<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 3
         let py = slf.py();
-        let int_type = py.get_type::<PyInt>();
         let value = Self::decode_internal(slf)?;
-        let mut int =
-            int_type.call_method1(intern!(py, "from_bytes"), (value, intern!(py, "big")))?;
-        int = int.neg()?.add(-1)?;
-        Ok(int)
+        let int = INT_FROMBYTES.get(py)?.call1((value, intern!(py, "big")))?;
+        int.neg()?.add(-1)
     }
 
     fn decode_fraction<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
