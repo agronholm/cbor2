@@ -68,9 +68,9 @@ static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
 ///     The value is a mapping of semantic tags (integers) to callables that take
 ///     the decoder instance as the sole argument.
 /// :param str_errors:
-///     determines how to handle unicode decoding errors (see the `Error Handlers`_
+///     determines how to handle Unicode decoding errors (see the `Error Handlers`_
 ///     section in the standard library documentation for details)
-/// :param read_size: minimum amount of bytes to read at once
+/// :param read_size: minimum number of bytes to read at once
 ///     (ignored if ``fp`` is not seekable)
 /// :param max_depth:
 ///     maximum allowed depth for nested containers
