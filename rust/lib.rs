@@ -61,6 +61,7 @@ mod _cbor2 {
 
     ///  Deserialize an object from an open file.
     ///
+    /// :param fp: the file to read from (any file-like object opened for reading in binary mode)
     /// :param tag_hook:
     ///     callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
     ///     to be decoded. This callback is invoked for any tags for which there is no

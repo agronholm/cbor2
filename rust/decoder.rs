@@ -49,8 +49,7 @@ static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
 /// When the class is constructed manually, the main entry points are
 /// :meth:`decode` and :meth:`decode_from_bytes`.
 ///
-/// :param data:
-///     the bytestring to deserialize
+/// :param fp: the file to read from (any file-like object opened for reading in binary mode)
 /// :param tag_hook:
 ///     callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
 ///     to be decoded. This callback is invoked for any tags for which there is no

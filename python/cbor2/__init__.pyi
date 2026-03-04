@@ -246,6 +246,7 @@ def load(
     major_decoders: Mapping[int, MajorDecoderCallback] | None = ...,
     semantic_decoders: Mapping[int, SemanticDecoderCallback] | None = ...,
     str_errors: str = ...,
+    read_size: int = ...,
     max_depth: int = ...,
 ) -> Any: ...
 def loads(
