@@ -14,8 +14,21 @@ from ipaddress import (
     IPv6Network,
 )
 from re import Pattern
-from typing import IO, Any, Generic, TypeAlias, TypeVar, final
+from typing import IO, Any, Generic, TypeAlias, final, overload
 from uuid import UUID
+
+if sys.hexversion < 51314855:
+    @final
+    class frozendict(Generic[_KT, _VT_co], Mapping[_KT, _VT_co]):
+        def __new__(cls, *args: Any, **kwargs: Any) -> Self: ...
+        def __getitem__(self, key: _KT, /) -> _VT_co: ...
+        def __len__(self) -> int: ...
+        def __iter__(self) -> Iterator[_T_co]: ...
+
+if sys.version_info >= (3, 13):
+    from typing import TypeVar
+else:
+    from typing_extensions import TypeVar
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -26,12 +39,14 @@ _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)
 _KT = TypeVar("_KT")
 _VT_co = TypeVar("_VT_co", covariant=True)
+_TContainer = TypeVar("_TContainer", default=None)
 
-TagHook: TypeAlias = Callable[[CBORDecoder, CBORTag], Any]
-MajorDecoderCallback: TypeAlias = Callable[[CBORDecoder, int], Any]
-SemanticDecoderCallback: TypeAlias = Callable[[CBORDecoder], Any]
-ObjectHook: TypeAlias = Callable[[CBORDecoder, dict[Any, Any]], Any]
+TagHook: TypeAlias = Callable[[CBORTag, bool], Any]
+SemanticDecoderCallback: TypeAlias = Callable[[Any, bool], Any]
+ObjectHook: TypeAlias = Callable[[dict[Any, Any]], Any]
 EncoderHook: TypeAlias = Callable[[CBOREncoder, Any], Any]
+ShareableDecoderCallback: TypeAlias = Callable[[Any], Any]
+ShareableDecoderInitializer: TypeAlias = Callable[[bool], tuple[Any, ShareableDecoderCallback]]
 
 @final
 class CBOREncoder:
@@ -105,8 +120,8 @@ class CBORDecoder:
         *,
         tag_hook: TagHook | None = ...,
         object_hook: ObjectHook | None = ...,
-        major_decoders: Mapping[int, MajorDecoderCallback] | None = ...,
-        semantic_decoders: Mapping[int, SemanticDecoderCallback] | None = ...,
+        semantic_decoders: Mapping[int, SemanticDecoderCallback | ShareableDecoderInitializer]
+        | None = ...,
         str_errors: str = ...,
         read_size: int = ...,
         max_depth: int = ...,
@@ -120,7 +135,6 @@ class CBORDecoder:
     @property
     def immutable(self) -> bool: ...
     def decode(self, *, immutable: bool = ...) -> Any: ...
-    def decode_from_bytes(self, buf: bytes, /) -> Any: ...
     def read(self, amount: int, /) -> bytes: ...
 
     # Low-level decoder helpers
@@ -133,7 +147,7 @@ class CBORDecoder:
     def decode_bytestring(self, subtype: int) -> bytes: ...
     def decode_string(self, subtype: int) -> str: ...
     def decode_array(self, subtype: int) -> list[Any] | tuple[Any, ...]: ...
-    def decode_map(self, subtype: int) -> dict[Any, Any] | FrozenDict[Any, Any]: ...
+    def decode_map(self, subtype: int) -> dict[Any, Any] | frozendict[Any, Any]: ...
     def decode_semantic(self, subtype: int) -> Any: ...
     def decode_special(self, subtype: int) -> Any: ...
 
@@ -171,13 +185,6 @@ class CBORDecodeValueError(CBORDecodeError, ValueError): ...
 class CBORDecodeEOF(CBORDecodeError, EOFError): ...
 
 @final
-class FrozenDict(Generic[_KT, _VT_co], Mapping[_KT, _VT_co]):
-    def __new__(cls, *args: Any, **kwargs: Any) -> Self: ...
-    def __getitem__(self, key: _KT, /) -> _VT_co: ...
-    def __len__(self) -> int: ...
-    def __iter__(self) -> Iterator[_T_co]: ...
-
-@final
 class CBORTag:
     tag: int
     value: Any
@@ -203,13 +210,9 @@ class CBORSimpleValue:
     def __ge__(self, other: object, /) -> bool: ...
 
 @final
-class BreakMarkerType: ...
-
-@final
 class UndefinedType: ...
 
 undefined: UndefinedType
-break_marker: BreakMarkerType
 
 def dump(
     obj: object,
@@ -243,22 +246,30 @@ def load(
     *,
     tag_hook: TagHook | None = ...,
     object_hook: ObjectHook | None = ...,
-    major_decoders: Mapping[int, MajorDecoderCallback] | None = ...,
-    semantic_decoders: Mapping[int, SemanticDecoderCallback] | None = ...,
+    semantic_decoders: Mapping[int, SemanticDecoderCallback | ShareableDecoderInitializer]
+    | None = ...,
     str_errors: str = ...,
     read_size: int = ...,
     max_depth: int = ...,
+    immutable: bool = ...,
 ) -> Any: ...
 def loads(
     data: bytes,
     *,
     tag_hook: TagHook | None = ...,
     object_hook: ObjectHook | None = ...,
-    major_decoders: Mapping[int, MajorDecoderCallback] | None = ...,
-    semantic_decoders: Mapping[int, SemanticDecoderCallback] | None = ...,
+    semantic_decoders: Mapping[int, SemanticDecoderCallback | ShareableDecoderInitializer]
+    | None = ...,
     str_errors: str = ...,
     max_depth: int = ...,
+    immutable: bool = ...,
 ) -> Any: ...
 def shareable_encoder(
     wraps: Callable[[CBOREncoder, _T], None], /
 ) -> Callable[[CBOREncoder, _T], None]: ...
+@overload
+def shareable_decoder(func: ShareableDecoderInitializer, /) -> ShareableDecoderInitializer: ...
+@overload
+def shareable_decoder(
+    *, name: str | None = ..., immutable: bool = ...
+) -> Callable[[ShareableDecoderInitializer], ShareableDecoderCallback]: ...

@@ -121,10 +121,9 @@ def test_dtypes_from_file(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     expected = Path(__file__).with_name("examples.json").read_text()
     out_path = tmp_path / "outfile.json"
     argv = ["--sort-keys", "--pretty", "-d", "-o", str(out_path), str(in_path)]
-    with monkeypatch.context() as m:
-        m.setattr("sys.argv", [""] + argv)
-        cbor2.tool.main()
-        assert out_path.read_text() == expected
+    monkeypatch.setattr("sys.argv", [""] + argv)
+    cbor2.tool.main()
+    assert out_path.read_text() == expected
 
 
 def test_ignore_tag(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:

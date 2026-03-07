@@ -23,11 +23,15 @@ mod _cbor2 {
     use crate::decoder::CBORDecoder;
 
     #[pymodule_export]
+    use crate::decoder::shareable_decoder;
+
+    #[pymodule_export]
     use crate::types::CBORTag;
 
     #[pymodule_export]
     use crate::types::CBORSimpleValue;
 
+    #[cfg(not(Py_3_15))]
     #[pymodule_export]
     use crate::types::FrozenDict;
 
@@ -71,10 +75,6 @@ mod _cbor2 {
     ///     callable that takes 2 arguments: the decoder instance, and a dictionary. This
     ///     callback is invoked for each deserialized :class:`dict` object. The return value
     ///     is substituted for the dict in the deserialized output.
-    /// :param major_decoders:
-    ///     An optional mapping for overriding the decoders for select major types.
-    ///     The value is a mapping of major types (integers 0-7) to callable that take 2
-    ///     arguments: the decoder instance and a numeric subtype.
     /// :param semantic_decoders:
     ///     An optional mapping for overriding the decoding for select semantic tags.
     ///     The value is a mapping of semantic tags (integers) to callables that take
@@ -86,6 +86,9 @@ mod _cbor2 {
     ///     (ignored if ``fp`` is not seekable)
     /// :param max_depth:
     ///     maximum allowed depth for nested containers
+    /// :param immutable:
+    ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
+    ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
     /// :return:
     ///     the deserialized object
     ///
@@ -96,36 +99,34 @@ mod _cbor2 {
         *,
         tag_hook = None,
         object_hook = None,
-        major_decoders = None,
         semantic_decoders = None,
         str_errors = "strict",
         read_size = 4096,
-        max_depth = 100,
+        max_depth = 1000,
+        immutable = false,
     ))]
     fn load<'py>(
         py: Python<'py>,
         fp: &Bound<'py, PyAny>,
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
-        major_decoders: Option<&Bound<'py, PyMapping>>,
         semantic_decoders: Option<&Bound<'py, PyMapping>>,
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
+        immutable: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let decoder = CBORDecoder::new(
+        let mut decoder = CBORDecoder::new(
             py,
             fp,
             tag_hook,
             object_hook,
-            major_decoders,
             semantic_decoders,
             str_errors,
             read_size,
             max_depth,
         )?;
-        let instance = Bound::new(py, decoder)?;
-        CBORDecoder::decode(&instance, false)
+        decoder.decode(py, immutable)
     }
 
     /// Deserialize an object from a bytestring.
@@ -141,10 +142,6 @@ mod _cbor2 {
     ///     callable that takes 2 arguments: the decoder instance, and a dictionary. This
     ///     callback is invoked for each deserialized :class:`dict` object. The return value
     ///     is substituted for the dict in the deserialized output.
-    /// :param major_decoders:
-    ///     An optional mapping for overriding the decoders for select major types.
-    ///     The value is a mapping of major types (integers 0-7) to callable that take 2
-    ///     arguments: the decoder instance and a numeric subtype.
     /// :param semantic_decoders:
     ///     An optional mapping for overriding the decoding for select semantic tags.
     ///     The value is a mapping of semantic tags (integers) to callables that take
@@ -154,6 +151,9 @@ mod _cbor2 {
     ///     section in the standard library documentation for details)
     /// :param max_depth:
     ///     maximum allowed depth for nested containers
+    /// :param immutable:
+    ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
+    ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
     /// :return:
     ///     the deserialized object
     ///
@@ -164,35 +164,33 @@ mod _cbor2 {
         *,
         tag_hook = None,
         object_hook = None,
-        major_decoders = None,
         semantic_decoders = None,
         str_errors = "strict",
-        max_depth = 100,
+        max_depth = 1000,
+        immutable = false,
     ))]
     fn loads<'py>(
         py: Python<'py>,
         data: Bound<'py, PyBytes>,
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
-        major_decoders: Option<&Bound<'py, PyMapping>>,
         semantic_decoders: Option<&Bound<'py, PyMapping>>,
         str_errors: &str,
         max_depth: usize,
+        immutable: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let decoder = CBORDecoder::new_internal(
+        let mut decoder = CBORDecoder::new_internal(
             py,
             None,
             Some(data),
             tag_hook,
             object_hook,
-            major_decoders,
             semantic_decoders,
             str_errors,
             0,
             max_depth,
         )?;
-        let instance = Bound::new(py, decoder)?;
-        CBORDecoder::decode(&instance, false)
+        decoder.decode(py, immutable)
     }
 
     /// Serialize an object to a file.
@@ -360,19 +358,20 @@ mod _cbor2 {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
         // Register cbor2.FrozenDict as a Mapping subclass
         let py = m.py();
-        let frozen_dict_type = py.get_type::<FrozenDict>();
-        py.import("collections.abc")?
-            .getattr("Mapping")?
-            .call_method1("register", (frozen_dict_type,))?;
+
+        #[cfg(not(Py_3_15))]
+        {
+            let frozen_dict_type = py.get_type::<FrozenDict>();
+            py.import("collections.abc")?
+                .getattr("Mapping")?
+                .call_method1("register", (frozen_dict_type,))?;
+        }
 
         let undefined = Bound::new(py, UndefinedType)?;
         m.add("undefined", undefined.clone())?;
         UNDEFINED.get_or_init(py, || undefined.unbind());
 
-        let break_marker = Bound::new(py, BreakMarkerType)?;
-        m.add("break_marker", break_marker.clone())?;
-        BREAK_MARKER.get_or_init(py, || break_marker.unbind());
-
+        BREAK_MARKER.get_or_try_init(py, || Py::new(py, BreakMarkerType))?;
         SYS_MAXSIZE.get_or_try_init(py, || py.import("sys")?.getattr("maxsize")?.extract())?;
 
         Ok(())

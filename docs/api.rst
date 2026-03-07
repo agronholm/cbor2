@@ -15,17 +15,14 @@ Decoding
 .. autofunction:: cbor2.loads
 .. autofunction:: cbor2.load
 .. autoclass:: cbor2.CBORDecoder
+.. autodecorator:: cbor2.shareable_decoder
 
 Types
 -----
 
 .. autoclass:: cbor2.CBORSimpleValue
 .. autoclass:: cbor2.CBORTag
-.. autoclass:: cbor2.FrozenDict
-.. data:: cbor2.break_marker
-
-    A singleton representing the CBOR break marker, used for encoding
-    indefinite strings and containers.
+.. autoclass:: cbor2.frozendict
 .. data:: cbor2.undefined
 
     A singleton representing the CBOR "undefined" value.
@@ -33,14 +30,18 @@ Types
 Type aliases
 ------------
 
-.. type:: MajorDecoderCallback
-    :canonical: ~collections.abc.Callable[[CBORDecoder, int], typing.Any]
-
-    Type of the callback needed in the ``major_decoders`` decoder option.
 .. type:: SemanticDecoderCallback
-    :canonical: ~collections.abc.Callable[[CBORDecoder], Any]
+    :canonical: ~collections.abc.Callable[[Any, bool], Any]
 
-    Type of the callback needed in the ``semantic_decoders`` decoder option.
+    The common type of callbacks accepted in the ``semantic_decoders`` decoder option.
+.. type:: ShareableDecoderInitializer
+    :canonical: ~collections.abc.Callable[[bool], tuple[Any, ShareableDecoderCallback]]
+
+    A two-phase decoder callback accepted in the ``semantic_decoders`` decoder option.
+.. type:: ShareableDecoderCallback
+    :canonical: ~collections.abc.Callable[[Any], Any]
+
+    Type of the callback returned by a :type:`ShareableDecoderInitializer`
 .. type:: ObjectHook
     :canonical: ~collections.abc.Callable[[CBORDecoder, dict[Any, Any]], Any]
 

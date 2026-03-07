@@ -1,4 +1,5 @@
 import re
+import sys
 from binascii import unhexlify
 from collections import OrderedDict
 from collections.abc import Set
@@ -28,7 +29,6 @@ from cbor2 import (
     CBOREncoder,
     CBORSimpleValue,
     CBORTag,
-    FrozenDict,
     dump,
     dumps,
     loads,
@@ -37,6 +37,9 @@ from cbor2 import (
 )
 
 from .hypothesis_strategies import compound_types_strategy
+
+if sys.hexversion < 51314855:
+    from cbor2 import frozendict
 
 
 class TestFpAttribute:
@@ -543,7 +546,7 @@ def test_dump_to_file(tmp_path: Path) -> None:
             id="byte length",
         ),
         pytest.param(OrderedDict([(255, 0), (2, 0)]), "a2020018ff00", id="integer keys"),
-        pytest.param(FrozenDict([(b"a", b""), (b"b", b"")]), "A2416140416240", id="frozendict"),
+        pytest.param(frozendict([(b"a", b""), (b"b", b"")]), "A2416140416240", id="frozendict"),
     ],
 )
 def test_ordered_map(value: object, expected: str) -> None:
@@ -586,7 +589,7 @@ def test_tuple_key() -> None:
 
 
 def test_dict_key() -> None:
-    assert dumps({FrozenDict({2: 1}): ""}) == unhexlify("a1a1020160")
+    assert dumps({frozendict({2: 1}): ""}) == unhexlify("a1a1020160")
 
 
 @pytest.mark.parametrize(

@@ -140,7 +140,6 @@ Python type                       Major tag Subtype
 :data:`None`                      7         22
 :data:`undefined`                 7         23
 :class:`float`                    7         27
-:data:`break_marker`              7         31
 ================================= ========= ===============================
 
 Encoder semantic tag support

@@ -6,6 +6,8 @@ import re
 import struct
 import sys
 from binascii import unhexlify
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from email.message import Message
@@ -29,6 +31,7 @@ from uuid import UUID
 
 import pytest
 from _pytest.fixtures import FixtureRequest
+
 from cbor2 import (
     CBORDecodeEOF,
     CBORDecodeError,
@@ -36,14 +39,17 @@ from cbor2 import (
     CBORDecodeValueError,
     CBORSimpleValue,
     CBORTag,
-    FrozenDict,
     dumps,
     load,
     loads,
+    shareable_decoder,
     undefined,
 )
 
-DECODER_MAX_DEPTH = 100
+if sys.hexversion < 51314855:
+    from cbor2 import frozendict
+
+DECODER_MAX_DEPTH = 1000
 
 
 @pytest.fixture
@@ -78,7 +84,7 @@ class TestFpAttribute:
 
 class TestTagHookAttribute:
     def test_callable(self) -> None:
-        def tag_hook(decoder: CBORDecoder, tag: CBORTag) -> object:
+        def tag_hook(tag: CBORTag, immutable: bool) -> object:
             return tag.value
 
         decoder = CBORDecoder(BytesIO(), tag_hook=tag_hook)
@@ -96,7 +102,7 @@ class TestTagHookAttribute:
 
 class TestObjectHookAttribute:
     def test_success(self) -> None:
-        def object_hook(decoder: CBORDecoder, value: dict[Any, Any]) -> dict[Any, Any]:
+        def object_hook(value: dict[Any, Any]) -> dict[Any, Any]:
             return value
 
         decoder = CBORDecoder(BytesIO(), object_hook=object_hook)
@@ -142,14 +148,6 @@ def test_read() -> None:
             decoder.read(10)
 
 
-def test_decode_from_bytes() -> None:
-    with BytesIO(b"foobar") as stream:
-        decoder = CBORDecoder(stream)
-        assert decoder.decode_from_bytes(b"\x01") == 1
-        with pytest.raises(TypeError):
-            decoder.decode_from_bytes("foo")  # type: ignore[arg-type]
-
-
 def test_non_seekable_fp() -> None:
     sock1, sock2 = socketpair()
     with sock1, sock2:
@@ -167,7 +165,7 @@ class TestMaximumDepth:
             CBORDecodeError,
             match=f"maximum container nesting depth \\({DECODER_MAX_DEPTH}\\) exceeded",
         ):
-            loads(b"\x81" * 1000 + b"\x80")
+            loads(b"\x81" * (DECODER_MAX_DEPTH + 1) + b"\x80")
 
     def test_explicit(self) -> None:
         with pytest.raises(
@@ -832,16 +830,12 @@ class TestDeprecatedIPNetwork:
 
 class TestSharedReference:
     def test_bad_reference(self) -> None:
-        with pytest.raises(CBORDecodeError) as exc:
+        with pytest.raises(CBORDecodeError, match="shared reference 5 not found"):
             loads(unhexlify("d81d05"))
-            assert str(exc.value).endswith("shared reference 5 not found")
-            assert isinstance(exc, ValueError)
 
     def test_uninitialized(self) -> None:
-        with pytest.raises(CBORDecodeError) as exc:
-            loads(unhexlify("D81CA1D81D014161"))
-            assert str(exc.value).endswith("shared value 0 has not been initialized")
-            assert isinstance(exc, ValueError)
+        with pytest.raises(CBORDecodeError, match="shared value 0 has not been initialized"):
+            loads(unhexlify("D90102D81C8181D81D00"))
 
     def test_immutable(self) -> None:
         # a = (1, 2, 3)
@@ -920,29 +914,12 @@ def test_premature_end_of_stream() -> None:
 
 
 def test_tag_hook() -> None:
-    def reverse(decoder: CBORDecoder, tag: CBORTag) -> Any:
+    def reverse(tag: CBORTag, immutable: bool) -> Any:
         assert tag.tag == 6000
         return tag.value[::-1]
 
     decoded = loads(unhexlify("d917706548656c6c6f"), tag_hook=reverse)
     assert decoded == "olleH"
-
-
-def test_tag_hook_cyclic() -> None:
-    class DummyType:
-        def __init__(self, value: object):
-            self.value = value
-
-    def unmarshal_dummy(decoder: CBORDecoder, tag: CBORTag) -> DummyType:
-        instance = DummyType.__new__(DummyType)
-        decoder.set_shareable(instance)
-        instance.value = decoder.decode_from_bytes(tag.value)
-        return instance
-
-    decoded = loads(unhexlify("D81CD90BB849D81CD90BB843D81D00"), tag_hook=unmarshal_dummy)
-    assert isinstance(decoded, DummyType)
-    assert isinstance(decoded.value, DummyType)
-    assert decoded.value.value is decoded
 
 
 def test_object_hook() -> None:
@@ -951,13 +928,13 @@ def test_object_hook() -> None:
             self.state = state
 
     payload = unhexlify("A2616103616205")
-    decoded = loads(payload, object_hook=lambda decoder, value: DummyType(value))
+    decoded = loads(payload, object_hook=DummyType)
     assert isinstance(decoded, DummyType)
     assert decoded.state == {"a": 3, "b": 5}
 
 
 def test_object_hook_exception() -> None:
-    def object_hook(decoder: CBORDecoder, data: dict[Any, Any]) -> NoReturn:
+    def object_hook(data: dict[Any, Any]) -> NoReturn:
         raise RuntimeError("foo")
 
     payload = unhexlify("A2616103616205")
@@ -966,6 +943,68 @@ def test_object_hook_exception() -> None:
 
     assert isinstance(exc_info.value.__cause__, RuntimeError)
     assert exc_info.value.__cause__.args[0] == "foo"
+
+
+class TestCustomDecoder:
+    def test_custom_semantic_decoder(self) -> None:
+        def custom_set_decoder(value: Any, immutable: bool) -> Any:
+            return frozenset(value) if immutable else set(value)
+
+        payload = unhexlify("d9010283050763666f6f")
+        assert loads(payload, semantic_decoders={258: custom_set_decoder}) == {5, 7, "foo"}
+        assert loads(
+            payload, semantic_decoders={258: custom_set_decoder}, immutable=True
+        ) == frozenset((5, 7, "foo"))
+
+    def test_custom_container_cyclic_reference(self) -> None:
+        @dataclass
+        class CustomContainer:
+            value: Any
+
+        @shareable_decoder(name="custom container")
+        def custom_decoder(
+            immutable: bool,
+        ) -> tuple[CustomContainer | None, Callable[[Any], Any]]:
+            container = None if immutable else CustomContainer(None)
+
+            def callback(item: Any) -> CustomContainer:
+                if container is None:
+                    return CustomContainer(item)
+                else:
+                    container.value = item
+                    return container
+
+            return container, callback
+
+        payload = unhexlify("d81cda00013880d81d00")
+        retval = loads(payload, semantic_decoders={80_000: custom_decoder})
+        assert retval.value is retval
+
+    @pytest.mark.parametrize(
+        "immutable, expected_value",
+        [
+            pytest.param(False, [1, 2], id="mutable"),
+            pytest.param(True, (1, 2), id="immutable"),
+        ],
+    )
+    def test_custom_container_immutable_flag(self, immutable: bool, expected_value: Any) -> None:
+        @dataclass
+        class CustomContainer:
+            value: tuple[Any, ...] | list[Any]
+
+        @shareable_decoder(name="custom container", immutable=immutable)
+        def custom_decoder(
+            immutable: bool,
+        ) -> tuple[CustomContainer | None, Callable[[Any], Any]]:
+            def callback(item: Any) -> CustomContainer:
+                return CustomContainer(item)
+
+            return None, callback
+
+        payload = unhexlify("da00013880820102")
+        retval = loads(payload, semantic_decoders={80_000: custom_decoder})
+        assert isinstance(retval, CustomContainer)
+        assert retval.value == expected_value
 
 
 def test_load_from_file(tmp_path: Path) -> None:
@@ -993,14 +1032,14 @@ def test_set() -> None:
 @pytest.mark.parametrize(
     "payload, expected",
     [
-        ("a1a1616161626163", {FrozenDict({"a": "b"}): "c"}),
+        ("a1a1616161626163", {frozendict({"a": "b"}): "c"}),
         (
-            "A1A1A10101A1666E6573746564F5A1666E6573746564F4",
-            {FrozenDict({FrozenDict({1: 1}): FrozenDict({"nested": True})}): {"nested": False}},
+            "a1a1a10101a1666e6573746564f5a1666e6573746564f4",
+            {frozendict({frozendict({1: 1}): frozendict({"nested": True})}): {"nested": False}},
         ),
         ("a182010203", {(1, 2): 3}),
         ("a1d901028301020304", {frozenset({1, 2, 3}): 4}),
-        ("A17f657374726561646d696e67ff01", {"streaming": 1}),
+        ("a17f657374726561646d696e67ff01", {"streaming": 1}),
         ("d9010282d90102820102d90102820304", {frozenset({1, 2}), frozenset({3, 4})}),
     ],
 )
@@ -1149,21 +1188,8 @@ class TestDecoderReuse:
 
         # Second decode should fail - sharedref(0) doesn't exist in this context
         decoder.fp = BytesIO(msg2)
-        with pytest.raises(CBORDecodeValueError, match="shared reference"):
+        with pytest.raises(CBORDecodeError, match="shared reference"):
             decoder.decode()
-
-    def test_decode_from_bytes_resets_shared_refs(self) -> None:
-        """
-        decode_from_bytes should also reset shared references between calls.
-        """
-        msg1 = dumps(CBORTag(28, "value"))
-        msg2 = dumps(CBORTag(29, 0))
-
-        decoder = CBORDecoder(BytesIO(b""))
-        decoder.decode_from_bytes(msg1)
-
-        with pytest.raises(CBORDecodeValueError, match="shared reference"):
-            decoder.decode_from_bytes(msg2)
 
     def test_shared_refs_within_single_decode(self) -> None:
         """
@@ -1186,94 +1212,6 @@ class TestDecoderReuse:
         result = loads(data)
         assert result == ["hello", "hello"]
         assert result[0] is result[1]  # Same object reference
-
-
-def test_decode_from_bytes_in_hook_preserves_buffer() -> None:
-    """Test that calling decode_from_bytes from a hook preserves stream buffer state.
-
-    This is a documented use case from docs/customizing.rst where hooks decode
-    embedded CBOR data. Before the fix, the stream's readahead buffer would be
-    corrupted, causing subsequent reads to fail or return wrong data.
-    """
-
-    def tag_hook(decoder: CBORDecoder, tag: CBORTag) -> Any:
-        if tag.tag == 999:
-            # Decode embedded CBOR (documented pattern)
-            return decoder.decode_from_bytes(tag.value)
-
-        return tag
-
-    # Test data: array with [tag(999, embedded_cbor), "after_hook", "final"]
-    # embedded_cbor encodes: [1, 2, 3]
-    data = unhexlify(
-        "83"  # array(3)
-        "d903e7"  # tag(999)
-        "44"  # bytes(4)
-        "83010203"  # embedded: array [1, 2, 3]
-        "6a"  # text(10)
-        "61667465725f686f6f6b"  # "after_hook"
-        "65"  # text(5)
-        "66696e616c"  # "final"
-    )
-
-    # Decode from stream (not bytes) to use readahead buffer
-    stream = BytesIO(data)
-    decoder = CBORDecoder(stream, tag_hook=tag_hook)
-    result = decoder.decode()
-
-    # Verify all values decoded correctly
-    assert result == [[1, 2, 3], "after_hook", "final"]
-
-    # First element should be the decoded embedded CBOR
-    assert result[0] == [1, 2, 3]
-    # Second element should be "after_hook" (not corrupted)
-    assert result[1] == "after_hook"
-    # Third element should be "final"
-    assert result[2] == "final"
-
-
-def test_decode_from_bytes_deeply_nested_in_hook() -> None:
-    """Test deeply nested decode_from_bytes calls preserve buffer state.
-
-    This tests tag(999, tag(888, tag(777, [1,2,3]))) where each tag value
-    is embedded CBOR that triggers the hook recursively.
-
-    Before the fix, even a single level would corrupt the buffer. With multiple
-    levels, the buffer would be completely corrupted, mixing data from different
-    BytesIO objects and the original stream.
-    """
-
-    def tag_hook(decoder: CBORDecoder, tag: CBORTag) -> Any:
-        if tag.tag in [999, 888, 777]:
-            # Recursively decode embedded CBOR
-            return decoder.decode_from_bytes(tag.value)
-
-        return tag
-
-    # Test data: [tag(999, tag(888, tag(777, [1,2,3]))), "after", "final"]
-    # Each tag contains embedded CBOR
-    data = unhexlify(
-        "83"  # array(3)
-        "d903e7"  # tag(999)
-        "4c"  # bytes(12)
-        "d9037848d903094483010203"  # embedded: tag(888, tag(777, [1,2,3]))
-        "65"  # text(5)
-        "6166746572"  # "after"
-        "65"  # text(5)
-        "66696e616c"  # "final"
-    )
-
-    # Decode from stream to use readahead buffer
-    stream = BytesIO(data)
-    decoder = CBORDecoder(stream, tag_hook=tag_hook)
-    result = decoder.decode()
-
-    # With the fix: all three levels of nesting work correctly
-    # Without the fix: buffer corruption at each level, test fails
-    assert result == [[1, 2, 3], "after", "final"]
-    assert result[0] == [1, 2, 3]
-    assert result[1] == "after"
-    assert result[2] == "final"
 
 
 def test_str_errors_valid_utf8_unchanged() -> None:
@@ -1299,20 +1237,10 @@ def test_string_stack_threshold_boundary(length: int) -> None:
     assert loads(payload) == test_string
 
 
-def test_override_major_decoder() -> None:
-    def string_decoder(decoder: CBORDecoder, subtype: int) -> str:
-        return decoder.decode_string(subtype)[::-1]
-
-    payload = unhexlify("824568656c6c6f65776f726c64")  # [b"hello", "world"]"
-    assert loads(payload, major_decoders={3: string_decoder}) == [b"hello", "dlrow"]
-
-
 def test_override_semantic_decoder() -> None:
-    expected_datetime = datetime(2026, 2, 18)
-
-    def date_decoder(decoder: CBORDecoder) -> datetime:
-        decoder.decode_epoch_datetime()
+    def date_decoder(value: int, immutable: bool) -> datetime:
+        assert value == 1363896240
         return datetime(2026, 2, 18)
 
     payload = unhexlify("c11a514b67b0")  # datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)
-    assert loads(payload, semantic_decoders={1: date_decoder}) == expected_datetime
+    assert loads(payload, semantic_decoders={1: date_decoder}) == datetime(2026, 2, 18)

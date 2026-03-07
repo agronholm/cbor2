@@ -29,6 +29,7 @@ dependencies = [
  "half",
  "num-bigint",
  "pyo3",
+ "pyo3-build-config",
 ]
 
 [[package]]

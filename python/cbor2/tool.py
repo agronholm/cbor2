@@ -18,7 +18,10 @@ from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeAlias, TypeVar
 
-from . import CBORDecodeEOF, CBORDecoder, CBORSimpleValue, CBORTag, FrozenDict, load, undefined
+from . import CBORDecodeEOF, CBORDecoder, CBORSimpleValue, CBORTag, load, loads, undefined
+
+if sys.hexversion < 51314855:
+    from ._cbor2 import frozendict
 
 if TYPE_CHECKING:
     from . import ObjectHook, TagHook
@@ -29,7 +32,7 @@ JSONValue: TypeAlias = "str | float | bool | None | list[JSONValue] | dict[str, 
 default_encoders: dict[type, Callable[[Any], Any]] = {
     bytes: lambda x: x.decode(encoding="utf-8", errors="backslashreplace"),
     decimal.Decimal: str,
-    FrozenDict: lambda x: str(dict(x)),
+    frozendict: lambda x: str(dict(x)),
     CBORSimpleValue: lambda x: f"cbor_simple:{x.value:d}",
     type(undefined): lambda x: "cbor:undef",
     datetime: lambda x: x.isoformat(),
@@ -45,13 +48,13 @@ default_encoders: dict[type, Callable[[Any], Any]] = {
 }
 
 
-def tag_hook(decoder: CBORDecoder, tag: CBORTag, ignore_tags: Collection[int] = ()) -> object:
+def tag_hook(tag: CBORTag, immutable: bool, ignore_tags: Collection[int] = ()) -> object:
     if tag.tag in ignore_tags:
         return tag.value
 
     if tag.tag == 24:
-        return decoder.decode_from_bytes(tag.value)
-    elif decoder.immutable:
+        return loads(tag.value)
+    elif immutable:
         return f"CBORtag:{tag.tag}:{tag.value}"
 
     return tag
@@ -110,7 +113,7 @@ def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict
             k = k.decode(encoding="utf-8", errors="backslashreplace")
         elif isinstance(k, CBORSimpleValue):
             k = f"cbor_simple:{k.value:d}"
-        elif isinstance(k, (FrozenDict, frozenset, tuple)):
+        elif isinstance(k, (frozendict, frozenset, tuple)):
             k = str(k)
 
         if isinstance(v, dict):

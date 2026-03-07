@@ -210,13 +210,39 @@ impl CBORSimpleValue {
 /// A hashable, immutable mapping type.
 ///
 /// The arguments to ``FrozenDict`` are processed just like those to ``dict``.
-#[pyclass(mapping, module = "cbor2")]
+///
+/// Available only on Python 3.14 and below. On Python 3.15, the decoder uses the built-in
+/// :class:`frozendict` class instead.
+#[cfg(not(Py_3_15))]
+#[pyclass(mapping, name = "frozendict", module = "cbor2")]
 pub struct FrozenDict {
     dict: Py<PyDict>,
     hash: Option<u64>,
 }
 
-// TODO: replace with PEP 814 frozendict when it becomes available
+#[cfg(not(Py_3_15))]
+impl FrozenDict {
+    pub fn from_dict(dict: Bound<'_, PyDict>) -> Self {
+        Self {
+            dict: dict.unbind(),
+            hash: None,
+        }
+    }
+
+    pub fn from_items<'py>(py: Python<'py>, items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>) -> PyResult<Bound<'py, Self>> {
+        let dict = PyDict::new(py);
+        for (key, value) in items {
+            dict.set_item(key, value)?;
+        }
+        let frozendict = Self {
+            dict: dict.unbind(),
+            hash: None,
+        };
+        Ok(Bound::new(py, frozendict)?)
+    }
+}
+
+#[cfg(not(Py_3_15))]
 #[pymethods]
 impl FrozenDict {
     #[new]
@@ -261,13 +287,13 @@ impl FrozenDict {
         if let Ok(t) = key.cast::<PyTuple>() {
             if t.len() != 2 {
                 return Err(PyErr::new::<PyTypeError, _>(
-                    "FrozenDict[...] expects exactly 2 type arguments",
+                    "frozendict[...] expects exactly 2 type arguments",
                 ));
             }
         } else {
             // Handle the “one thing” case explicitly if you want, or just error
             return Err(PyErr::new::<PyTypeError, _>(
-                "FrozenDict[...] expects exactly 2 type arguments",
+                "frozendict[...] expects exactly 2 type arguments",
             ));
         };
 
@@ -305,7 +331,7 @@ impl FrozenDict {
         let dict_repr = self.dict.bind(py).repr()?;
         Ok(PyString::new(
             py,
-            format!("FrozenDict({})", dict_repr).as_str(),
+            format!("frozendict({})", dict_repr).as_str(),
         ))
     }
 

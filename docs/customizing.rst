@@ -131,7 +131,7 @@ In rare cases, you may need to decode the next item from the stream as immutable
 In practice, this means:
 
 * Arrays are decoded as :class:`tuple` instead of :class:`list`
-* Maps are decoded as :class:`~cbor2.FrozenDict` instead of :class:`dict`
+* Maps are decoded as :class:`frozendict` (or :class:`~cbor2.frozendict`) instead of :class:`dict`
 * Sets are decoded as :class:`set` instead of :class:`frozenset`
 
 There are two ways your custom decoder callbacks may want to interact with the decoder's
@@ -234,6 +234,8 @@ serialize such a cyclic object graph::
 
     from __future__ import annotations
 
+    from typing import Any
+
     import cbor2
 
     class MyType:
@@ -246,11 +248,10 @@ serialize such a cyclic object graph::
     def encode_mytype(encoder: cbor2.CBOREncoder, value: MyType):
         # The state has to be serialized separately so that the decoder would have a chance to
         # create an empty instance before the shared value references are decoded
-        encoder.encode_semantic(3000, value.__dict__)
+        encoder.encode_semantic(80000, value.__dict__)
 
-    def decode_mytype(decoder: cbor2.CBORDecoder) -> MyType:
+    def decode_mytype(state: dict[str, Any], immutable: bool) -> MyType:
         instance = MyType.__new__()
-        state = decoder.decode()
         instance.__dict__.update(state)
         return instance
 
@@ -264,12 +265,14 @@ To fix this, a few adjustments need to be made:
 
 #. Value sharing needs to be turned on in the encoder with ``value_sharing=True``
 #. The encoder callback must be decorated with :deco:`shareable_encoder`
-#. The decoder callback must call :meth:`CBORDecoder.set_shareable` with ``instance``
-   (the "empty" instance before its state has been decoded) as the argument
+#. The decoder callback must be decorated with :deco:`shareable_decoder`
 
 Here is the revised example::
 
     from __future__ import annotations
+
+    from collections.abc import Callable
+    from typing import Any
 
     import cbor2
 
@@ -284,17 +287,19 @@ Here is the revised example::
     def encode_mytype(encoder: cbor2.CBOREncoder, value: MyType):
         # The state has to be serialized separately so that the decoder would have a chance to
         # create an empty instance before the shared value references are decoded
-        encoder.encode_semantic(3000, value.__dict__)
+        encoder.encode_semantic(80000, value.__dict__)
 
-    def decode_mytype(decoder: cbor2.CBORDecoder) -> MyType:
-        # Connects the new MyType instance with the first available shareable index
-        # so that later references to that index can get the same object
-        instance = decoder.set_shareable(MyType.__new__(MyType))
+    @cbor2.shareable_decoder
+    def decode_mytype(immutable: bool) -> tuple[MyType, Callable[[Any], Any]]:
+        # The uninitialized instance will be marked as shareable before its state is decoded
+        instance = MyType.__new__(MyType)
 
-        # The decoded state can now contain references to the empty instance
-        state = decoder.decode()
-        instance.__dict__.update(state)
-        return instance
+        def decoder(state: dict[str, Any]) -> MyType:
+            instance.__dict__.update(state)
+            return instance
+
+        # Return the raw instance and a callback to be run once the state has been decoded
+        return instance, decoder
 
     parent = MyType()
     child1 = MyType(parent)
@@ -302,6 +307,6 @@ Here is the revised example::
     # Important: value sharing must be enabled
     serialized = cbor2.dumps(parent, encoders={MyType: encode_mytype}, value_sharing=True)
 
-    new_parent = cbor2.loads(serialized, semantic_decoders={3000: decode_mytype})
+    new_parent = cbor2.loads(serialized, semantic_decoders={80000: decode_mytype})
     assert new_parent.children[0].parent is new_parent
     assert new_parent.children[1].parent is new_parent

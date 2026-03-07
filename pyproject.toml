@@ -26,6 +26,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
 ]
 requires-python = ">= 3.10"
 dynamic = ["version"]
@@ -103,7 +104,7 @@ relative_files = true
 show_missing = true
 
 [tool.tox]
-env_list = ["py310", "py311", "py312", "py313", "py314", "py314t", "pypy3"]
+env_list = ["py310", "py311", "py312", "py313", "py314", "py314t", "py315", "pypy3"]
 skip_missing_interpreters = true
 requires = ["tox >= 4.22"]
 

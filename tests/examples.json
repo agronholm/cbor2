@@ -13,7 +13,7 @@
     ],
     "dict_key": [
         {
-            "FrozenDict({2: 1})": ""
+            "frozendict({2: 1})": ""
         }
     ],
     "embedded": [
