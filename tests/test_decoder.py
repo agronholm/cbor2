@@ -6,7 +6,7 @@ import re
 import struct
 import sys
 from binascii import unhexlify
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -102,7 +102,7 @@ class TestTagHookAttribute:
 
 class TestObjectHookAttribute:
     def test_success(self) -> None:
-        def object_hook(value: dict[Any, Any]) -> dict[Any, Any]:
+        def object_hook(value: Mapping[Any, Any]) -> Mapping[Any, Any]:
             return value
 
         decoder = CBORDecoder(BytesIO(), object_hook=object_hook)
@@ -934,7 +934,7 @@ def test_object_hook() -> None:
 
 
 def test_object_hook_exception() -> None:
-    def object_hook(data: dict[Any, Any]) -> NoReturn:
+    def object_hook(data: Mapping[Any, Any]) -> NoReturn:
         raise RuntimeError("foo")
 
     payload = unhexlify("A2616103616205")

@@ -1,5 +1,5 @@
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, TypeAlias
 
 from ._cbor2 import CBORDecodeEOF as CBORDecodeEOF
@@ -26,9 +26,9 @@ if sys.hexversion < 51314855:
 
 TagHook: TypeAlias = Callable[[CBORTag, bool], Any]
 SemanticDecoderCallback: TypeAlias = Callable[[Any, bool], Any]
-ObjectHook: TypeAlias = Callable[[dict[Any, Any]], Any]
+ObjectHook: TypeAlias = Callable[[Mapping[Any, Any]], Any]
 EncoderHook: TypeAlias = Callable[[CBOREncoder, Any], Any]
 ShareableDecoderCallback: TypeAlias = Callable[[Any], Any]
 ShareableDecoderInitializer: TypeAlias = Callable[[bool], tuple[Any, ShareableDecoderCallback]]
 
-del Any, Callable, TypeAlias, sys
+del Any, Callable, Mapping, TypeAlias, sys

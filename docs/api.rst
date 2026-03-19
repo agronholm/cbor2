@@ -43,11 +43,11 @@ Type aliases
 
     Type of the callback returned by a :type:`ShareableDecoderInitializer`
 .. type:: ObjectHook
-    :canonical: ~collections.abc.Callable[[CBORDecoder, dict[Any, Any]], Any]
+    :canonical: ~collections.abc.Callable[[collections.abc.Mapping[Any, Any]], Any]
 
     Type of the callback needed for the ``object_hook`` decoder option.
 .. type:: TagHook
-    :canonical: ~collections.abc.Callable[[CBORDecoder, CBORTag], Any]
+    :canonical: ~collections.abc.Callable[[CBORTag], Any]
 
     Type of the callback needed for the ``tag_hook`` decoder option.
 .. type:: EncoderHook
