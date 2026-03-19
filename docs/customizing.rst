@@ -8,38 +8,18 @@ Both the encoder and decoder can be customized to support a wider range of types
 Customizing the decoder
 -----------------------
 
-There are four ways to customize the decoding behavior, available as keyword arguments to
+There are three ways to customize the decoding behavior, available as keyword arguments to
 :func:`load`, :func:`loads` and :class:`CBORDecoder`:
 
-#. ``major_decoders``: lets you override how specific major CBOR types are decoded
-#. ``semantic_decoders``: lets you override how specific semantic tags are decoded
+#. ``semantic_decoders``: lets you change how specific semantic tags are decoded
 #. ``tag_hook``: lets you define a catch-all for unhandled semantic tags
 #. ``object_hook``: lets you transform any newly-decoded dicts
-
-Overriding the decoding of major types
-++++++++++++++++++++++++++++++++++++++
-
-The following example overrides the decoding for major type 3 (text strings)::
-
-    import cbor2
-
-    def string_decoder(decoder: cbor2.CBORDecoder, subtype: int) -> str:
-        # Call the original implementation
-        # (optional if you want to do the low-level decoding yourself)
-        my_string = decoder.decode_string(subtype)
-        return my_string[::-1]
-
-    payload = cbor2.dumps("Hello, world!")
-    assert cbor2.loads(payload, major_decoders={3: string_decoder}) == "!dlrow ,olleH"
-
-.. note:: Overriding major decoders is a niche feature, not needed by most users.
-    Additionally, passing a major decoder lookup mapping has negative consequences
-    for the decoder's performance due to the extra round-trips to the Python interpreter.
 
 Overriding the decoding of semantic tags
 ++++++++++++++++++++++++++++++++++++++++
 
-If you want to override how an already supported tag is decoded, this is a good way to do it.
+If you want to define yourself how spefici semantic tag should be decoded, this is a good way to do
+it.
 
 Here's an example decoder implementation for semantic tag 1 (epoch datetime)::
 
@@ -47,9 +27,8 @@ Here's an example decoder implementation for semantic tag 1 (epoch datetime)::
 
     import cbor2
 
-    def decode_epoch_datetime(decoder: cbor2.CBORDecoder) -> datetime:
-        timestamp = decoder.decode()
-        return datetime.fromtimestamp(timestamp, timezone.utc)
+    def decode_epoch_datetime(item: int, immutable: bool) -> datetime:
+        return datetime.fromtimestamp(item, timezone.utc)
 
     payload = cbor2.dumps(cbor2.CBORTag(1, 1363896240))
     decoded = cbor2.loads(payload, semantic_decoders={1: decode_epoch_datetime})
@@ -63,8 +42,9 @@ Specifying a "catch-all" for unhandled semantic tags
 ++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 By specifying a ``tag_hook``, the decoder will handle otherwise unhandled semantic tags by calling
-this callable with two arguments: the decoder instance and the tag object. Its return value is used
-in place of the :class:`CBORTag` object that would have otherwise been returned.
+this callable with two arguments: the :class:`CBORTag` instance and the ``immutable`` flag. Its
+return value is used in place of the :class:`CBORTag` object that would have otherwise been
+returned.
 
 Here's an example that assumes semantic tag 4000 to contain an array of attributes ``x`` and ``y``
 for a custom ``Point`` class::
@@ -76,7 +56,7 @@ for a custom ``Point`` class::
             self.x = x
             self.y = y
 
-    def tag_hook(decoder: cbor2.CBORDecoder, tag: cbor2.CBORTag) -> Point | cbor2.CBORTag:
+    def tag_hook(tag: cbor2.CBORTag, immutable: bool) -> Point | cbor2.CBORTag:
         if tag.tag == 4000:
             # we expect tag.value to be an array of [x, y] attributes
             return Point(*tag.value)
@@ -93,13 +73,14 @@ Customizing map decoding
 ++++++++++++++++++++++++
 
 The final decoder option allows users to customize how CBOR maps are decoded, using the
-``object_hook`` option. This callback takes two arguments: the decoder instance and a
-:class:`dict`. The callback should return either the dictionary passed to it, or another object
-that should replace it.
+``object_hook`` option. This callback takes two arguments: the mapping (a :class:`dict` or a
+:class:`frozendict`) and the ``immutable`` flag. The callback should return either the mapping
+passed to it, or another object that should replace it.
 
 Here's an example that decode any dict with the key ``typename`` set to ``Point`` as a ``Point``
 instance::
 
+    from collections.abc import Mapping
     from typing import Any
 
     import cbor2
@@ -109,7 +90,7 @@ instance::
             self.x = x
             self.y = y
 
-    def object_hook(decoder: cbor2.CBORDecoder, value: dict[Any, Any]) -> dict[Any, Any] | Point:
+    def object_hook(value: Mapping[Any, Any], immutable: bool) -> Mapping[Any, Any] | Point:
         if value.get("typename") == "Point":
             return Point(value["x"], value["y"])
 
@@ -131,7 +112,7 @@ In rare cases, you may need to decode the next item from the stream as immutable
 In practice, this means:
 
 * Arrays are decoded as :class:`tuple` instead of :class:`list`
-* Maps are decoded as :class:`frozendict` (or :class:`~cbor2.frozendict`) instead of :class:`dict`
+* Maps are decoded as :class:`frozendict` instead of :class:`dict`
 * Sets are decoded as :class:`set` instead of :class:`frozenset`
 
 There are two ways your custom decoder callbacks may want to interact with the decoder's
