@@ -23,13 +23,6 @@ use std::mem::{replace, take};
 #[cfg(not(Py_3_15))]
 use crate::types::FrozenDict;
 
-const VALID_STR_ERRORS: [&str; 5] = [
-    "strict",
-    "ignore",
-    "replace",
-    "backslashreplace",
-    "surrogateescape",
-];
 const IMMUTABLE_ATTR: &str = "_cbor2_immutable";
 const NAME_ATTR: &str = "_cbor2_name";
 const SEEK_CUR: u8 = 1;
@@ -150,7 +143,7 @@ pub struct CBORDecoder {
     tag_hook: Option<Py<PyAny>>,
     object_hook: Option<Py<PyAny>>,
     semantic_decoders: Option<Py<PyMapping>>,
-    str_errors: Py<PyString>,
+    str_errors: Option<Py<PyString>>,
     #[pyo3(get)]
     read_size: usize,
     #[pyo3(get)]
@@ -185,7 +178,7 @@ impl CBORDecoder {
             fp: None,
             tag_hook: None,
             object_hook: None,
-            str_errors: bound_str_errors.clone().unbind(),
+            str_errors: None,
             read_size,
             max_depth,
             semantic_decoders: semantic_decoders.map(|d| d.clone().unbind()),
@@ -375,7 +368,6 @@ impl CBORDecoder {
             None => {
                 // Indefinite length
                 let mut string = PyString::new(py, "");
-                let mut total_length: usize = 0;
                 loop {
                     let (major_type, subtype) = self.read_major_and_subtype(py)?;
                     let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
@@ -387,22 +379,25 @@ impl CBORDecoder {
                                     "chunk too long in an indefinite text string chunk: {length}"
                                 )));
                             }
-                            total_length += length;
                             let bytes = self.read(py, length)?;
-                            let decoded: Bound<PyString> = bytes
-                                .into_bound_py_any(py)?
-                                .call_method1(
-                                    intern!(py, "decode"),
-                                    (intern!(py, "utf-8"), &self.str_errors),
-                                )
-                                .map_err(|e| {
-                                    let exc =
-                                        CBORDecodeValueError::new_err("error decoding text string");
-                                    exc.set_cause(py, Some(e));
-                                    exc
-                                })?
-                                .cast_into()
-                                .map_err(|e| PyErr::from(e))?;
+                            let decoded = match self.str_errors.as_ref() {
+                                None => PyString::from_bytes(py, bytes.as_slice()),
+                                Some(str_errors) => bytes
+                                    .into_bound_py_any(py)?
+                                    .call_method1(
+                                        intern!(py, "decode"),
+                                        (intern!(py, "utf-8"), str_errors),
+                                    )
+                                    .and_then(|string| {
+                                        string.cast_into().map_err(|e| PyErr::from(e))
+                                    }),
+                            }
+                            .map_err(|e| {
+                                let exc =
+                                    CBORDecodeValueError::new_err("error decoding text string");
+                                exc.set_cause(py, Some(e));
+                                exc
+                            })?;
                             string = string.add(decoded)?.cast_into()?;
                         }
                         (7, 31) => break Ok(Value(string.into_any())), // break marker
@@ -417,11 +412,17 @@ impl CBORDecoder {
             }
             Some(length) if length <= 65536 => {
                 let bytes = self.read(py, length)?;
-                let py_bytes = bytes.into_bound_py_any(py)?;
-                let decode_result = py_bytes.call_method1(
-                    intern!(py, "decode"),
-                    (intern!(py, "utf-8"), self.str_errors.bind(py)),
-                );
+                let decode_result: PyResult<Bound<'_, PyString>> = match self.str_errors.as_ref() {
+                    None => PyString::from_bytes(py, bytes.as_slice()),
+                    Some(str_errors) => bytes
+                        .into_bound_py_any(py)?
+                        .call_method1(
+                            intern!(py, "decode"),
+                            (intern!(py, "utf-8"), str_errors.bind(py)),
+                        )?
+                        .cast_into()
+                        .map_err(PyErr::from),
+                };
                 if let Ok(decoded_bytes) = decode_result {
                     Ok(StringValue(
                         decoded_bytes.cast_into().map_err(PyErr::from)?,
@@ -437,16 +438,20 @@ impl CBORDecoder {
             }
             Some(mut length) => {
                 // Incrementally decode the string, in chunks of 65536 bytes
-                let decoder_class =
-                    INCREMENTAL_UTF8_DECODER.get_or_try_init(py, || -> PyResult<Py<PyAny>> {
+                let decoder_class = INCREMENTAL_UTF8_DECODER
+                    .get_or_try_init(py, || -> PyResult<Py<PyAny>> {
                         let decoder = py
                             .import("codecs")?
                             .getattr("lookup")?
                             .call1(("utf-8",))?
                             .getattr("incrementaldecoder")?;
                         Ok(decoder.unbind())
-                    })?;
-                let decoder = decoder_class.bind(py).call1((self.str_errors.bind(py),))?;
+                    })?
+                    .bind(py);
+                let decoder = match self.str_errors.as_ref() {
+                    None => decoder_class.call0()?,
+                    Some(str_errors) => decoder_class.call1((str_errors,))?,
+                };
                 let mut string = PyString::new(py, "");
                 while length > 0 {
                     let chunk_size = length.min(65536);
@@ -1410,19 +1415,28 @@ impl CBORDecoder {
     }
 
     #[getter]
-    fn str_errors(&self, py: Python<'_>) -> PyResult<String> {
-        self.str_errors.bind(py).extract()
+    fn str_errors(&self, py: Python<'_>) -> Py<PyString> {
+        if let Some(str_errors) = self.str_errors.as_ref() {
+            str_errors.clone_ref(py)
+        } else {
+            intern!(py, "strict").clone().unbind()
+        }
     }
 
     #[setter]
     fn set_str_errors(&mut self, str_errors: &Bound<'_, PyString>) -> PyResult<()> {
         let as_string: &str = str_errors.extract()?;
-        if !VALID_STR_ERRORS.contains(&as_string) {
-            return Err(PyValueError::new_err(format!(
-                "invalid str_errors value: '{str_errors}'"
-            )));
-        }
-        self.str_errors = str_errors.clone().unbind();
+        self.str_errors = match as_string {
+            "strict" => None,
+            "ignore" | "replace" | "backslashreplace" | "surrogateescape" => {
+                Some(str_errors.clone().unbind())
+            }
+            _ => {
+                return Err(PyValueError::new_err(format!(
+                    "invalid str_errors value: '{str_errors}'"
+                )));
+            }
+        };
         Ok(())
     }
 
