@@ -102,7 +102,7 @@ class TestTagHookAttribute:
 
 class TestObjectHookAttribute:
     def test_success(self) -> None:
-        def object_hook(value: Mapping[Any, Any]) -> Mapping[Any, Any]:
+        def object_hook(value: Mapping[Any, Any], immutable: bool) -> Mapping[Any, Any]:
             return value
 
         decoder = CBORDecoder(BytesIO(), object_hook=object_hook)
@@ -924,7 +924,7 @@ def test_tag_hook() -> None:
 
 def test_object_hook() -> None:
     class DummyType:
-        def __init__(self, state: object):
+        def __init__(self, state: Mapping[Any, Any], immutable: bool) -> None:
             self.state = state
 
     payload = unhexlify("A2616103616205")
@@ -934,7 +934,7 @@ def test_object_hook() -> None:
 
 
 def test_object_hook_exception() -> None:
-    def object_hook(data: Mapping[Any, Any]) -> NoReturn:
+    def object_hook(data: Mapping[Any, Any], immutable: bool) -> NoReturn:
         raise RuntimeError("foo")
 
     payload = unhexlify("A2616103616205")

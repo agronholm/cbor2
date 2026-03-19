@@ -43,7 +43,7 @@ _TContainer = TypeVar("_TContainer", default=None)
 
 TagHook: TypeAlias = Callable[[CBORTag, bool], Any]
 SemanticDecoderCallback: TypeAlias = Callable[[Any, bool], Any]
-ObjectHook: TypeAlias = Callable[[Mapping[Any, Any]], Any]
+ObjectHook: TypeAlias = Callable[[Mapping[Any, Any], bool], Any]
 EncoderHook: TypeAlias = Callable[[CBOREncoder, Any], Any]
 ShareableDecoderCallback: TypeAlias = Callable[[Any], Any]
 ShareableDecoderInitializer: TypeAlias = Callable[[bool], tuple[Any, ShareableDecoderCallback]]
