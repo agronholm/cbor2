@@ -7,6 +7,7 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fix two reference/memory leaks in the C extension's long string decoder.
 - Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
   containers, with a default value of 100 levels (CVE-2026-26209)
 - Changed the default ``read_size`` from 4096 to 1 for backwards compatibility.

@@ -85,6 +85,8 @@ TEST_VALUES = [
     ),
     ("tag", {}, c_cbor2.CBORTag(1, 1)),
     ("nestedtag", {}, {c_cbor2.CBORTag(1, 1): 1}),
+    ("longstr_128k", {}, "x" * 131072),
+    ("longstr_multi_utf8", {}, ("a" * 65535 + "€") * 2),
 ]
 
 Leaks = namedtuple("Leaks", ("count", "comparison"))
@@ -105,7 +107,7 @@ def test_malloc(op):
     # NOTE: Filter pointing to the op() line in the loop below, because we're
     # only interested in memory allocated by that line. Naturally, if this file
     # is edited, the lineno parameter below must be adjusted!
-    only_op = tracemalloc.Filter(True, __file__, lineno=102, all_frames=True)
+    only_op = tracemalloc.Filter(True, __file__, lineno=119, all_frames=True)
     tracemalloc.start(10)
     try:
         # Perform a pre-run of op so that any one-time memory allocation
