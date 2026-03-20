@@ -2,17 +2,20 @@ use crate::utils::PyImportable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::PyAnyMethods;
-use pyo3::types::PyTupleMethods;
-use pyo3::types::{
-    PyDict, PyDictMethods, PyFrozenSet, PyGenericAlias, PyInt, PyIterator, PyNotImplemented,
-    PyString, PyTuple, PyType,
-};
+use pyo3::types::{PyInt, PyNotImplemented};
 use pyo3::{
-    Bound, IntoPyObjectExt, Py, PyAny, PyErr, PyResult, PyTypeInfo, Python, create_exception,
-    pyclass, pymethods,
+    Bound, IntoPyObjectExt, Py, PyAny, PyResult, Python, create_exception, pyclass, pymethods,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+
+#[cfg(not(Py_3_15))]
+use pyo3::types::{
+    PyDict, PyDictMethods, PyFrozenSet, PyGenericAlias, PyIterator, PyString, PyTuple,
+    PyTupleMethods, PyType,
+};
+#[cfg(not(Py_3_15))]
+use pyo3::{PyErr, PyTypeInfo};
 
 pub static DECIMAL_TYPE: PyImportable = PyImportable::new("decimal", "Decimal");
 pub static FRACTION_TYPE: PyImportable = PyImportable::new("fractions", "Fraction");
@@ -229,7 +232,10 @@ impl FrozenDict {
         }
     }
 
-    pub fn from_items<'py>(py: Python<'py>, items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>) -> PyResult<Bound<'py, Self>> {
+    pub fn from_items<'py>(
+        py: Python<'py>,
+        items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
+    ) -> PyResult<Bound<'py, Self>> {
         let dict = PyDict::new(py);
         for (key, value) in items {
             dict.set_item(key, value)?;
