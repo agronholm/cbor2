@@ -125,6 +125,7 @@ class CBORDecoder:
         str_errors: str = ...,
         read_size: int = ...,
         max_depth: int = ...,
+        allow_indefinite: bool = ...,
     ) -> Self: ...
 
     # Properties
@@ -132,6 +133,8 @@ class CBORDecoder:
     def read_size(self) -> int: ...
     @property
     def max_depth(self) -> int: ...
+    @property
+    def allow_indefinite(self) -> bool: ...
     @property
     def immutable(self) -> bool: ...
     def decode(self, *, immutable: bool = ...) -> Any: ...
@@ -251,6 +254,7 @@ def load(
     str_errors: str = ...,
     read_size: int = ...,
     max_depth: int = ...,
+    allow_indefinite: bool = ...,
     immutable: bool = ...,
 ) -> Any: ...
 def loads(
@@ -262,6 +266,7 @@ def loads(
     | None = ...,
     str_errors: str = ...,
     max_depth: int = ...,
+    allow_indefinite: bool = ...,
     immutable: bool = ...,
 ) -> Any: ...
 def shareable_encoder(

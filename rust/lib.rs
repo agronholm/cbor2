@@ -86,6 +86,9 @@ mod _cbor2 {
     ///     (ignored if ``fp`` is not seekable)
     /// :param max_depth:
     ///     maximum allowed depth for nested containers
+    /// :param allow_indefinite:
+    ///     if :data:`False`, raise a :exc:`CBORDecodeError` when encountering an indefinite-length
+    ///     string or container in the input stream
     /// :param immutable:
     ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
     ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
@@ -103,6 +106,7 @@ mod _cbor2 {
         str_errors = "strict",
         read_size = 4096,
         max_depth = 1000,
+        allow_indefinite = true,
         immutable = false,
     ))]
     fn load<'py>(
@@ -114,6 +118,7 @@ mod _cbor2 {
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
+        allow_indefinite: bool,
         immutable: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let mut decoder = CBORDecoder::new(
@@ -125,6 +130,7 @@ mod _cbor2 {
             str_errors,
             read_size,
             max_depth,
+            allow_indefinite,
         )?;
         decoder.decode(py, immutable)
     }
@@ -151,6 +157,9 @@ mod _cbor2 {
     ///     section in the standard library documentation for details)
     /// :param max_depth:
     ///     maximum allowed depth for nested containers
+    /// :param allow_indefinite:
+    ///     if :data:`False`, raise a :exc:`CBORDecodeError` when encountering an indefinite-length
+    ///     string or container in the input stream
     /// :param immutable:
     ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
     ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
@@ -167,6 +176,7 @@ mod _cbor2 {
         semantic_decoders = None,
         str_errors = "strict",
         max_depth = 1000,
+        allow_indefinite = true,
         immutable = false,
     ))]
     fn loads<'py>(
@@ -177,6 +187,7 @@ mod _cbor2 {
         semantic_decoders: Option<&Bound<'py, PyMapping>>,
         str_errors: &str,
         max_depth: usize,
+        allow_indefinite: bool,
         immutable: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let mut decoder = CBORDecoder::new_internal(
@@ -189,6 +200,7 @@ mod _cbor2 {
             str_errors,
             0,
             max_depth,
+            allow_indefinite,
         )?;
         decoder.decode(py, immutable)
     }

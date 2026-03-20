@@ -128,6 +128,13 @@ class TestStrErrorsAttribute:
             CBORDecoder(BytesIO(), str_errors="foo")
 
 
+def test_allow_indefinite() -> None:
+    decoder = CBORDecoder(BytesIO(unhexlify("7f6177ff")), allow_indefinite=False)
+    assert not decoder.allow_indefinite
+    with pytest.raises(CBORDecodeError, match="encountered indefinite length"):
+        decoder.decode()
+
+
 def test_readonly_attributes() -> None:
     decoder = CBORDecoder(BytesIO())
     assert decoder.read_size == 4096

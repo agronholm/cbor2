@@ -135,6 +135,9 @@ pub fn shareable_decoder<'py>(
 ///     (ignored if ``fp`` is not seekable)
 /// :param max_depth:
 ///     maximum allowed depth for nested containers
+/// :param allow_indefinite:
+///     if :data:`False`, raise a :exc:`CBORDecodeError` when encountering an indefinite-length
+///     string or container in the input stream
 ///
 /// .. _CBOR: https://cbor.io/
 #[pyclass(module = "cbor2")]
@@ -148,6 +151,8 @@ pub struct CBORDecoder {
     read_size: usize,
     #[pyo3(get)]
     max_depth: usize,
+    #[pyo3(get)]
+    allow_indefinite: bool,
 
     read_method: Option<Py<PyAny>>,
     buffer: Option<Py<PyBytes>>,
@@ -167,6 +172,7 @@ impl CBORDecoder {
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
+        allow_indefinite: bool,
     ) -> PyResult<Self> {
         let available_bytes = if let Some(buffer) = buffer.as_ref() {
             buffer.len()?
@@ -181,6 +187,7 @@ impl CBORDecoder {
             str_errors: None,
             read_size,
             max_depth,
+            allow_indefinite,
             semantic_decoders: semantic_decoders.map(|d| d.clone().unbind()),
             read_method: None,
             buffer: buffer.map(Bound::unbind),
@@ -286,7 +293,14 @@ impl CBORDecoder {
             25 => Some(u16::from_be_bytes(self.read_exact(py)?) as usize),
             26 => Some(u32::from_be_bytes(self.read_exact(py)?) as usize),
             27 => Some(u64::from_be_bytes(self.read_exact(py)?) as usize),
-            31 => None,
+            31 => {
+                if !self.allow_indefinite {
+                    return Err(CBORDecodeError::new_err(
+                        "encountered indefinite length but it has been disabled",
+                    ));
+                }
+                None
+            },
             _ => {
                 return Err(CBORDecodeValueError::new_err(format!(
                     "unknown unsigned integer subtype 0x{subtype:x}"
@@ -1337,6 +1351,7 @@ impl CBORDecoder {
         str_errors = "strict",
         read_size = 4096,
         max_depth = 1000,
+        allow_indefinite = true,
     ))]
     pub fn new(
         py: Python<'_>,
@@ -1347,6 +1362,7 @@ impl CBORDecoder {
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
+        allow_indefinite: bool,
     ) -> PyResult<Self> {
         Self::new_internal(
             py,
@@ -1358,6 +1374,7 @@ impl CBORDecoder {
             str_errors,
             read_size,
             max_depth,
+            allow_indefinite,
         )
     }
 

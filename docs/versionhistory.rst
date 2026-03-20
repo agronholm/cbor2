@@ -21,6 +21,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   tags
 - Added the ``immutable`` decoder flag to always use immutable containers where possible when
   decoding a CBOR stream
+- Added the ``allow_indefinite`` decoder option to optionally disallow indefinite-length strings
+  and containers
 - **BACKWARD INCOMPATIBLE** Changed the signature of the ``tag_hook`` decoder callables to accept
   (``CBORTag``, ``immutable`` as arguments instead of ``CBORDecoder``, ``CBORTag``)
 - **BACKWARD INCOMPATIBLE** Changed the signature of the ``object_hook`` decoder callables to
