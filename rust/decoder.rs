@@ -698,6 +698,7 @@ impl CBORDecoder {
 
                     // If these attributes are present, this callable was decorated with
                     // @shareable_decoder
+                    #[allow(unused_variables)]
                     return if let Some(name) = name {
                         let require_immutable: bool = decoder
                             .getattr_opt(intern!(py, IMMUTABLE_ATTR))?
