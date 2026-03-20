@@ -31,6 +31,7 @@ from uuid import UUID
 
 import pytest
 from _pytest.fixtures import FixtureRequest
+
 from cbor2 import (
     CBORDecodeEOF,
     CBORDecodeError,
@@ -446,6 +447,12 @@ def test_simple_value(payload: str, value: int) -> None:
 def test_simple_val_as_key() -> None:
     decoded = loads(unhexlify("A1F86301"))
     assert decoded == {CBORSimpleValue(99): 1}
+
+
+@pytest.mark.parametrize("payload", ["f800", "f817", "f81f"])
+def test_invalid_simple_value(payload: str) -> None:
+    with pytest.raises(CBORDecodeValueError, match="invalid two-byte sequence for simple value"):
+        loads(unhexlify(payload))
 
 
 #

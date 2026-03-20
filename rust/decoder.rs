@@ -602,7 +602,8 @@ impl CBORDecoder {
             } else {
                 PyDict::new(py).into_any()
             };
-            let transformed = maybe_call_object_hook(py, container, object_hook.as_ref(), immutable)?;
+            let transformed =
+                maybe_call_object_hook(py, container, object_hook.as_ref(), immutable)?;
             return Ok(Value(transformed));
         };
 
@@ -632,8 +633,12 @@ impl CBORDecoder {
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
                     if item.is_exact_instance_of::<BreakMarkerType>() {
                         let container = create_frozen_dict(py, take(&mut items))?;
-                        let transformed =
-                            maybe_call_object_hook(py, container.into_any(), object_hook.as_ref(), immutable)?;
+                        let transformed = maybe_call_object_hook(
+                            py,
+                            container.into_any(),
+                            object_hook.as_ref(),
+                            immutable,
+                        )?;
                         return Ok(CompleteFrame(transformed));
                     } else if let Some(key) = key.take() {
                         items.push((key, item));
@@ -654,8 +659,12 @@ impl CBORDecoder {
                         dict.set_item(key, item)?;
                         if dict.len() == length {
                             let dict = replace(&mut dict, PyDict::new(py));
-                            let transformed =
-                                maybe_call_object_hook(py, dict.into_any(), object_hook.as_ref(), immutable)?;
+                            let transformed = maybe_call_object_hook(
+                                py,
+                                dict.into_any(),
+                                object_hook.as_ref(),
+                                immutable,
+                            )?;
                             return Ok(CompleteFrame(transformed));
                         }
                         Ok(ContinueFrame(true))
@@ -668,8 +677,12 @@ impl CBORDecoder {
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
                     if item.is_exact_instance_of::<BreakMarkerType>() {
                         let dict = replace(&mut dict, PyDict::new(py));
-                        let transformed =
-                            maybe_call_object_hook(py, dict.into_any(), object_hook.as_ref(), immutable)?;
+                        let transformed = maybe_call_object_hook(
+                            py,
+                            dict.into_any(),
+                            object_hook.as_ref(),
+                            immutable,
+                        )?;
                         return Ok(CompleteFrame(transformed));
                     } else if let Some(key) = key.take() {
                         dict.set_item(key, item)?;
@@ -808,6 +821,11 @@ impl CBORDecoder {
             23 => Ok(UNDEFINED.get(py).unwrap().into_bound_py_any(py)?),
             24 => {
                 let value = self.read_exact::<1>(py)?[0];
+                if value < 0x20 {
+                    return Err(CBORDecodeValueError::new_err(
+                        "invalid two-byte sequence for simple value",
+                    ));
+                }
                 CBORSimpleValue::new(value.into_pyobject(py)?)?.into_bound_py_any(py)
             }
             25 => {
