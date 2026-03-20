@@ -2,7 +2,6 @@ import platform
 import sys
 
 import pytest
-
 from cbor2 import CBORSimpleValue, CBORTag, undefined
 
 if sys.hexversion < 51314855:

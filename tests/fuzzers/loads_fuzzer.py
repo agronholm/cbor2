@@ -1,7 +1,6 @@
 import sys
 
 import atheris
-
 from cbor2 import loads
 
 

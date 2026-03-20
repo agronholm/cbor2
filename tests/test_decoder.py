@@ -31,7 +31,6 @@ from uuid import UUID
 
 import pytest
 from _pytest.fixtures import FixtureRequest
-
 from cbor2 import (
     CBORDecodeEOF,
     CBORDecodeError,
