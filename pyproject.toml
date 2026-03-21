@@ -53,6 +53,9 @@ doc = [
 benchmarks = [
     "pytest-benchmark==4.0.0",
 ]
+fuzz = [
+    "atheris",
+]
 
 [tool.setuptools.packages.find]
 include = ["cbor2"]

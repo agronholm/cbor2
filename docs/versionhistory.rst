@@ -7,11 +7,25 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
+  containers, with a default value of 400 levels (CVE-2026-26209)
+- Changed the default ``read_size`` from 4096 to 1 for backwards compatibility.
+  The buffered reads introduced in 5.8.0 could cause issues when code needs to
+  access the stream position after decoding. Users can opt-in to faster decoding
+  by passing ``read_size=4096`` when they don't need to access the stream directly
+  after decoding. Added a direct read path for ``read_size=1`` to avoid buffer
+  management overhead.
+  (`#275 <https://github.com/agronholm/cbor2/pull/275>`_; PR by @andreer)
+- Fixed C encoder not respecting string referencing when encoding string-type datetimes (tag 0)
+  (`#254 <https://github.com/agronholm/cbor2/issues/254>`_)
+- Fixed a missed check for an exception in the C implementation of ``CBOREncoder.encode_shared()``
+  (`#287 <https://github.com/agronholm/cbor2/issues/287>`_)
+- Fixed two reference/memory leaks in the C extension's long string decoder
+  (`#290 <https://github.com/agronholm/cbor2/pull/290>`_ PR by @killiancowan82)
 - Fixed C decoder ignoring the ``str_errors`` setting when decoding strings, and improved
   string decoding performance by using stack allocation for small strings and eliminating
   unnecessary conditionals. Benchmarks show 9-17% faster deserialization.
-  (`#255 <https://github.com/agronholm/cbor2/issues/255>`_,
-  `#270 <https://github.com/agronholm/cbor2/pull/170>`_; PR by @andreer)
+  (`#255 <https://github.com/agronholm/cbor2/issues/255>`_; PR by @andreer)
 
 **5.8.0** (2025-12-30)
 

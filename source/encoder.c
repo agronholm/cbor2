@@ -1004,36 +1004,6 @@ CBOREncoder_encode_semantic(CBOREncoderObject *self, PyObject *value)
 
 
 static PyObject *
-encode_datestr(CBOREncoderObject *self, PyObject *datestr)
-{
-    const char *buf;
-    Py_ssize_t length, match;
-
-    match = PyUnicode_Tailmatch(
-        datestr, _CBOR2_str_utc_suffix, PyUnicode_GET_LENGTH(datestr) - 6,
-        PyUnicode_GET_LENGTH(datestr), 1);
-    if (match != -1) {
-        buf = PyUnicode_AsUTF8AndSize(datestr, &length);
-        if (buf) {
-            if (fp_write(self, "\xC0", 1) == 0) {
-                if (match) {
-                    if (encode_length(self, 3, length - 5) == 0)
-                        if (fp_write(self, buf, length - 6) == 0)
-                            if (fp_write(self, "Z", 1) == 0)
-                                Py_RETURN_NONE;
-                } else {
-                    if (encode_length(self, 3, length) == 0)
-                        if (fp_write(self, buf, length) == 0)
-                            Py_RETURN_NONE;
-                }
-            }
-        }
-    }
-    return NULL;
-}
-
-
-static PyObject *
 encode_timestamp(CBOREncoderObject *self, PyObject *timestamp)
 {
     PyObject *ret = NULL;
@@ -1095,8 +1065,16 @@ CBOREncoder_encode_datetime(CBOREncoderObject *self, PyObject *value)
             } else {
                 tmp = PyObject_CallMethodObjArgs(
                         value, _CBOR2_str_isoformat, NULL);
-                if (tmp)
-                    ret = encode_datestr(self, tmp);
+                if (tmp) {
+                    PyObject *replaced = PyUnicode_Replace(
+                        tmp, _CBOR2_str_utc_suffix, _CBOR2_str_z, 1);
+                    if (replaced) {
+                        Py_DECREF(tmp);
+                        tmp = replaced;
+                        if (fp_write(self, "\xc0", 1) == 0)
+                            ret = CBOREncoder_encode_string(self, tmp);
+                    }
+                }
             }
             Py_XDECREF(tmp);
             Py_DECREF(value);
@@ -1344,7 +1322,10 @@ encode_shared(CBOREncoderObject *self, EncodeFunction *encoder,
                 if (tuple) {
                     if (PyDict_SetItem(self->shared, id, tuple) == 0) {
                         ret = encoder(self, value);
-                        PyDict_DelItem(self->shared, id);
+                        if (PyDict_DelItem(self->shared, id) == -1) {
+                            Py_XDECREF(ret);
+                            ret = NULL;
+                        }
                     }
                     Py_DECREF(tuple);
                 }
@@ -1960,10 +1941,12 @@ encode_canonical_map(CBOREncoderObject *self, PyObject *value)
 
     // Don't generate string references when sorting keys
     self->string_referencing = false;
-    if (PyDict_Check(value))
+    if (PyDict_Check(value)) {
         list = dict_to_canonical_list(self, value);
-    else
+    }
+    else {
         list = mapping_to_canonical_list(self, value);
+    }
     self->string_referencing = string_referencing_old;
 
     if (list) {

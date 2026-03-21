@@ -50,6 +50,10 @@ static int _CBORDecoder_set_tag_hook(CBORDecoderObject *, PyObject *, void *);
 static int _CBORDecoder_set_object_hook(CBORDecoderObject *, PyObject *, void *);
 static int _CBORDecoder_set_str_errors(CBORDecoderObject *, PyObject *, void *);
 
+// Forward declarations for read dispatch functions
+static int fp_read_unbuffered(CBORDecoderObject *, char *, Py_ssize_t);
+static int fp_read_buffered(CBORDecoderObject *, char *, Py_ssize_t);
+
 static PyObject * decode(CBORDecoderObject *, DecodeOptions);
 static PyObject * decode_bytestring(CBORDecoderObject *, uint8_t);
 static PyObject * decode_string(CBORDecoderObject *, uint8_t);
@@ -151,6 +155,7 @@ CBORDecoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         Py_INCREF(Py_None);
         self->object_hook = Py_None;
         self->str_errors = NULL;  // NULL means strict mode
+        self->max_depth = CBOR2_DEFAULT_MAX_DEPTH;
         self->immutable = false;
         self->shared_index = -1;
         self->decode_depth = 0;
@@ -158,6 +163,7 @@ CBORDecoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         self->readahead_size = 0;
         self->read_pos = 0;
         self->read_len = 0;
+        self->fp_read = fp_read_unbuffered;  // default, will be set properly in init
     }
     return (PyObject *) self;
 error:
@@ -167,19 +173,19 @@ error:
 
 
 // CBORDecoder.__init__(self, fp=None, tag_hook=None, object_hook=None,
-//                      str_errors='strict', read_size=4096)
+//                      str_errors='strict', read_size=1, *, max_depth=100)
 int
 CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {
-        "fp", "tag_hook", "object_hook", "str_errors", "read_size", NULL
+        "fp", "tag_hook", "object_hook", "str_errors", "read_size", "max_depth", NULL
     };
     PyObject *fp = NULL, *tag_hook = NULL, *object_hook = NULL,
              *str_errors = NULL;
     Py_ssize_t read_size = CBOR2_DEFAULT_READ_SIZE;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOn", keywords,
-                &fp, &tag_hook, &object_hook, &str_errors, &read_size))
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOnn", keywords,
+                &fp, &tag_hook, &object_hook, &str_errors, &read_size, &self->max_depth))
         return -1;
 
     if (read_size < 1) {
@@ -236,7 +242,8 @@ _CBORDecoder_set_fp_with_read_size(CBORDecoderObject *self, PyObject *value, Py_
         return -1;
     }
 
-    if (self->readahead == NULL || self->readahead_size != read_size) {
+    // Skip buffer allocation for read_size=1 (direct read path doesn't use buffer)
+    if (read_size > 1 && (self->readahead == NULL || self->readahead_size != read_size)) {
         new_buffer = (char *)PyMem_Malloc(read_size);
         if (!new_buffer) {
             Py_DECREF(read);
@@ -257,8 +264,15 @@ _CBORDecoder_set_fp_with_read_size(CBORDecoderObject *self, PyObject *value, Py_
     if (new_buffer) {
         PyMem_Free(self->readahead);
         self->readahead = new_buffer;
-        self->readahead_size = read_size;
+    } else if (read_size == 1 && self->readahead != NULL) {
+        // Free existing buffer when switching to direct read path (read_size=1)
+        PyMem_Free(self->readahead);
+        self->readahead = NULL;
     }
+    self->readahead_size = read_size;
+
+    // Set read dispatch function - eliminates runtime check on every read
+    self->fp_read = (read_size == 1) ? fp_read_unbuffered : fp_read_buffered;
 
     return 0;
 }
@@ -449,9 +463,25 @@ fp_read_bytes(CBORDecoderObject *self, char *buf, Py_ssize_t size)
     return bytes_read;
 }
 
-// Read into caller's buffer using the readahead buffer
+// Unbuffered read - used when read_size=1 (backwards compatible mode)
+// This matches the 5.7.1 behavior with no runtime overhead
 static int
-fp_read(CBORDecoderObject *self, char *buf, const Py_ssize_t size)
+fp_read_unbuffered(CBORDecoderObject *self, char *buf, Py_ssize_t size)
+{
+    Py_ssize_t bytes_read = fp_read_bytes(self, buf, size);
+    if (bytes_read == size)
+        return 0;
+    if (bytes_read >= 0)
+        PyErr_Format(
+            _CBOR2_CBORDecodeEOF,
+            "premature end of stream (expected to read %zd bytes, "
+            "got %zd instead)", size, bytes_read);
+    return -1;
+}
+
+// Buffered read - used when read_size > 1 for improved performance
+static int
+fp_read_buffered(CBORDecoderObject *self, char *buf, Py_ssize_t size)
 {
     Py_ssize_t available, to_copy, remaining, total_copied;
 
@@ -509,7 +539,7 @@ fp_read_object(CBORDecoderObject *self, const Py_ssize_t size)
     if (!ret)
         return NULL;
 
-    if (fp_read(self, PyBytes_AS_STRING(ret), size) == -1) {
+    if (self->fp_read(self, PyBytes_AS_STRING(ret), size) == -1) {
         Py_DECREF(ret);
         return NULL;
     }
@@ -530,7 +560,7 @@ CBORDecoder_read(CBORDecoderObject *self, PyObject *length)
         return NULL;
     ret = PyBytes_FromStringAndSize(NULL, len);
     if (ret) {
-        if (fp_read(self, PyBytes_AS_STRING(ret), len) == -1) {
+        if (self->fp_read(self, PyBytes_AS_STRING(ret), len) == -1) {
             Py_DECREF(ret);
             ret = NULL;
         }
@@ -578,19 +608,19 @@ decode_length(CBORDecoderObject *self, uint8_t subtype,
         if (subtype < 24) {
             *length = subtype;
         } else if (subtype == 24) {
-            if (fp_read(self, value.u8.buf, sizeof(uint8_t)) == -1)
+            if (self->fp_read(self, value.u8.buf, sizeof(uint8_t)) == -1)
                 return -1;
             *length = value.u8.value;
         } else if (subtype == 25) {
-            if (fp_read(self, value.u16.buf, sizeof(uint16_t)) == -1)
+            if (self->fp_read(self, value.u16.buf, sizeof(uint16_t)) == -1)
                 return -1;
             *length = be16toh(value.u16.value);
         } else if (subtype == 26) {
-            if (fp_read(self, value.u32.buf, sizeof(uint32_t)) == -1)
+            if (self->fp_read(self, value.u32.buf, sizeof(uint32_t)) == -1)
                 return -1;
             *length = be32toh(value.u32.value);
         } else {
-            if (fp_read(self, value.u64.buf, sizeof(uint64_t)) == -1)
+            if (self->fp_read(self, value.u64.buf, sizeof(uint64_t)) == -1)
                 return -1;
             *length = be64toh(value.u64.value);
         }
@@ -754,7 +784,7 @@ decode_indefinite_bytestrings(CBORDecoderObject *self)
     list = PyList_New(0);
     if (list) {
         while (1) {
-            if (fp_read(self, &lead.byte, 1) == -1)
+            if (self->fp_read(self, &lead.byte, 1) == -1)
                 break;
             if (lead.major == 2 && lead.subtype != 31) {
                 ret = decode_bytestring(self, lead.subtype);
@@ -976,6 +1006,9 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
         return NULL;
     }
 
+    if (buffer)
+        PyMem_Free(buffer);
+
     return ret;
 error:
     Py_XDECREF(ret);
@@ -997,7 +1030,7 @@ decode_indefinite_strings(CBORDecoderObject *self)
     list = PyList_New(0);
     if (list) {
         while (1) {
-            if (fp_read(self, &lead.byte, 1) == -1)
+            if (self->fp_read(self, &lead.byte, 1) == -1)
                 break;
             if (lead.major == 3 && lead.subtype != 31) {
                 ret = decode_string(self, lead.subtype);
@@ -2102,7 +2135,7 @@ CBORDecoder_decode_simple_value(CBORDecoderObject *self)
     PyObject *tag, *ret = NULL;
     uint8_t buf;
 
-    if (fp_read(self, (char*)&buf, sizeof(uint8_t)) == 0) {
+    if (self->fp_read(self, (char*)&buf, sizeof(uint8_t)) == 0) {
         tag = PyStructSequence_New(&CBORSimpleValueType);
         if (tag) {
             PyStructSequence_SET_ITEM(tag, 0, PyLong_FromLong(buf));
@@ -2128,7 +2161,7 @@ CBORDecoder_decode_float16(CBORDecoderObject *self)
         char buf[sizeof(uint16_t)];
     } u;
 
-    if (fp_read(self, u.buf, sizeof(uint16_t)) == 0)
+    if (self->fp_read(self, u.buf, sizeof(uint16_t)) == 0)
         ret = PyFloat_FromDouble(unpack_float16(u.i));
     set_shareable(self, ret);
     return ret;
@@ -2146,7 +2179,7 @@ CBORDecoder_decode_float32(CBORDecoderObject *self)
         char buf[sizeof(float)];
     } u;
 
-    if (fp_read(self, u.buf, sizeof(float)) == 0) {
+    if (self->fp_read(self, u.buf, sizeof(float)) == 0) {
         u.i = be32toh(u.i);
         ret = PyFloat_FromDouble(u.f);
     }
@@ -2166,7 +2199,7 @@ CBORDecoder_decode_float64(CBORDecoderObject *self)
         char buf[sizeof(double)];
     } u;
 
-    if (fp_read(self, u.buf, sizeof(double)) == 0) {
+    if (self->fp_read(self, u.buf, sizeof(double)) == 0) {
         u.i = be64toh(u.i);
         ret = PyFloat_FromDouble(u.f);
     }
@@ -2192,10 +2225,18 @@ decode(CBORDecoderObject *self, DecodeOptions options)
         self->shared_index = -1;
     }
 
+    if (self->decode_depth == self->max_depth) {
+        PyErr_Format(
+            _CBOR2_CBORDecodeError,
+            "maximum container nesting depth (%u) exceeded", self->max_depth);
+        return NULL;
+    }
+
     if (Py_EnterRecursiveCall(" in CBORDecoder.decode"))
         return NULL;
 
-    if (fp_read(self, &lead.byte, 1) == 0) {
+    self->decode_depth++;
+    if (self->fp_read(self, &lead.byte, 1) == 0) {
         switch (lead.major) {
             case 0: ret = decode_uint(self, lead.subtype);       break;
             case 1: ret = decode_negint(self, lead.subtype);     break;
@@ -2210,6 +2251,8 @@ decode(CBORDecoderObject *self, DecodeOptions options)
     }
 
     Py_LeaveRecursiveCall();
+    self->decode_depth--;
+
     if (options & DECODE_IMMUTABLE)
         self->immutable = old_immutable;
     if (options & DECODE_UNSHARED)
@@ -2234,10 +2277,7 @@ PyObject *
 CBORDecoder_decode(CBORDecoderObject *self)
 {
     PyObject *ret;
-    self->decode_depth++;
     ret = decode(self, DECODE_NORMAL);
-    self->decode_depth--;
-    assert(self->decode_depth >= 0);
     if (self->decode_depth == 0) {
         clear_shareable_state(self);
     }
@@ -2261,7 +2301,6 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
     if (!buf)
         return NULL;
 
-    self->decode_depth++;
     save_read = self->read;
     Py_INCREF(save_read);  // Keep alive while we use a different read method
     save_read_pos = self->read_pos;
@@ -2281,7 +2320,6 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
         }
         Py_DECREF(save_read);
         Py_DECREF(buf);
-        self->decode_depth--;
         return NULL;
     }
 
@@ -2290,7 +2328,6 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
     Py_XDECREF(self->read);  // Decrement BytesIO read method
     self->read = save_read;  // Restore saved read (already has correct refcount)
     Py_DECREF(buf);
-    self->decode_depth--;
 
     if (is_nested) {
         PyMem_Free(self->readahead);
@@ -2299,7 +2336,6 @@ CBORDecoder_decode_from_bytes(CBORDecoderObject *self, PyObject *data)
     self->read_pos = save_read_pos;
     self->read_len = save_read_len;
 
-    assert(self->decode_depth >= 0);
     if (self->decode_depth == 0) {
         clear_shareable_state(self);
     }
@@ -2451,13 +2487,12 @@ PyDoc_STRVAR(CBORDecoder__doc__,
 "    :class:`dict` object. The return value is substituted for the dict\n"
 "    in the deserialized output.\n"
 ":param read_size:\n"
-"    the size of the read buffer (default 4096). The decoder reads from\n"
-"    the stream in chunks of this size for performance. This means the\n"
-"    stream position may advance beyond the bytes actually decoded. For\n"
-"    large values (bytestrings, text strings), reads may be larger than\n"
-"    ``read_size``. Code that needs to read from the stream after\n"
-"    decoding should use :meth:`decode_from_bytes` instead, or set\n"
-"    ``read_size=1`` to disable buffering (at a performance cost).\n"
+"    the minimum number of bytes to read at a time.\n"
+"    Setting this to a higher value like 4096 improves performance,\n"
+"    but is likely to read past the end of the CBOR value, advancing the stream\n"
+"    position beyond the decoded data. This only matters if you need to reuse the\n"
+"    stream after decoding.\n"
+"    Ignored in the pure Python implementation, but included for API compatibility.\n"
 "\n"
 ".. _CBOR: https://cbor.io/\n"
 );

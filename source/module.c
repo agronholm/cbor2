@@ -648,6 +648,7 @@ PyObject *_CBOR2_str_utc = NULL;
 PyObject *_CBOR2_str_utc_suffix = NULL;
 PyObject *_CBOR2_str_UUID = NULL;
 PyObject *_CBOR2_str_write = NULL;
+PyObject *_CBOR2_str_z = NULL;
 
 PyObject *_CBOR2_CBORError = NULL;
 PyObject *_CBOR2_CBOREncodeError = NULL;
@@ -991,6 +992,9 @@ PyInit__cbor2(void)
         goto error;
     if (!_CBOR2_str_utc_suffix &&
             !(_CBOR2_str_utc_suffix = PyUnicode_InternFromString("+00:00")))
+        goto error;
+    if (!_CBOR2_str_z &&
+            !(_CBOR2_str_z = PyUnicode_InternFromString("Z")))
         goto error;
     if (!_CBOR2_str_datetimestr_re &&
         !(_CBOR2_str_datetimestr_re = PyUnicode_InternFromString(

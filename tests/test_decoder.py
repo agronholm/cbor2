@@ -123,6 +123,36 @@ def test_load(impl):
         assert impl.load(fp=stream) == 1
 
 
+def test_stream_position_after_decode(impl):
+    """Test that stream position is exactly at end of decoded CBOR value."""
+    # CBOR: integer 1 (1 byte: 0x01) followed by extra data
+    cbor_data = b"\x01"
+    extra_data = b"extra"
+    with BytesIO(cbor_data + extra_data) as stream:
+        decoder = impl.CBORDecoder(stream)
+        result = decoder.decode()
+        assert result == 1
+        # Stream position should be exactly at end of CBOR data
+        assert stream.tell() == len(cbor_data)
+        # Should be able to read the extra data
+        assert stream.read() == extra_data
+
+
+class TestMaximumDepth:
+    def test_default(self, impl) -> None:
+        with pytest.raises(
+            impl.CBORDecodeError,
+            match="maximum container nesting depth \\(400\\) exceeded",
+        ):
+            impl.loads(b"\x81" * 401 + b"\x80")
+
+    def test_explicit(self, impl) -> None:
+        with pytest.raises(
+            impl.CBORDecodeError, match=r"maximum container nesting depth \(9\) exceeded"
+        ):
+            impl.loads(b"\x81" * 10 + b"\x80", max_depth=9)
+
+
 @pytest.mark.parametrize(
     "payload, expected",
     [

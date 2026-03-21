@@ -674,6 +674,12 @@ def test_encode_stringrefs_dict(impl):
     assert impl.dumps(value, string_referencing=True, canonical=True) == expected
 
 
+def test_encode_stringrefs_datetime(impl):
+    value = [datetime(2026, 1, 19, tzinfo=timezone.utc), "abc", "abc"]
+    expected = unhexlify("D9010083C074323032362D30312D31395430303A30303A30305A63616263D81901")
+    assert impl.dumps(value, string_referencing=True) == expected
+
+
 @pytest.mark.parametrize("tag", [-1, 2**64, "f"], ids=["too small", "too large", "wrong type"])
 def test_invalid_tag(impl, tag):
     with pytest.raises(TypeError):
