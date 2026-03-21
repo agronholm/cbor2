@@ -119,7 +119,9 @@ class TestObjectHookAttribute:
 
 
 class TestStrErrorsAttribute:
-    @pytest.mark.parametrize("str_errors", ["strict", "replace", "ignore"])
+    @pytest.mark.parametrize(
+        "str_errors", ["strict", "replace", "ignore", "backslashreplace", "surrogateescape"]
+    )
     def test_success(self, str_errors: str) -> None:
         decoder = CBORDecoder(BytesIO(), str_errors=str_errors)
         assert decoder.str_errors == str_errors
