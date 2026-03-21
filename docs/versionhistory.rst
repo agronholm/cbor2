@@ -7,6 +7,39 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- **MAJOR REWRITE**:
+  The Python and C implementations of the encoder and decoder were replaced with a single,
+  Rust-based implementation in the interest of maintainability and memory safety.
+  Here are some of the highlights:
+
+  * Improved memory safety (100% safe-mode Rust)
+  * Substantially improved performance
+  * Iterative, rather than recursive decoding, meaning container nesting depth only theoretically
+    limited by the available memory, rather than C stack size (but limited to 1000 levels by
+    default)
+- Added the ``semantic_decoders`` decoder option to add or override decoders for specific semantic
+  tags
+- Added the ``immutable`` decoder flag to always use immutable containers where possible when
+  decoding a CBOR stream
+- Added the ``allow_indefinite`` decoder option to optionally disallow indefinite-length strings
+  and containers
+- **BACKWARD INCOMPATIBLE** Changed the signature of the ``tag_hook`` decoder callables to accept
+  (``CBORTag``, ``immutable`` as arguments instead of ``CBORDecoder``, ``CBORTag``)
+- **BACKWARD INCOMPATIBLE** Changed the signature of the ``object_hook`` decoder callables to
+  accept (``Mapping[Any, Any]``, ``bool``) instead of (``CBORDecoder``, ``dict[Any, Any]``)
+- **BACKWARD INCOMPATIBLE** Removed the ``break_marker`` singleton as no longer necessary
+- **BACKWARD INCOMPATIBLE** Changed the decoding of semantic tag 261 to yield an ``IPv4Interface``
+  or ``IPv6Interface`` if the address contains host bits
+- **BACKWARD INCOMPATIBLE** Removed the individual decoding functions from the API as they were
+  mistakenly called directly by users. Please open an issue if you need them back.
+- **BACKWARD INCOMPATIBLE** Changed the encoding of IP addresses to use the semantic tags 52 and 54
+  instead of the deprecated 260 and 261 (`#232 <https://github.com/agronholm/cbor2/issues/232>`_)
+- Fixed string references to work with indefinite-length (byte/unicode) strings too
+- Fixed ``str_errors`` options accepted by the decoder not aligning with the actual list of
+  accepted values by ``bytes.decode()``
+
+**UNRELEASED**
+
 - Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
   containers, with a default value of 100 levels (CVE-2026-26209)
 - Changed the default ``read_size`` from 4096 to 1 for backwards compatibility.
