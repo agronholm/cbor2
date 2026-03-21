@@ -87,6 +87,9 @@ extend-select = [
 ]
 ignore = ["ISC001"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["cbor2"]
+
 [tool.mypy]
 strict = true
 files = ["python", "tests"]
