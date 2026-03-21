@@ -74,7 +74,7 @@ class CBORDecoder:
         str_errors: Literal["strict", "error", "replace"] = "strict",
         read_size: int = 1,
         *,
-        max_depth: int = 100,
+        max_depth: int = 400,
     ):
         """
         :param fp:
@@ -832,7 +832,7 @@ def loads(
     str_errors: Literal["strict", "error", "replace"] = "strict",
     read_size: int = 1,
     *,
-    max_depth: int = 100,
+    max_depth: int = 400,
 ) -> Any:
     """
     Deserialize an object from a bytestring.
@@ -881,7 +881,7 @@ def load(
     str_errors: Literal["strict", "error", "replace"] = "strict",
     read_size: int = 1,
     *,
-    max_depth: int = 100,
+    max_depth: int = 400,
 ) -> Any:
     """
     Deserialize an object from an open file.

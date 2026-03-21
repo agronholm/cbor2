@@ -142,9 +142,9 @@ class TestMaximumDepth:
     def test_default(self, impl) -> None:
         with pytest.raises(
             impl.CBORDecodeError,
-            match="maximum container nesting depth \\(100\\) exceeded",
+            match="maximum container nesting depth \\(400\\) exceeded",
         ):
-            impl.loads(b"\x81" * 101 + b"\x80")
+            impl.loads(b"\x81" * 401 + b"\x80")
 
     def test_explicit(self, impl) -> None:
         with pytest.raises(
