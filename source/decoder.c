@@ -937,6 +937,7 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
 
             Py_DECREF(string);
             string = NULL;
+            Py_DECREF(ret);
             ret = joined;
         } else {
             // Set the result to the decoded string
@@ -968,6 +969,9 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
 
     if (ret && string_namespace_add(self, ret, length) == -1)
         goto error;
+
+    if (buffer)
+        PyMem_Free(buffer);
 
     return ret;
 error:

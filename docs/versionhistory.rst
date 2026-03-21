@@ -20,6 +20,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   (`#254 <https://github.com/agronholm/cbor2/issues/254>`_)
 - Fixed a missed check for an exception in the C implementation of ``CBOREncoder.encode_shared()``
   (`#287 <https://github.com/agronholm/cbor2/issues/287>`_)
+- Fixed two reference/memory leaks in the C extension's long string decoder
+  (`#290 <https://github.com/agronholm/cbor2/pull/290>`_ PR by @killiancowan82)
 
 **5.8.0** (2025-12-30)
 
