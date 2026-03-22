@@ -7,8 +7,8 @@ Earlier versions are unsupported.
 
 | Version | Supported          |
 |---------| ------------------ |
-| 5.8.x   | :white_check_mark: |
-| < 5.8.x | :x:                |
+| 5.9.x   | :white_check_mark: |
+| < 5.9.x | :x:                |
 
 ## Reporting a Vulnerability
 

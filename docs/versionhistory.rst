@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
-**UNRELEASED**
+**5.9.0** (2026-03-22)
 
 - Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
   containers, with a default value of 400 levels (CVE-2026-26209)
