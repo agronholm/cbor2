@@ -393,11 +393,27 @@ _CBORDecoder_set_str_errors(CBORDecoderObject *self, PyObject *value,
                 Py_DECREF(bytes);
                 return 0;
             }
+            if (!strcmp(mode, "ignore")) {
+                self->str_errors = "ignore";
+                Py_DECREF(bytes);
+                return 0;
+            }
+            if (!strcmp(mode, "backslashreplace")) {
+                self->str_errors = "backslashreplace";
+                Py_DECREF(bytes);
+                return 0;
+            }
+            if (!strcmp(mode, "surrogateescape")) {
+                self->str_errors = "surrogateescape";
+                Py_DECREF(bytes);
+                return 0;
+            }
             Py_DECREF(bytes);
         }
     }
     PyErr_Format(PyExc_ValueError,
-            "invalid str_errors value %R (must be 'strict' or 'replace')", value);
+            "invalid str_errors value %R (must be 'strict', 'error', 'replace', "
+            "'backslashreplace' or 'surrogateescape')", value);
     return -1;
 }
 

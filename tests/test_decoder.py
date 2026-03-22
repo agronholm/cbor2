@@ -1215,9 +1215,8 @@ def test_str_errors_error_alias(impl):
 
 def test_str_errors_invalid_mode(impl):
     payload = b"\x65hello"
-    for invalid_mode in ["invalid", "ignore", "backslashreplace"]:
-        with pytest.raises(ValueError, match="invalid str_errors"):
-            impl.loads(payload, str_errors=invalid_mode)
+    with pytest.raises(ValueError, match="invalid str_errors value 'invalid'"):
+        impl.loads(payload, str_errors="invalid")
 
 
 @pytest.mark.parametrize(
