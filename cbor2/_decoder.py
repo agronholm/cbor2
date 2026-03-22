@@ -894,6 +894,7 @@ def load(
     read_size: int = 1,
     *,
     max_depth: int = 400,
+    raw_tags: bool = False,
 ) -> Any:
     """
     Deserialize an object from an open file.
@@ -934,4 +935,5 @@ def load(
         str_errors=str_errors,
         read_size=read_size,
         max_depth=max_depth,
+        raw_tags=raw_tags,
     ).decode()

@@ -126,6 +126,32 @@ a :class:`CBORTag` object like so::
 
 This will be ignored on decode and the original data content will be returned.
 
+Bypassing semantic tag decoders
+-------------------------------
+
+By default, cbor2 automatically interprets certain CBOR tags as Python types (e.g., tag 0 as
+``datetime``, tags 2-3 as big integers, tag 4 as ``Decimal``). Some protocols, however, reuse
+these low-numbered tags for application-specific purposes. For example, the Cardano blockchain
+uses tags 0-7 to identify block eras, not their RFC 8949 semantic meanings.
+
+In such cases, pass ``raw_tags=True`` to skip all built-in semantic tag decoders and receive raw
+:class:`CBORTag` objects instead::
+
+    import cbor2
+
+    # Without raw_tags: tag 0 is interpreted as a datetime string
+    cbor2.loads(b'\xc0\x74...')  # returns a datetime object
+
+    # With raw_tags: tag 0 is returned as a raw CBORTag
+    result = cbor2.loads(b'\xc0\x83\x01\x02\x03', raw_tags=True)
+    assert isinstance(result, cbor2.CBORTag)
+    assert result.tag == 0
+    assert result.value == [1, 2, 3]
+
+The ``raw_tags`` parameter is available on :func:`loads`, :func:`load`, and
+:class:`CBORDecoder`. It can be combined with ``tag_hook`` -- when both are used, the hook
+receives all tags as raw :class:`CBORTag` objects regardless of their number.
+
 Use Cases
 ---------
 

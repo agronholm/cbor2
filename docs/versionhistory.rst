@@ -7,6 +7,11 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Added ``raw_tags`` parameter to ``loads()``, ``load()``, and ``CBORDecoder`` that skips
+  built-in semantic tag decoders and returns raw ``CBORTag`` objects for all tags. This
+  enables decoding of protocols that reuse low-numbered tags (0-5) for application-specific
+  purposes rather than their RFC 8949 semantic meanings (datetime, bignum, etc.).
+  (PR by @theeldermillenial)
 - Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
   containers, with a default value of 400 levels (CVE-2026-26209)
 - Changed the default ``read_size`` from 4096 to 1 for backwards compatibility.
