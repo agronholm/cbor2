@@ -21,7 +21,7 @@ typedef struct CBORDecoderObject_ {
     PyObject *object_hook;
     PyObject *shareables;
     PyObject *stringref_namespace;
-    PyObject *str_errors;
+    const char *str_errors;  // NULL for strict, "replace" for replace mode
     Py_ssize_t max_depth;
     bool immutable;
     Py_ssize_t shared_index;

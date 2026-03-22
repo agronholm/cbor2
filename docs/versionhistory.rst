@@ -22,6 +22,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   (`#287 <https://github.com/agronholm/cbor2/issues/287>`_)
 - Fixed two reference/memory leaks in the C extension's long string decoder
   (`#290 <https://github.com/agronholm/cbor2/pull/290>`_ PR by @killiancowan82)
+- Fixed C decoder ignoring the ``str_errors`` setting when decoding strings, and improved
+  string decoding performance by using stack allocation for small strings and eliminating
+  unnecessary conditionals. Benchmarks show 9-17% faster deserialization.
+  (`#255 <https://github.com/agronholm/cbor2/issues/255>`_; PR by @andreer)
 
 **5.8.0** (2025-12-30)
 

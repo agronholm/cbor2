@@ -65,13 +65,14 @@ class CBORDecoder:
 
     _fp: IO[bytes]
     _fp_read: Callable[[int], bytes]
+    _str_errors: str
 
     def __init__(
         self,
         fp: IO[bytes],
         tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
         object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
-        str_errors: Literal["strict", "error", "replace"] = "strict",
+        str_errors: str = "strict",
         read_size: int = 1,
         *,
         max_depth: int = 400,
@@ -164,17 +165,19 @@ class CBORDecoder:
             raise ValueError("object_hook must be None or a callable")
 
     @property
-    def str_errors(self) -> Literal["strict", "error", "replace"]:
+    def str_errors(self) -> str:
         return self._str_errors
 
     @str_errors.setter
-    def str_errors(self, value: Literal["strict", "error", "replace"]) -> None:
-        if value in ("strict", "error", "replace"):
+    def str_errors(self, value: str) -> None:
+        if value == "error":
+            self._str_errors = "strict"
+        elif value in ("strict", "error", "replace", "backslashreplace", "surrogateescape"):
             self._str_errors = value
         else:
             raise ValueError(
-                f"invalid str_errors value {value!r} (must be one of 'strict', "
-                "'error', or 'replace')"
+                f"invalid str_errors value {value!r} (must be 'strict', 'error', 'replace', "
+                f"'backslashreplace' or 'surrogateescape')"
             )
 
     def set_shareable(self, value: T) -> T:
