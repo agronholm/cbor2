@@ -9,20 +9,15 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 - **MAJOR REWRITE**:
   The Python and C implementations of the encoder and decoder were replaced with a single,
-  Rust-based implementation in the interest of maintainability and memory safety.
+  Rust-based implementation in the interest of maintainability.
   Here are some of the highlights:
 
   * Improved memory safety (100% safe-mode Rust)
+  * Complete elimination of reference leaks
   * Substantially improved performance
   * Iterative, rather than recursive decoding, meaning container nesting depth only theoretically
     limited by the available memory, rather than C stack size (but limited to 1000 levels by
     default)
-- Added the ``semantic_decoders`` decoder option to add or override decoders for specific semantic
-  tags
-- Added the ``immutable`` decoder flag to always use immutable containers where possible when
-  decoding a CBOR stream
-- Added the ``allow_indefinite`` decoder option to optionally disallow indefinite-length strings
-  and containers
 - **BACKWARD INCOMPATIBLE** Changed the signature of the ``tag_hook`` decoder callables to accept
   (``CBORTag``, ``immutable`` as arguments instead of ``CBORDecoder``, ``CBORTag``)
 - **BACKWARD INCOMPATIBLE** Changed the signature of the ``object_hook`` decoder callables to
@@ -34,6 +29,18 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   mistakenly called directly by users. Please open an issue if you need them back.
 - **BACKWARD INCOMPATIBLE** Changed the encoding of IP addresses to use the semantic tags 52 and 54
   instead of the deprecated 260 and 261 (`#232 <https://github.com/agronholm/cbor2/issues/232>`_)
+- **BACKWARD INCOMPATIBLE** Dropped the deprecated ``cbor2.decoder`` and ``cbor2.encoder``
+  modules – everything in the API is now importable directly from ``cbor2``
+- **BACKWARD INCOMPATIBLE** The ``cbor2.FrozenDict`` class has now been renamed ``frozendict`` and
+  is not available on Python 3.15 where the built-in ``frozendict`` class must be used instead
+- Added the ``semantic_decoders`` decoder option to add or override decoders for specific semantic
+  tags
+- Added the ``immutable`` decoder flag to always use immutable containers where possible when
+  decoding a CBOR stream
+- Added the ``allow_indefinite`` decoder option to optionally disallow indefinite-length strings
+  and containers
+- Dropped support for Python 3.9
+- Fixed the decoder not rejecting invalid two-byte simple value sequences (0xF800 - 0xF81F)
 
 **5.9.0** (2026-03-22)
 
