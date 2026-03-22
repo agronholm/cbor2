@@ -883,7 +883,7 @@ decode_definite_short_string(CBORDecoderObject *self, Py_ssize_t length)
     if (!buf)
         return PyErr_NoMemory();
 
-    if (fp_read(self, buf, length) == -1) {
+    if (self->fp_read(self, buf, length) == -1) {
         if (buf != stack_buf)
             PyMem_Free(buf);
         return NULL;
@@ -1021,9 +1021,6 @@ decode_definite_long_string(CBORDecoderObject *self, Py_ssize_t length)
         Py_DECREF(ret);
         return NULL;
     }
-
-    if (buffer)
-        PyMem_Free(buffer);
 
     return ret;
 error:
