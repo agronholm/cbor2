@@ -61,6 +61,7 @@ class CBORDecoder:
         "_stringref_namespace",
         "_max_depth",
         "_decode_depth",
+        "_raw_tags",
     )
 
     _fp: IO[bytes]
@@ -75,6 +76,7 @@ class CBORDecoder:
         read_size: int = 1,
         *,
         max_depth: int = 400,
+        raw_tags: bool = False,
     ):
         """
         :param fp:
@@ -116,6 +118,7 @@ class CBORDecoder:
         self._immutable = False
         self._max_depth = max_depth
         self._decode_depth = 0
+        self._raw_tags = raw_tags
 
     @property
     def immutable(self) -> bool:
@@ -479,8 +482,15 @@ class CBORDecoder:
     def decode_semantic(self, subtype: int) -> Any:
         # Major tag 6
         tagnum = self._decode_length(subtype)
-        if semantic_decoder := semantic_decoders.get(tagnum):
-            return semantic_decoder(self)
+
+        # When raw_tags is True, skip ALL built-in semantic decoders and
+        # return raw CBORTag objects.  This is essential for protocols
+        # like Cardano that reuse low-numbered tags (0-7) for
+        # application-specific purposes (e.g., era identification)
+        # rather than the CBOR semantic meanings (datetime, bignum, etc.).
+        if not self._raw_tags:
+            if semantic_decoder := semantic_decoders.get(tagnum):
+                return semantic_decoder(self)
 
         tag = CBORTag(tagnum, None)
         self.set_shareable(tag)
@@ -833,6 +843,7 @@ def loads(
     read_size: int = 1,
     *,
     max_depth: int = 400,
+    raw_tags: bool = False,
 ) -> Any:
     """
     Deserialize an object from a bytestring.
@@ -871,6 +882,7 @@ def loads(
             str_errors=str_errors,
             read_size=read_size,
             max_depth=max_depth,
+            raw_tags=raw_tags,
         ).decode()
 
 

@@ -155,6 +155,7 @@ CBORDecoder_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         self->str_errors = PyBytes_FromString("strict");
         self->max_depth = CBOR2_DEFAULT_MAX_DEPTH;
         self->immutable = false;
+        self->raw_tags = false;
         self->shared_index = -1;
         self->decode_depth = 0;
         self->readahead = NULL;
@@ -176,15 +177,18 @@ int
 CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {
-        "fp", "tag_hook", "object_hook", "str_errors", "read_size", "max_depth", NULL
+        "fp", "tag_hook", "object_hook", "str_errors", "read_size", "max_depth", "raw_tags", NULL
     };
     PyObject *fp = NULL, *tag_hook = NULL, *object_hook = NULL,
              *str_errors = NULL;
     Py_ssize_t read_size = CBOR2_DEFAULT_READ_SIZE;
+    int raw_tags = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOnn", keywords,
-                &fp, &tag_hook, &object_hook, &str_errors, &read_size, &self->max_depth))
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOnn$p", keywords,
+                &fp, &tag_hook, &object_hook, &str_errors, &read_size, &self->max_depth, &raw_tags))
         return -1;
+
+    self->raw_tags = raw_tags != 0;
 
     if (read_size < 1) {
         PyErr_SetString(PyExc_ValueError, "read_size must be at least 1");
@@ -1291,6 +1295,14 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
     PyObject *tag, *value, *ret = NULL;
 
     if (decode_length(self, subtype, &tagnum, NULL) == 0) {
+        // When raw_tags is true, skip ALL built-in semantic decoders
+        // and return raw CBORTag objects.  This is essential for
+        // protocols like Cardano that reuse low-numbered tags (0-7)
+        // for application-specific purposes.
+        if (self->raw_tags) {
+            goto apply_tag_hook;
+        }
+
         switch (tagnum) {
             case 0:     ret = CBORDecoder_decode_datetime_string(self); break;
             case 1:     ret = CBORDecoder_decode_epoch_datetime(self);  break;
@@ -1316,6 +1328,7 @@ decode_semantic(CBORDecoderObject *self, uint8_t subtype)
                 break;
 
             default:
+            apply_tag_hook:
                 tag = CBORTag_New(tagnum);
                 if (tag) {
                     set_shareable(self, tag);

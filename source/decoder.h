@@ -24,6 +24,7 @@ typedef struct CBORDecoderObject_ {
     PyObject *str_errors;
     Py_ssize_t max_depth;
     bool immutable;
+    bool raw_tags;
     Py_ssize_t shared_index;
     Py_ssize_t decode_depth;
 
