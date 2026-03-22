@@ -130,6 +130,44 @@ class TestStrErrorsAttribute:
         with pytest.raises(ValueError, match="invalid str_errors value: 'foo'"):
             CBORDecoder(BytesIO(), str_errors="foo")
 
+    @pytest.mark.parametrize(
+        "mode, expected",
+        [
+            ("strict", None),  # Should raise exception
+            ("replace", "hello\ufffdworld"),  # Should replace invalid byte with U+FFFD
+        ],
+        ids=["strict_mode", "replace_mode"],
+    )
+    def test_str_errors_handling(self, mode: str, expected: str | None) -> None:
+        invalid_utf8 = b"\x6bhello\xffworld"  # \xFF is invalid UTF-8
+
+        if expected is None:
+            with pytest.raises(CBORDecodeValueError, match="error decoding text string"):
+                loads(invalid_utf8, str_errors=mode)
+        else:
+            result = loads(invalid_utf8, str_errors=mode)
+            assert result == expected
+            assert len(result) == 11
+            assert result[5] == "\ufffd"
+
+    def test_str_errors_long_string_over_65536_bytes(self) -> None:
+        """Issue #255: str_errors not respected for strings >65536 bytes."""
+        # 65537 bytes: 65536 'a' + 1 invalid UTF-8 byte
+        payload = unhexlify("7a00010001" + "61" * 65536 + "c3")
+        result = loads(payload, str_errors="replace")
+        assert len(result) == 65537
+        assert result[-1] == "\ufffd"
+
+    def test_str_errors_long_string_invalid_middle(self) -> None:
+        """Test str_errors with invalid UTF-8 in the middle of a long string."""
+        # 65536 'a' + invalid byte + 65536 'b' = 131073 bytes
+        payload = unhexlify("7a00020001" + "61" * 65536 + "c3" + "62" * 65536)
+        result = loads(payload, str_errors="replace")
+        assert len(result) == 131073
+        assert result[65536] == "\ufffd"
+        assert result[:65536] == "a" * 65536
+        assert result[65537:] == "b" * 65536
+
 
 def test_allow_indefinite() -> None:
     decoder = CBORDecoder(BytesIO(unhexlify("7f6177ff")), allow_indefinite=False)

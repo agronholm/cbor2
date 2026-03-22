@@ -34,14 +34,11 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   mistakenly called directly by users. Please open an issue if you need them back.
 - **BACKWARD INCOMPATIBLE** Changed the encoding of IP addresses to use the semantic tags 52 and 54
   instead of the deprecated 260 and 261 (`#232 <https://github.com/agronholm/cbor2/issues/232>`_)
-- Fixed string references to work with indefinite-length (byte/unicode) strings too
-- Fixed ``str_errors`` options accepted by the decoder not aligning with the actual list of
-  accepted values by ``bytes.decode()``
 
-**UNRELEASED**
+**5.9.0** (2026-03-22)
 
 - Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
-  containers, with a default value of 100 levels (CVE-2026-26209)
+  containers, with a default value of 400 levels (CVE-2026-26209)
 - Changed the default ``read_size`` from 4096 to 1 for backwards compatibility.
   The buffered reads introduced in 5.8.0 could cause issues when code needs to
   access the stream position after decoding. Users can opt-in to faster decoding
@@ -53,6 +50,12 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   (`#254 <https://github.com/agronholm/cbor2/issues/254>`_)
 - Fixed a missed check for an exception in the C implementation of ``CBOREncoder.encode_shared()``
   (`#287 <https://github.com/agronholm/cbor2/issues/287>`_)
+- Fixed two reference/memory leaks in the C extension's long string decoder
+  (`#290 <https://github.com/agronholm/cbor2/pull/290>`_ PR by @killiancowan82)
+- Fixed C decoder ignoring the ``str_errors`` setting when decoding strings, and improved
+  string decoding performance by using stack allocation for small strings and eliminating
+  unnecessary conditionals. Benchmarks show 9-17% faster deserialization.
+  (`#255 <https://github.com/agronholm/cbor2/issues/255>`_; PR by @andreer)
 
 **5.8.0** (2025-12-30)
 
