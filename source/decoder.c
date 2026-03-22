@@ -173,7 +173,7 @@ error:
 
 
 // CBORDecoder.__init__(self, fp=None, tag_hook=None, object_hook=None,
-//                      str_errors='strict', read_size=1, *, max_depth=100)
+//                      str_errors='strict', read_size=1, *, max_depth=400)
 int
 CBORDecoder_init(CBORDecoderObject *self, PyObject *args, PyObject *kwargs)
 {
