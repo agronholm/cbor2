@@ -14,6 +14,7 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
   * Improved memory safety (100% safe-mode Rust)
   * Complete elimination of reference leaks
+  * Support for free-threading and subinterpreters
   * Substantially improved performance
   * Iterative, rather than recursive decoding, meaning container nesting depth only theoretically
     limited by the available memory, rather than C stack size (but limited to 1000 levels by
