@@ -3,10 +3,12 @@ use crate::decoder::DecoderResult::{
     BeginFrame, CompleteFrame, ContinueFrame, Shareable, SharedReference, StringNamespace,
     StringReference, StringValue, Value,
 };
+#[cfg(not(Py_3_15))]
+use crate::types::FrozenDict;
 use crate::types::{
-    BreakMarkerType, CBORDecodeEOF, CBORDecodeError, CBORDecodeValueError, CBORSimpleValue,
-    CBORTag, DECIMAL_TYPE, FRACTION_TYPE, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE,
-    IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE,
+    BreakMarkerType, CBORDecodeEOF, CBORDecodeError, CBORSimpleValue, CBORTag, DECIMAL_TYPE,
+    FRACTION_TYPE, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE,
+    IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE,
 };
 use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
 use half::f16;
@@ -17,11 +19,9 @@ use pyo3::types::{
     PyBytes, PyCFunction, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyListMethods, PyMapping,
     PySet, PyString, PyTuple,
 };
-use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
+use pyo3::{IntoPyObjectExt, Py, PyAny, PyErrArguments, intern, pyclass};
+use std::fmt::{Display, Formatter};
 use std::mem::{replace, take};
-
-#[cfg(not(Py_3_15))]
-use crate::types::FrozenDict;
 
 const IMMUTABLE_ATTR: &str = "_cbor2_immutable";
 const NAME_ATTR: &str = "_cbor2_name";
@@ -45,7 +45,12 @@ static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
 static FROZEN_DICT: PyImportable = PyImportable::new("builtins", "frozendict");
 
 enum DecoderResult<'a> {
-    BeginFrame(Box<DecoderCallback<'a>>, bool, Option<Bound<'a, PyAny>>),
+    BeginFrame(
+        Box<DecoderCallback<'a>>,
+        bool,
+        Option<Bound<'a, PyAny>>,
+        DisplayName<'a>,
+    ),
     ContinueFrame(bool),
     CompleteFrame(Bound<'a, PyAny>),
     Value(Bound<'a, PyAny>),
@@ -56,6 +61,22 @@ enum DecoderResult<'a> {
     SharedReference(usize),
 }
 
+enum DisplayName<'a> {
+    String(&'static str),
+    SemanticTag(usize),
+    PythonName(Bound<'a, PyAny>),
+}
+
+impl<'a> Display for DisplayName<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DisplayName::String(s) => f.write_str(s),
+            DisplayName::SemanticTag(tagnum) => write!(f, "{}", tagnum),
+            DisplayName::PythonName(obj) => write!(f, "{}", obj),
+        }
+    }
+}
+
 type DecoderCallback<'py> =
     dyn 'py + FnMut(Bound<'py, PyAny>, bool) -> PyResult<DecoderResult<'py>>;
 
@@ -63,13 +84,14 @@ struct StackFrame<'py> {
     immutable: bool,
     decoder_callback: Option<Box<DecoderCallback<'py>>>,
     shareable_index: Option<usize>,
+    typename: DisplayName<'py>,
     contains_string_namespace: bool,
 }
 
 /// Decorates a function to be a two-stage decoder.
 ///
 /// :param name: the name displayed in a :exc:`CBORDecodeError` raised by the decoder
-///     (e.g. "Error decoding thingamajig") where name='thingamajig`)
+///     (e.g. "error decoding thingamajig") where name='thingamajig`)
 /// :param immutable: :data:`True` if the item sent to the decoder should be decoded as immutable
 #[pyfunction]
 #[pyo3(signature = (func=None, /, *, name=None, immutable=false))]
@@ -106,13 +128,25 @@ pub fn shareable_decoder<'py>(
     }
 }
 
+fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound<'py, PyTuple>> {
+    let array: Bound<'py, PyTuple> = value
+        .cast_into()
+        .map_err(|e| PyTypeError::new_err("input value must be an array"))?;
+    if array.len() != length {
+        return Err(PyValueError::new_err(format!(
+            "expected an array with exactly {length} elements"
+        )));
+    }
+    Ok(array)
+}
+
 /// The CBORDecoder class implements a fully featured `CBOR`_ decoder with
 /// several extensions for handling shared references, big integers, rational
 /// numbers and so on. Typically, the class is not used directly, but the
 /// :func:`load` and :func:`loads` functions are called to indirectly construct
 /// and use the class.
 ///
-/// When the class is constructed manually, the main entry point is:meth:`decode`.
+/// When the class is constructed manually, the main entry point is :meth:`decode`.
 ///
 /// :param fp: the file to read from (any file-like object opened for reading in binary mode)
 /// :param tag_hook:
@@ -271,7 +305,7 @@ impl CBORDecoder {
     fn decode_length_finite(&mut self, py: Python<'_>, subtype: u8) -> PyResult<usize> {
         match self.decode_length(py, subtype)? {
             Some(length) => Ok(length),
-            None => Err(CBORDecodeValueError::new_err(
+            None => Err(CBORDecodeError::new_err(
                 "indefinite length not allowed here",
             )),
         }
@@ -300,9 +334,9 @@ impl CBORDecoder {
                     ));
                 }
                 None
-            },
+            }
             _ => {
-                return Err(CBORDecodeValueError::new_err(format!(
+                return Err(CBORDecodeError::new_err(format!(
                     "unknown unsigned integer subtype 0x{subtype:x}"
                 )));
             }
@@ -340,7 +374,7 @@ impl CBORDecoder {
                         (2, _) => {
                             let length = self.decode_length_finite(py, subtype)?;
                             if length > sys_maxsize {
-                                return Err(CBORDecodeValueError::new_err(format!(
+                                return Err(CBORDecodeError::new_err(format!(
                                     "chunk too long in an indefinite bytestring chunk: {length}"
                                 )));
                             }
@@ -349,7 +383,7 @@ impl CBORDecoder {
                         }
                         (7, 31) => break Ok(Value(bytes.into_any())), // break marker
                         _ => {
-                            return Err(CBORDecodeValueError::new_err(format!(
+                            return Err(CBORDecodeError::new_err(format!(
                                 "non-byte string (major type {major_type}) found in indefinite \
                                     length byte string"
                             )));
@@ -389,7 +423,7 @@ impl CBORDecoder {
                         (3, _) => {
                             let length = self.decode_length_finite(py, subtype)?;
                             if length > sys_maxsize {
-                                return Err(CBORDecodeValueError::new_err(format!(
+                                return Err(CBORDecodeError::new_err(format!(
                                     "chunk too long in an indefinite text string chunk: {length}"
                                 )));
                             }
@@ -405,18 +439,12 @@ impl CBORDecoder {
                                     .and_then(|string| {
                                         string.cast_into().map_err(|e| PyErr::from(e))
                                     }),
-                            }
-                            .map_err(|e| {
-                                let exc =
-                                    CBORDecodeValueError::new_err("error decoding text string");
-                                exc.set_cause(py, Some(e));
-                                exc
-                            })?;
+                            }?;
                             string = string.add(decoded)?.cast_into()?;
                         }
                         (7, 31) => break Ok(Value(string.into_any())), // break marker
                         _ => {
-                            return Err(CBORDecodeValueError::new_err(format!(
+                            return Err(CBORDecodeError::new_err(format!(
                                 "non-text string (major type {major_type}) found in indefinite \
                                     length text string"
                             )));
@@ -426,29 +454,14 @@ impl CBORDecoder {
             }
             Some(length) if length <= 65536 => {
                 let bytes = self.read(py, length)?;
-                let decode_result: PyResult<Bound<'_, PyString>> = match self.str_errors.as_ref() {
-                    None => PyString::from_bytes(py, bytes.as_slice()),
-                    Some(str_errors) => bytes
-                        .into_bound_py_any(py)?
-                        .call_method1(
-                            intern!(py, "decode"),
-                            (intern!(py, "utf-8"), str_errors.bind(py)),
-                        )?
-                        .cast_into()
-                        .map_err(PyErr::from),
+                let decoded_string: Bound<'_, PyAny> = match self.str_errors.as_ref() {
+                    None => PyString::from_bytes(py, bytes.as_slice())?.into_any(),
+                    Some(str_errors) => bytes.into_bound_py_any(py)?.call_method1(
+                        intern!(py, "decode"),
+                        (intern!(py, "utf-8"), str_errors.bind(py)),
+                    )?,
                 };
-                if let Ok(decoded_bytes) = decode_result {
-                    Ok(StringValue(
-                        decoded_bytes.cast_into().map_err(PyErr::from)?,
-                        length,
-                    ))
-                } else {
-                    raise_exc_from(
-                        py,
-                        CBORDecodeValueError::new_err("error decoding text string"),
-                        Some(decode_result.unwrap_err()),
-                    )
-                }
+                Ok(StringValue(decoded_string, length))
             }
             Some(mut length) => {
                 // Incrementally decode the string, in chunks of 65536 bytes
@@ -466,25 +479,15 @@ impl CBORDecoder {
                     None => decoder_class.call0()?,
                     Some(str_errors) => decoder_class.call1((str_errors,))?,
                 };
-                let mut string = PyString::new(py, "");
+                let mut string = PyString::new(py, "").into_any();
                 while length > 0 {
                     let chunk_size = length.min(65536);
                     let chunk = self.read(py, chunk_size)?;
                     length -= chunk_size;
                     let is_final_chunk = length == 0;
-                    let decode_result =
-                        decoder.call_method1(intern!(py, "decode"), (chunk, is_final_chunk));
-                    let decoded_chunk: Bound<'_, PyString> = match decode_result {
-                        Ok(decoded_chunk) => decoded_chunk.cast_into()?,
-                        Err(e) => {
-                            return raise_exc_from(
-                                py,
-                                CBORDecodeValueError::new_err("error decoding text string"),
-                                Some(e),
-                            );
-                        }
-                    };
-                    string = string.add(decoded_chunk)?.cast_into()?;
+                    let decoded_chunk =
+                        decoder.call_method1(intern!(py, "decode"), (chunk, is_final_chunk))?;
+                    string = string.add(decoded_chunk)?;
                 }
                 Ok(StringValue(string.into_any(), length))
             }
@@ -528,7 +531,12 @@ impl CBORDecoder {
                     }
                 })
             };
-            Ok(BeginFrame(callback, false, None))
+            Ok(BeginFrame(
+                callback,
+                false,
+                None,
+                DisplayName::String("array"),
+            ))
         } else {
             let mut list = PyList::empty(py);
             let container = list.clone().into_any();
@@ -559,7 +567,12 @@ impl CBORDecoder {
                     }
                 })
             };
-            Ok(BeginFrame(callback, false, Some(container)))
+            Ok(BeginFrame(
+                callback,
+                false,
+                Some(container),
+                DisplayName::String("array"),
+            ))
         }
     }
 
@@ -663,7 +676,7 @@ impl CBORDecoder {
                     }
                 })
             };
-            Ok(BeginFrame(callback, true, None))
+            Ok(BeginFrame(callback, true, None, DisplayName::String("map")))
         } else {
             let mut dict = PyDict::new(py);
             let container = dict.clone().into_any();
@@ -707,7 +720,12 @@ impl CBORDecoder {
                     }
                 })
             };
-            Ok(BeginFrame(callback, true, Some(container)))
+            Ok(BeginFrame(
+                callback,
+                true,
+                Some(container),
+                DisplayName::String("map"),
+            ))
         }
     }
 
@@ -725,7 +743,6 @@ impl CBORDecoder {
 
                     // If these attributes are present, this callable was decorated with
                     // @shareable_decoder
-                    #[allow(unused_variables)]
                     return if let Some(name) = name {
                         let require_immutable: bool = decoder
                             .getattr_opt(intern!(py, IMMUTABLE_ATTR))?
@@ -754,13 +771,23 @@ impl CBORDecoder {
                             } else {
                                 Some(container)
                             },
+                            if name.is_none() {
+                                DisplayName::SemanticTag(tagnum)
+                            } else {
+                                DisplayName::PythonName(name.clone())
+                            },
                         ))
                     } else {
                         let callback =
                             move |item, new_immutable: bool| -> PyResult<DecoderResult<'py>> {
                                 decoder.call1((item, new_immutable)).map(CompleteFrame)
                             };
-                        Ok(BeginFrame(Box::new(callback), immutable, None))
+                        Ok(BeginFrame(
+                            Box::new(callback),
+                            immutable,
+                            None,
+                            DisplayName::SemanticTag(tagnum),
+                        ))
                     };
                 }
                 Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
@@ -769,30 +796,36 @@ impl CBORDecoder {
         };
 
         // No semantic decoder lookup map – fall back to the hard coded switchboard
-        let callback: Box<DecoderCallback<'py>> = match tagnum {
-            0 => Box::new(Self::decode_datetime_string),
-            1 => Box::new(Self::decode_epoch_datetime),
-            2 => Box::new(Self::decode_positive_bignum),
-            3 => Box::new(Self::decode_negative_bignum),
-            4 => Box::new(Self::decode_fraction),
-            5 => Box::new(Self::decode_bigfloat),
-            25 => Box::new(Self::decode_stringref),
+        let (callback, typename): (Box<DecoderCallback<'py>>, &str) = match tagnum {
+            0 => (
+                Box::new(Self::decode_datetime_string),
+                "string-form datetime",
+            ),
+            1 => (Box::new(Self::decode_epoch_datetime), "epoch-form datetime"),
+            2 => (Box::new(Self::decode_positive_bignum), "positive bignum"),
+            3 => (Box::new(Self::decode_negative_bignum), "negative bignum"),
+            4 => (Box::new(Self::decode_fraction), "decimal fraction"),
+            5 => (Box::new(Self::decode_bigfloat), "bigfloat"),
+            25 => (Box::new(Self::decode_stringref), "string reference"),
             28 => return Ok(Shareable),
-            29 => Box::new(Self::decode_sharedref),
-            30 => Box::new(Self::decode_rational),
-            35 => Box::new(Self::decode_regexp),
-            36 => Box::new(Self::decode_mime),
-            37 => Box::new(Self::decode_uuid),
-            52 => Box::new(Self::decode_ipv4),
-            54 => Box::new(Self::decode_ipv6),
-            100 => Box::new(Self::decode_epoch_date),
+            29 => (Box::new(Self::decode_sharedref), "shared reference"),
+            30 => (Box::new(Self::decode_rational), "rational"),
+            35 => (Box::new(Self::decode_regexp), "regular expression"),
+            36 => (Box::new(Self::decode_mime), "MIME message"),
+            37 => (Box::new(Self::decode_uuid), "UUID"),
+            52 => (Box::new(Self::decode_ipv4), "IPv4 address"),
+            54 => (Box::new(Self::decode_ipv6), "IPv6 address"),
+            100 => (Box::new(Self::decode_epoch_date), "epoch-form date"),
             256 => return Ok(StringNamespace),
             258 => return self.decode_set(py, immutable),
-            260 => Box::new(Self::decode_ipaddress),
-            261 => Box::new(Self::decode_ipnetwork),
-            1004 => Box::new(Self::decode_date_string),
-            43000 => Box::new(Self::decode_complex),
-            55799 => Box::new(Self::decode_self_describe_cbor),
+            260 => (Box::new(Self::decode_ipaddress), "IP address"),
+            261 => (Box::new(Self::decode_ipnetwork), "IP network"),
+            1004 => (Box::new(Self::decode_date_string), "string-form date"),
+            43000 => (Box::new(Self::decode_complex), "complex number"),
+            55799 => (
+                Box::new(Self::decode_self_describe_cbor),
+                "self-described CBOR value",
+            ),
             _ => {
                 // For a tag with no designated decoder, check if we have a tag hook, and call
                 // that with the tag object, using its return value as the decoded value.
@@ -812,10 +845,20 @@ impl CBORDecoder {
                         Ok(CompleteFrame(bound_tag.clone()))
                     }
                 });
-                return Ok(BeginFrame(callback, true, Some(container)));
+                return Ok(BeginFrame(
+                    callback,
+                    true,
+                    Some(container),
+                    DisplayName::SemanticTag(tagnum),
+                ));
             }
         };
-        Ok(BeginFrame(callback, true, None))
+        Ok(BeginFrame(
+            callback,
+            true,
+            None,
+            DisplayName::String(typename),
+        ))
     }
 
     fn decode_special<'py>(
@@ -836,7 +879,7 @@ impl CBORDecoder {
             24 => {
                 let value = self.read_exact::<1>(py)?[0];
                 if value < 0x20 {
-                    return Err(CBORDecodeValueError::new_err(
+                    return Err(CBORDecodeError::new_err(
                         "invalid two-byte sequence for simple value",
                     ));
                 }
@@ -855,7 +898,7 @@ impl CBORDecoder {
                 f64::from_be_bytes(bytes).into_bound_py_any(py)
             }
             31 => Ok(BREAK_MARKER.get(py).unwrap().into_bound_py_any(py)?),
-            _ => Err(CBORDecodeValueError::new_err(format!(
+            _ => Err(CBORDecodeError::new_err(format!(
                 "undefined reserved major type 7 subtype 0x{subtype:x}"
             ))),
         }
@@ -876,7 +919,7 @@ impl CBORDecoder {
         let mut datetime_str: Bound<'py, PyString> = value.cast_into().map_err(|e| {
             create_exc_from(
                 py,
-                CBORDecodeValueError::new_err(format!(
+                CBORDecodeError::new_err(format!(
                     "expected string for tag, got {} instead",
                     value_type.to_string()
                 )),
@@ -912,15 +955,6 @@ impl CBORDecoder {
         DATETIME_FROMISOFORMAT
             .get(py)?
             .call1((&datetime_str,))
-            .map_err(|e| {
-                create_exc_from(
-                    py,
-                    CBORDecodeValueError::new_err(format!(
-                        "invalid datetime string: '{datetime_str}'"
-                    )),
-                    Some(e),
-                )
-            })
             .map(CompleteFrame)
     }
 
@@ -953,22 +987,7 @@ impl CBORDecoder {
     fn decode_fraction(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 4
         let py = value.py();
-        let tuple = value.cast::<PyTuple>().map_err(|e| {
-            create_exc_from(
-                py,
-                CBORDecodeValueError::new_err(
-                    "error decoding decimal fraction: input value must be an array",
-                ),
-                Some(PyErr::from(e)),
-            )
-        })?;
-
-        if tuple.len() != 2 {
-            return Err(CBORDecodeValueError::new_err(
-                "error decoding decimal fraction: array must have exactly two elements",
-            ));
-        }
-
+        let tuple = require_tuple(value, 2)?;
         let decimal_class = DECIMAL_TYPE.get(py)?;
         {
             let exp = tuple.get_item(0)?;
@@ -981,34 +1000,12 @@ impl CBORDecoder {
             let args_tuple = PyTuple::new(py, [sign, digits, exp])?;
             decimal_class.call1((args_tuple,)).map(CompleteFrame)
         }
-        .map_err(|e| {
-            create_exc_from(
-                py,
-                CBORDecodeValueError::new_err("error decoding decimal fraction"),
-                Some(e),
-            )
-        })
     }
 
     fn decode_bigfloat(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 5
         let py = value.py();
-        let tuple = value.cast::<PyTuple>().map_err(|e| {
-            create_exc_from(
-                py,
-                CBORDecodeValueError::new_err(
-                    "error decoding bigfloat: input value must be an array",
-                ),
-                Some(PyErr::from(e)),
-            )
-        })?;
-
-        if tuple.len() != 2 {
-            return Err(CBORDecodeValueError::new_err(
-                "error decoding bigfloat: array must have exactly two elements",
-            ));
-        }
-
+        let tuple = require_tuple(value, 2)?;
         let decimal_class = DECIMAL_TYPE.get(py)?;
         {
             let exp = decimal_class.call1((tuple.get_item(0)?,))?;
@@ -1016,13 +1013,6 @@ impl CBORDecoder {
             let exp = PyInt::new(py, 2).pow(exp, py.None())?;
             sig.mul(exp).map(CompleteFrame)
         }
-        .map_err(|e| {
-            create_exc_from(
-                py,
-                CBORDecodeValueError::new_err("error decoding bigfloat"),
-                Some(e),
-            )
-        })
     }
 
     fn decode_stringref(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
@@ -1040,57 +1030,25 @@ impl CBORDecoder {
     fn decode_rational(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 30
         let py = value.py();
-        let tuple = value.cast_into::<PyTuple>().map_err(|e| {
-            create_exc_from(
-                py,
-                CBORDecodeValueError::new_err(
-                    "error decoding rational: input value must be an array",
-                ),
-                Some(PyErr::from(e)),
-            )
-        })?;
-
-        if tuple.len() != 2 {
-            return Err(CBORDecodeValueError::new_err(
-                "error decoding rational: array must have exactly two elements",
-            ));
-        }
-
-        match FRACTION_TYPE.get(py)?.call1(tuple) {
-            Ok(fraction) => Ok(CompleteFrame(fraction)),
-            Err(e) => raise_exc_from(
-                py,
-                CBORDecodeValueError::new_err("error decoding rational"),
-                Some(e),
-            ),
-        }
+        let tuple = require_tuple(value, 2)?;
+        FRACTION_TYPE.get(py)?.call1(tuple).map(CompleteFrame)
     }
 
     fn decode_regexp(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 35
-        let py = value.py();
-        match RE_COMPILE.get(py)?.call1((value,)) {
-            Ok(regexp) => Ok(CompleteFrame(regexp)),
-            Err(e) => raise_exc_from(
-                py,
-                CBORDecodeValueError::new_err("error decoding regular expression"),
-                Some(e),
-            ),
-        }
+        RE_COMPILE
+            .get(value.py())?
+            .call1((value,))
+            .map(CompleteFrame)
     }
 
     fn decode_mime(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 36
         let py = value.py();
         let parser = EMAIL_PARSER.get(py)?.call0()?;
-        match parser.call_method1(intern!(py, "parsestr"), (value,)) {
-            Ok(message) => Ok(CompleteFrame(message)),
-            Err(e) => raise_exc_from(
-                py,
-                CBORDecodeValueError::new_err("error decoding MIME message"),
-                Some(e),
-            ),
-        }
+        parser
+            .call_method1(intern!(py, "parsestr"), (value,))
+            .map(CompleteFrame)
     }
 
     fn decode_uuid(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
@@ -1098,14 +1056,10 @@ impl CBORDecoder {
         let py = value.py();
         let kwargs = PyDict::new(py);
         kwargs.set_item(intern!(py, "bytes"), value)?;
-        match UUID_TYPE.get(py)?.call((), Some(&kwargs)) {
-            Ok(uuid) => Ok(CompleteFrame(uuid)),
-            Err(e) => raise_exc_from(
-                py,
-                CBORDecodeValueError::new_err("error decoding UUID value"),
-                Some(e),
-            ),
-        }
+        UUID_TYPE
+            .get(py)?
+            .call((), Some(&kwargs))
+            .map(CompleteFrame)
     }
 
     fn decode_ipv4(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
@@ -1133,13 +1087,11 @@ impl CBORDecoder {
             {
                 IPV4INTERFACE_TYPE.get(py)?.call1(((address, prefix),))?
             } else {
-                return Err(CBORDecodeValueError::new_err(
-                    "error decoding IPv4: invalid types in input array",
-                ));
+                return Err(CBORDecodeError::new_err("invalid types in input array"));
             }
         } else {
-            return Err(CBORDecodeValueError::new_err(
-                "error decoding IPv4: input value must be a bytestring or an array of 2 elements",
+            return Err(CBORDecodeError::new_err(
+                "input value must be a bytestring or an array of 2 elements",
             ));
         };
         Ok(CompleteFrame(addr))
@@ -1177,9 +1129,7 @@ impl CBORDecoder {
             {
                 Ok((IPV6INTERFACE_TYPE.get(py)?, address, prefix))
             } else {
-                Err(CBORDecodeValueError::new_err(
-                    "error decoding IPv6: invalid types in input array",
-                ))
+                Err(CBORDecodeError::new_err("invalid types in input array"))
             }?;
             let addr_obj = ipv6addr_class.call1((addr_bytes,))?;
 
@@ -1192,8 +1142,8 @@ impl CBORDecoder {
                 } else if let Ok(zone_id_int) = zone_id.cast::<PyInt>() {
                     format!("%{zone_id_int}")
                 } else {
-                    return Err(CBORDecodeValueError::new_err(
-                        "error decoding IPv6: zone ID must be an integer or a bytestring",
+                    return Err(CBORDecodeError::new_err(
+                        "zone ID must be an integer or a bytestring",
                     ));
                 }
             } else {
@@ -1203,8 +1153,8 @@ impl CBORDecoder {
             let formatted_addr = format!("{addr_obj}{zone_id_suffix}/{prefix}");
             class.call1((formatted_addr,))?
         } else {
-            return Err(CBORDecodeValueError::new_err(
-                "error decoding IPv6: input value must be a bytestring or an array of 2 elements",
+            return Err(CBORDecodeError::new_err(
+                "input value must be a bytestring or an array of 2 elements",
             ));
         };
         Ok(CompleteFrame(addr))
@@ -1214,24 +1164,17 @@ impl CBORDecoder {
         // Semantic tag 100
         let py = value.py();
         let value = value.extract::<i32>()? + 719163;
-        let date = DATE_FROMORDINAL.get(py)?.call1((value,))?;
-        Ok(CompleteFrame(date))
+        DATE_FROMORDINAL.get(py)?.call1((value,)).map(CompleteFrame)
     }
 
     fn decode_ipaddress(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 260 (deprecated)
         let py = value.py();
-        let value = value.cast_into::<PyBytes>().map_err(|e| {
-            create_exc_from(
-                py,
-                CBORDecodeValueError::new_err("invalid IP address"),
-                Some(PyErr::from(e)),
-            )
-        })?;
+        let value = value.cast_into::<PyBytes>()?;
         let addr_obj = match value.len()? {
             4 | 16 => IPADDRESS_FUNC.get(py)?.call1((value,)),
             6 => Ok(Bound::new(py, CBORTag::new_internal(260, value.into_any()))?.into_any()), // MAC address
-            length => Err(CBORDecodeValueError::new_err(format!(
+            length => Err(CBORDecodeError::new_err(format!(
                 "invalid IP address length ({length})"
             ))),
         }?;
@@ -1247,7 +1190,7 @@ impl CBORDecoder {
         let value: Bound<'py, PyMapping> = value.cast_into()?;
         let length = value.len()?;
         if length != 1 {
-            return Err(CBORDecodeValueError::new_err(format!(
+            return Err(CBORDecodeError::new_err(format!(
                 "invalid input map length for IP network: {}",
                 length
             )));
@@ -1255,7 +1198,7 @@ impl CBORDecoder {
         let first_item = value.items()?.get_item(0)?;
         let mask_length = first_item.get_item(1)?;
         if !mask_length.is_exact_instance_of::<PyInt>() {
-            return Err(CBORDecodeValueError::new_err(format!(
+            return Err(CBORDecodeError::new_err(format!(
                 "invalid mask length for IP network: {mask_length}"
             )));
         }
@@ -1285,22 +1228,7 @@ impl CBORDecoder {
     fn decode_complex(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 43000
         let py = value.py();
-        let tuple = value.cast_into::<PyTuple>().map_err(|e| {
-            create_exc_from(
-                py,
-                CBORDecodeValueError::new_err(
-                    "error decoding complex: input value must be an array",
-                ),
-                Some(PyErr::from(e)),
-            )
-        })?;
-
-        if tuple.len() != 2 {
-            return Err(CBORDecodeValueError::new_err(
-                "error decoding complex: array must have exactly two elements",
-            ));
-        }
-
+        let tuple = require_tuple(value, 2)?;
         let real: f64 = tuple.get_item(0)?.extract()?;
         let imag: f64 = tuple.get_item(1)?.extract()?;
         Ok(CompleteFrame(
@@ -1335,7 +1263,12 @@ impl CBORDecoder {
             };
             Ok(CompleteFrame(container))
         };
-        Ok(BeginFrame(Box::new(callback), true, container))
+        Ok(BeginFrame(
+            Box::new(callback),
+            true,
+            container,
+            DisplayName::String("set"),
+        ))
     }
 }
 
@@ -1542,6 +1475,24 @@ impl CBORDecoder {
             Ok(())
         }
 
+        fn wrap_exception(py: Python<'_>, err: PyErr, typename: &DisplayName) -> PyErr {
+            if err.is_instance_of::<CBORDecodeEOF>(py) {
+                err
+            } else if err.is_instance_of::<CBORDecodeError>(py) {
+                CBORDecodeError::new_err(format!(
+                    "error decoding {}: {}",
+                    typename,
+                    err.arguments(py)
+                ))
+            } else {
+                create_exc_from(
+                    py,
+                    CBORDecodeError::new_err(format!("error decoding {}", typename)),
+                    Some(err),
+                )
+            }
+        }
+
         let mut shareables: Vec<Option<Bound<'py, PyAny>>> = Vec::new();
         let mut string_namespaces: Vec<Vec<Bound<'py, PyAny>>> = Vec::new();
         let mut value: Option<Bound<'py, PyAny>> = None;
@@ -1552,6 +1503,7 @@ impl CBORDecoder {
                 let frame = frames.last_mut().unwrap();
                 if let Some(decoder_callback) = frame.decoder_callback.as_mut() {
                     decoder_callback(previous_value, frame.immutable)
+                        .map_err(|e| wrap_exception(py, e, &frame.typename))
                 } else if frame.contains_string_namespace {
                     string_namespaces
                         .pop()
@@ -1578,10 +1530,24 @@ impl CBORDecoder {
                         "invalid major type: {major_type}"
                     ))),
                 }
+                .map_err(|e| {
+                    let typename = match major_type {
+                        0 => "unsigned integer",
+                        1 => "negative integer",
+                        2 => "byte string",
+                        3 => "text string",
+                        4 => "array",
+                        5 => "map",
+                        6 => "semantic tag",
+                        7 => "special value",
+                        _ => unreachable!("invalid major types should have been handled earlier"),
+                    };
+                    wrap_exception(py, e, &DisplayName::String(typename))
+                })
             };
 
             match result {
-                Ok(BeginFrame(callback, requested_immutable, container)) => {
+                Ok(BeginFrame(callback, requested_immutable, container, typename)) => {
                     if let Some(frame) = frames.last_mut()
                         && let Some(container) = container
                         && let Some(shareable_index) = frame.shareable_index
@@ -1597,6 +1563,7 @@ impl CBORDecoder {
                             immutable: current_immutable,
                             decoder_callback: Some(callback),
                             shareable_index: None,
+                            typename,
                             contains_string_namespace: false,
                         },
                     )?;
@@ -1628,6 +1595,7 @@ impl CBORDecoder {
                             immutable: current_immutable,
                             decoder_callback: None,
                             shareable_index: None,
+                            typename: DisplayName::String("string namespace"),
                             contains_string_namespace: true,
                         },
                     )?;
@@ -1656,12 +1624,12 @@ impl CBORDecoder {
                         if let Some(string) = namespace.get(index) {
                             value = Some(string.clone());
                         } else {
-                            return Err(CBORDecodeValueError::new_err(format!(
+                            return Err(CBORDecodeError::new_err(format!(
                                 "string reference {index} not found"
                             )));
                         }
                     } else {
-                        return Err(CBORDecodeValueError::new_err(
+                        return Err(CBORDecodeError::new_err(
                             "string reference outside of namespace",
                         ));
                     }
@@ -1677,6 +1645,7 @@ impl CBORDecoder {
                             immutable: current_immutable,
                             decoder_callback: None,
                             shareable_index: Some(shareables.len()),
+                            typename: DisplayName::String("shareable value"),
                             contains_string_namespace: false,
                         },
                     )?;
@@ -1705,13 +1674,13 @@ impl CBORDecoder {
                 }
                 Err(err) => {
                     // If an Exception was raised, wrap it in a CBORDecodeError
-                    // If a ValueError was raised, wrap it in a CBORDecodeValueError
+                    // If a ValueError was raised, wrap it in a CBORDecodeError
                     return if err.is_instance_of::<CBORDecodeError>(py) {
                         Err(err)
                     } else if err.is_instance_of::<PyValueError>(py) {
                         Err(create_exc_from(
                             py,
-                            CBORDecodeValueError::new_err(err.to_string()),
+                            CBORDecodeError::new_err(err.to_string()),
                             Some(err),
                         ))
                     } else if err.is_instance_of::<PyException>(py) {

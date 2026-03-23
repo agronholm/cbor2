@@ -5,7 +5,6 @@ from typing import Any, TypeAlias
 from ._cbor2 import CBORDecodeEOF as CBORDecodeEOF
 from ._cbor2 import CBORDecodeError as CBORDecodeError
 from ._cbor2 import CBORDecoder as CBORDecoder
-from ._cbor2 import CBORDecodeValueError as CBORDecodeValueError
 from ._cbor2 import CBOREncodeError as CBOREncodeError
 from ._cbor2 import CBOREncoder as CBOREncoder
 from ._cbor2 import CBOREncodeTypeError as CBOREncodeTypeError

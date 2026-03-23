@@ -16,6 +16,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   * Complete elimination of reference leaks
   * Support for free-threading and subinterpreters
   * Substantially improved performance
+  * Improved decoder error handling where any non-base exception gets wrapped in a
+    ``CBORDecodeError``
   * Iterative, rather than recursive decoding, meaning container nesting depth only theoretically
     limited by the available memory, rather than C stack size (but limited to 1000 levels by
     default)
@@ -24,6 +26,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - **BACKWARD INCOMPATIBLE** Changed the signature of the ``object_hook`` decoder callables to
   accept (``Mapping[Any, Any]``, ``bool``) instead of (``CBORDecoder``, ``dict[Any, Any]``)
 - **BACKWARD INCOMPATIBLE** Removed the ``break_marker`` singleton as no longer necessary
+- **BACKWARD INCOMPATIBLE** Removed the ``CBORDecodeValueError`` exception, instead chaining
+  ``ValueError`` or ``TypeError`` to a ``CBORDecodeError``
 - **BACKWARD INCOMPATIBLE** Changed the decoding of semantic tag 261 to yield an ``IPv4Interface``
   or ``IPv6Interface`` if the address contains host bits
 - **BACKWARD INCOMPATIBLE** Removed the individual decoding functions from the API as they were

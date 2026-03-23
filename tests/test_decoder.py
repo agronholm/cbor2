@@ -36,7 +36,6 @@ from cbor2 import (
     CBORDecodeEOF,
     CBORDecodeError,
     CBORDecoder,
-    CBORDecodeValueError,
     CBORSimpleValue,
     CBORTag,
     dumps,
@@ -142,7 +141,7 @@ class TestStrErrorsAttribute:
         invalid_utf8 = b"\x6bhello\xffworld"  # \xFF is invalid UTF-8
 
         if expected is None:
-            with pytest.raises(CBORDecodeValueError, match="error decoding text string"):
+            with pytest.raises(CBORDecodeError, match="error decoding text string"):
                 loads(invalid_utf8, str_errors=mode)
         else:
             result = loads(invalid_utf8, str_errors=mode)
@@ -363,7 +362,7 @@ def test_string(payload: str, expected: str) -> None:
     ],
 )
 def test_string_invalid_utf8(payload: str) -> None:
-    with pytest.raises(CBORDecodeValueError, match="error decoding text string") as exc:
+    with pytest.raises(CBORDecodeError, match="error decoding text string") as exc:
         loads(unhexlify(payload))
 
     assert isinstance(exc.value.__cause__, UnicodeDecodeError)
@@ -469,7 +468,7 @@ def test_streaming(payload: str, expected: object) -> None:
 )
 def test_bad_streaming_strings(payload: str) -> None:
     with pytest.raises(
-        CBORDecodeValueError,
+        CBORDecodeError,
         match=r"non-(byte|text) string \(major type \d\) found in indefinite length (byte|text) string",
     ):
         loads(unhexlify(payload))
@@ -498,7 +497,7 @@ def test_simple_val_as_key() -> None:
 
 @pytest.mark.parametrize("payload", ["f800", "f817", "f81f"])
 def test_invalid_simple_value(payload: str) -> None:
-    with pytest.raises(CBORDecodeValueError, match="invalid two-byte sequence for simple value"):
+    with pytest.raises(CBORDecodeError, match="invalid two-byte sequence for simple value"):
         loads(unhexlify(payload))
 
 
@@ -607,7 +606,7 @@ def test_datetime_secfrac_overflow() -> None:
 
 
 def test_datetime_invalid_string() -> None:
-    with pytest.raises(CBORDecodeValueError) as excinfo:
+    with pytest.raises(CBORDecodeError) as excinfo:
         loads(unhexlify("c06b303030302d3132332d3031"))
 
     assert isinstance(excinfo.value.__cause__, ValueError)
@@ -724,14 +723,15 @@ def test_rational() -> None:
 
 
 def test_rational_invalid_iterable() -> None:
-    with pytest.raises(
-        CBORDecodeValueError, match="error decoding rational: input value must be an array"
-    ):
+    with pytest.raises(CBORDecodeError, match="error decoding rational") as exc_info:
         loads(unhexlify("d81e01"))
+
+    assert isinstance(exc_info.value.__cause__, TypeError)
+    assert str(exc_info.value.__cause__) == "input value must be an array"
 
 
 def test_rational_zero_denominator() -> None:
-    with pytest.raises(CBORDecodeValueError, match="error decoding rational") as exc:
+    with pytest.raises(CBORDecodeError, match="error decoding rational") as exc:
         loads(unhexlify("d81e820100"))
 
     assert isinstance(exc.value.__cause__, ZeroDivisionError)
@@ -744,7 +744,7 @@ def test_regex() -> None:
 
 
 def test_regex_unbalanced_parentheses() -> None:
-    with pytest.raises(CBORDecodeValueError, match="error decoding regular expression") as exc:
+    with pytest.raises(CBORDecodeError, match="error decoding regular expression") as exc:
         loads(unhexlify("d8236c68656c6c6f2028776f726c64"))
 
     assert isinstance(exc.value.__cause__, re.error)
@@ -764,7 +764,7 @@ def test_mime() -> None:
 
 
 def test_mime_invalid_type() -> None:
-    with pytest.raises(CBORDecodeValueError, match="error decoding MIME message") as exc:
+    with pytest.raises(CBORDecodeError, match="error decoding MIME message") as exc:
         loads(unhexlify("d82401"))
 
     assert isinstance(exc.value.__cause__, TypeError)
@@ -776,14 +776,14 @@ def test_uuid() -> None:
 
 
 def test_uuid_invalid_length() -> None:
-    with pytest.raises(CBORDecodeValueError, match="error decoding UUID value") as exc:
+    with pytest.raises(CBORDecodeError, match="error decoding UUID") as exc:
         loads(unhexlify("d8254f5eaffac8b51e480581277fdcc7842f"))
 
     assert isinstance(exc.value.__cause__, ValueError)
 
 
 def test_uuid_invalid_type() -> None:
-    with pytest.raises(CBORDecodeValueError, match="error decoding UUID value") as exc:
+    with pytest.raises(CBORDecodeError, match="error decoding UUID") as exc:
         loads(unhexlify("d82501"))
 
     assert isinstance(exc.value.__cause__, TypeError)
@@ -841,7 +841,7 @@ class TestDeprecatedIPAddress:
 
     @pytest.mark.parametrize("payload", ["d9010443c00a0a", "d9010401"])
     def test_invalid(self, payload: str) -> None:
-        with pytest.raises(CBORDecodeError, match="invalid IP address"):
+        with pytest.raises(CBORDecodeError, match="error decoding IP address"):
             loads(unhexlify(payload))
 
 
@@ -877,7 +877,7 @@ class TestDeprecatedIPNetwork:
         ],
     )
     def test_invalid(self, payload: str, pattern: str) -> None:
-        with pytest.raises(CBORDecodeValueError, match=pattern):
+        with pytest.raises(CBORDecodeError, match=pattern):
             loads(unhexlify(payload))
 
 
@@ -922,11 +922,11 @@ class TestStringReference:
         assert decoded == ["first", "first", "second", "first", "second"]
 
     def test_ref_outside_of_namespace(self) -> None:
-        with pytest.raises(CBORDecodeValueError, match="string reference outside of namespace$"):
+        with pytest.raises(CBORDecodeError, match="string reference outside of namespace$"):
             loads(unhexlify("85656669727374d81900667365636f6e64d81900d81901"))
 
     def test_invalid_string_ref(self) -> None:
-        with pytest.raises(CBORDecodeValueError, match="string reference 3 not found$"):
+        with pytest.raises(CBORDecodeError, match="string reference 3 not found$"):
             loads(unhexlify("d9010086656669727374d81900667365636f6e64d81900d81901d81903"))
 
 
@@ -999,7 +999,7 @@ def test_object_hook_exception() -> None:
 
 
 class TestCustomDecoder:
-    def test_custom_semantic_decoder(self) -> None:
+    def test_success(self) -> None:
         def custom_set_decoder(value: Any, immutable: bool) -> Any:
             return frozenset(value) if immutable else set(value)
 
@@ -1009,7 +1009,7 @@ class TestCustomDecoder:
             payload, semantic_decoders={258: custom_set_decoder}, immutable=True
         ) == frozenset((5, 7, "foo"))
 
-    def test_custom_container_cyclic_reference(self) -> None:
+    def test_cyclic_reference(self) -> None:
         @dataclass
         class CustomContainer:
             value: Any
@@ -1040,7 +1040,7 @@ class TestCustomDecoder:
             pytest.param(True, (1, 2), id="immutable"),
         ],
     )
-    def test_custom_container_immutable_flag(self, immutable: bool, expected_value: Any) -> None:
+    def test_immutable_flag(self, immutable: bool, expected_value: Any) -> None:
         @dataclass
         class CustomContainer:
             value: tuple[Any, ...] | list[Any]
@@ -1058,6 +1058,21 @@ class TestCustomDecoder:
         retval = loads(payload, semantic_decoders={80_000: custom_decoder})
         assert isinstance(retval, CustomContainer)
         assert retval.value == expected_value
+
+    def test_error_in_callback(self) -> None:
+        @shareable_decoder(name="custom container")
+        def custom_decoder(immutable: bool) -> tuple[None, Callable[[Any], Any]]:
+            def callback(item: Any) -> NoReturn:
+                raise RuntimeError("foo")
+
+            return None, callback
+
+        payload = unhexlify("da000138806474657374")
+        with pytest.raises(CBORDecodeError, match="error decoding custom container") as exc_info:
+            loads(payload, semantic_decoders={80_000: custom_decoder})
+
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+        assert str(exc_info.value.__cause__) == "foo"
 
 
 def test_load_from_file(tmp_path: Path) -> None:
@@ -1140,7 +1155,7 @@ def test_huge_truncated_indefinite_data(tag_dtype: str, will_overflow: bytes) ->
     ],
 )
 def test_embedded_indefinite_data(data: str) -> None:
-    with pytest.raises(CBORDecodeValueError):
+    with pytest.raises(CBORDecodeError):
         loads(unhexlify(data))
 
 
@@ -1148,7 +1163,7 @@ def test_embedded_indefinite_data(data: str) -> None:
     "data", [pytest.param("7f01ff", id="string"), pytest.param("5f01ff", id="bytes")]
 )
 def test_invalid_indefinite_data_item(data: str) -> None:
-    with pytest.raises(CBORDecodeValueError):
+    with pytest.raises(CBORDecodeError):
         loads(unhexlify(data))
 
 
@@ -1160,7 +1175,7 @@ def test_invalid_indefinite_data_item(data: str) -> None:
     ],
 )
 def test_indefinite_overflow(data: str) -> None:
-    with pytest.raises(CBORDecodeValueError):
+    with pytest.raises(CBORDecodeError):
         loads(unhexlify(data))
 
 
@@ -1181,7 +1196,7 @@ def test_invalid_cbor() -> None:
 )
 def test_reserved_special_tags(data: str, expected: str) -> None:
     with pytest.raises(
-        CBORDecodeValueError, match=f"undefined reserved major type 7 subtype 0x{expected}"
+        CBORDecodeError, match=f"undefined reserved major type 7 subtype 0x{expected}"
     ):
         loads(unhexlify(data))
 
@@ -1191,10 +1206,11 @@ def test_reserved_special_tags(data: str, expected: str) -> None:
     [("c400", "4", "decimal fraction"), ("c500", "5", "bigfloat")],
 )
 def test_decimal_payload_unpacking(data: str, expected: str, typename: str) -> None:
-    with pytest.raises(
-        CBORDecodeValueError, match=f"error decoding {typename}: input value must be an array"
-    ):
+    with pytest.raises(CBORDecodeError, match=f"error decoding {typename}") as exc_info:
         loads(unhexlify(data))
+
+    assert isinstance(exc_info.value.__cause__, TypeError)
+    assert str(exc_info.value.__cause__) == "input value must be an array"
 
 
 @pytest.mark.parametrize(

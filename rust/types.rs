@@ -59,12 +59,6 @@ create_exception!(
 );
 create_exception!(
     cbor2,
-    CBORDecodeValueError,
-    CBORDecodeError,
-    "Raised when the CBOR stream being decoded contains an invalid value."
-);
-create_exception!(
-    cbor2,
     CBORDecodeEOF,
     CBORDecodeError,
     "Raised when decoding unexpectedly reaches EOF."

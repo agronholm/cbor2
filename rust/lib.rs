@@ -51,9 +51,6 @@ mod _cbor2 {
     use crate::types::CBOREncodeValueError;
 
     #[pymodule_export]
-    use crate::types::CBORDecodeValueError;
-
-    #[pymodule_export]
     use crate::types::CBORDecodeError;
 
     #[pymodule_export]

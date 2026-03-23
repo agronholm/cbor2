@@ -63,5 +63,4 @@ Exceptions
 .. autoexception:: cbor2.CBOREncodeTypeError
 .. autoexception:: cbor2.CBOREncodeValueError
 .. autoexception:: cbor2.CBORDecodeError
-.. autoexception:: cbor2.CBORDecodeValueError
 .. autoexception:: cbor2.CBORDecodeEOF
