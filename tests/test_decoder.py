@@ -1059,8 +1059,15 @@ class TestCustomDecoder:
         assert isinstance(retval, CustomContainer)
         assert retval.value == expected_value
 
-    def test_error_in_callback(self) -> None:
-        @shareable_decoder(name="custom container")
+    @pytest.mark.parametrize(
+        "name, expected_typename",
+        [
+            pytest.param(None, "semantic tag 80000"),
+            pytest.param("custom container", "custom container"),
+        ],
+    )
+    def test_error_in_callback(self, name: str | None, expected_typename: str) -> None:
+        @shareable_decoder(name=name)
         def custom_decoder(immutable: bool) -> tuple[None, Callable[[Any], Any]]:
             def callback(item: Any) -> NoReturn:
                 raise RuntimeError("foo")
@@ -1068,7 +1075,9 @@ class TestCustomDecoder:
             return None, callback
 
         payload = unhexlify("da000138806474657374")
-        with pytest.raises(CBORDecodeError, match="error decoding custom container") as exc_info:
+        with pytest.raises(
+            CBORDecodeError, match=f"error decoding {expected_typename}"
+        ) as exc_info:
             loads(payload, semantic_decoders={80_000: custom_decoder})
 
         assert isinstance(exc_info.value.__cause__, RuntimeError)

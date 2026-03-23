@@ -71,7 +71,7 @@ impl<'a> Display for DisplayName<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             DisplayName::String(s) => f.write_str(s),
-            DisplayName::SemanticTag(tagnum) => write!(f, "{}", tagnum),
+            DisplayName::SemanticTag(tagnum) => write!(f, "semantic tag {}", tagnum),
             DisplayName::PythonName(obj) => write!(f, "{}", obj),
         }
     }
