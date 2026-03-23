@@ -111,11 +111,14 @@ env_list = ["py310", "py311", "py312", "py313", "py314", "py314t", "py315", "pyp
 skip_missing_interpreters = true
 requires = ["tox >= 4.22"]
 
+[tool.tox.env_pkg_base]
+set_env = { RUSTFLAGS = "--deny warnings" }
+
 [tool.tox.env_run_base]
 commands = [["pytest", { replace = "posargs", extend = true }]]
 package = "wheel"
 dependency_groups = ["test"]
-set_env = { RUSTFLAGS = "--deny warnings", TZ = "America/New_York" }
+set_env = { TZ = "America/New_York" }
 
 [tool.tox.env.docs]
 commands = [["sphinx-build", "-W", "-n", "docs", "build/sphinx"]]

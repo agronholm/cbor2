@@ -131,7 +131,7 @@ pub fn shareable_decoder<'py>(
 fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound<'py, PyTuple>> {
     let array: Bound<'py, PyTuple> = value
         .cast_into()
-        .map_err(|e| PyTypeError::new_err("input value must be an array"))?;
+        .map_err(|_| PyTypeError::new_err("input value must be an array"))?;
     if array.len() != length {
         return Err(PyValueError::new_err(format!(
             "expected an array with exactly {length} elements"
