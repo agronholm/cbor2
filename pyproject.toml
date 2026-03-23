@@ -115,7 +115,7 @@ requires = ["tox >= 4.22"]
 commands = [["pytest", { replace = "posargs", extend = true }]]
 package = "wheel"
 dependency_groups = ["test"]
-set_env = { TZ = "America/New_York" }
+set_env = { RUSTFLAGS = "--deny warnings", TZ = "America/New_York" }
 
 [tool.tox.env.docs]
 commands = [["sphinx-build", "-W", "-n", "docs", "build/sphinx"]]
