@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from email.message import Message
 from fractions import Fraction
+from inspect import signature
 from io import BytesIO
 from ipaddress import (
     IPv4Address,
@@ -44,11 +45,12 @@ from cbor2 import (
     shareable_decoder,
     undefined,
 )
+from cbor2._cbor2 import loads as raw_loads
 
 if sys.hexversion < 51314855:
     from cbor2 import frozendict
 
-DECODER_MAX_DEPTH = 1000
+DECODER_MAX_DEPTH = signature(raw_loads).parameters["max_depth"].default
 
 
 @pytest.fixture

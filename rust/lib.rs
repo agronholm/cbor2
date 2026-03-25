@@ -101,7 +101,7 @@ mod _cbor2 {
         semantic_decoders = None,
         str_errors = "strict",
         read_size = 4096,
-        max_depth = 1000,
+        max_depth = 400,
         allow_indefinite = true,
         immutable = false,
     ))]
@@ -171,7 +171,7 @@ mod _cbor2 {
         object_hook = None,
         semantic_decoders = None,
         str_errors = "strict",
-        max_depth = 1000,
+        max_depth = 400,
         allow_indefinite = true,
         immutable = false,
     ))]
