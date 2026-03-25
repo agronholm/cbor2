@@ -1,5 +1,5 @@
 use crate::types::{
-    BreakMarkerType, CBOREncodeError, CBOREncodeValueError, CBORSimpleValue, CBORTag, UndefinedType,
+    CBOREncodeError, CBOREncodeValueError, CBORSimpleValue, CBORTag, UndefinedType,
 };
 use crate::utils::PyImportable;
 use bigdecimal::BigDecimal;
@@ -520,8 +520,6 @@ impl CBOREncoder {
             Self::encode_none(slf)
         } else if obj.is_exact_instance_of::<UndefinedType>() {
             Self::encode_undefined(slf)
-        } else if obj.is_exact_instance_of::<BreakMarkerType>() {
-            Self::encode_break(slf)
         } else if let Ok(map) = obj.cast::<PyMapping>() {
             Self::encode_map(slf, map)
         } else if let Ok(sequence) = obj.cast::<PySequence>() {
