@@ -16,12 +16,15 @@ from collections.abc import Callable, Collection, Iterable, Iterator
 from contextlib import ExitStack
 from datetime import datetime
 from functools import partial
-from typing import TYPE_CHECKING, Any, BinaryIO, TypeVar
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeAlias, TypeVar
 
-from . import CBORDecoder, CBORSimpleValue, CBORTag, FrozenDict, load, undefined
+from . import CBORDecodeEOF, CBORDecoder, CBORSimpleValue, CBORTag, load, loads, undefined
+
+if sys.hexversion < 51314855:
+    from ._cbor2 import frozendict
 
 if TYPE_CHECKING:
-    from typing import Literal, TypeAlias
+    from . import ObjectHook, TagHook
 
 T = TypeVar("T")
 JSONValue: TypeAlias = "str | float | bool | None | list[JSONValue] | dict[str, JSONValue]"
@@ -29,7 +32,7 @@ JSONValue: TypeAlias = "str | float | bool | None | list[JSONValue] | dict[str, 
 default_encoders: dict[type, Callable[[Any], Any]] = {
     bytes: lambda x: x.decode(encoding="utf-8", errors="backslashreplace"),
     decimal.Decimal: str,
-    FrozenDict: lambda x: str(dict(x)),
+    frozendict: lambda x: str(dict(x)),
     CBORSimpleValue: lambda x: f"cbor_simple:{x.value:d}",
     type(undefined): lambda x: "cbor:undef",
     datetime: lambda x: x.isoformat(),
@@ -37,7 +40,7 @@ default_encoders: dict[type, Callable[[Any], Any]] = {
     uuid.UUID: lambda x: x.urn,
     CBORTag: lambda x: {f"CBORTag:{x.tag:d}": x.value},
     set: list,
-    re.compile("").__class__: lambda x: x.pattern,
+    re.Pattern: lambda x: x.pattern,
     ipaddress.IPv4Address: str,
     ipaddress.IPv6Address: str,
     ipaddress.IPv4Network: str,
@@ -45,13 +48,13 @@ default_encoders: dict[type, Callable[[Any], Any]] = {
 }
 
 
-def tag_hook(decoder: CBORDecoder, tag: CBORTag, ignore_tags: Collection[int] = ()) -> object:
+def tag_hook(tag: CBORTag, immutable: bool, ignore_tags: Collection[int] = ()) -> object:
     if tag.tag in ignore_tags:
         return tag.value
 
     if tag.tag == 24:
-        return decoder.decode_from_bytes(tag.value)
-    elif decoder.immutable:
+        return loads(tag.value)
+    elif immutable:
         return f"CBORtag:{tag.tag}:{tag.value}"
 
     return tag
@@ -69,16 +72,16 @@ class DefaultEncoder(json.JSONEncoder):
 
 def iterdecode(
     f: BinaryIO,
-    tag_hook: Callable[[CBORDecoder, CBORTag], Any] | None = None,
-    object_hook: Callable[[CBORDecoder, dict[Any, Any]], Any] | None = None,
+    tag_hook: TagHook | None = None,
+    object_hook: ObjectHook | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
 ) -> Iterator[Any]:
     decoder = CBORDecoder(f, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors)
-    while True:
-        try:
+    try:
+        while True:
             yield decoder.decode()
-        except EOFError:
-            return
+    except CBORDecodeEOF:
+        return
 
 
 def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict[str, Any] | T:
@@ -110,7 +113,7 @@ def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict
             k = k.decode(encoding="utf-8", errors="backslashreplace")
         elif isinstance(k, CBORSimpleValue):
             k = f"cbor_simple:{k.value:d}"
-        elif isinstance(k, (FrozenDict, frozenset, tuple)):
+        elif isinstance(k, (frozendict, frozenset, tuple)):
             k = str(k)
 
         if isinstance(v, dict):

@@ -5,6 +5,48 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- **MAJOR REWRITE**:
+  The Python and C implementations of the encoder and decoder were replaced with a single,
+  Rust-based implementation in the interest of maintainability.
+  Here are some of the highlights:
+
+  * Improved memory safety (100% safe-mode Rust)
+  * Complete elimination of reference leaks
+  * Support for free-threading and subinterpreters
+  * Substantially improved performance
+  * Improved decoder error handling where any non-base exception gets wrapped in a
+    ``CBORDecodeError``
+  * Iterative, rather than recursive decoding, meaning container nesting depth only theoretically
+    limited by the available memory, rather than C stack size (but limited to 1000 levels by
+    default)
+- **BACKWARD INCOMPATIBLE** Changed the signature of the ``tag_hook`` decoder callables to accept
+  (``CBORTag``, ``immutable`` as arguments instead of ``CBORDecoder``, ``CBORTag``)
+- **BACKWARD INCOMPATIBLE** Changed the signature of the ``object_hook`` decoder callables to
+  accept (``Mapping[Any, Any]``, ``bool``) instead of (``CBORDecoder``, ``dict[Any, Any]``)
+- **BACKWARD INCOMPATIBLE** Removed the ``break_marker`` singleton as no longer necessary
+- **BACKWARD INCOMPATIBLE** Removed the ``CBORDecodeValueError`` exception, instead chaining
+  ``ValueError`` or ``TypeError`` to a ``CBORDecodeError``
+- **BACKWARD INCOMPATIBLE** Changed the decoding of semantic tag 261 to yield an ``IPv4Interface``
+  or ``IPv6Interface`` if the address contains host bits
+- **BACKWARD INCOMPATIBLE** Removed the individual decoding functions from the API as they were
+  mistakenly called directly by users. Please open an issue if you need them back.
+- **BACKWARD INCOMPATIBLE** Changed the encoding of IP addresses to use the semantic tags 52 and 54
+  instead of the deprecated 260 and 261 (`#232 <https://github.com/agronholm/cbor2/issues/232>`_)
+- **BACKWARD INCOMPATIBLE** Dropped the deprecated ``cbor2.decoder`` and ``cbor2.encoder``
+  modules – everything in the API is now importable directly from ``cbor2``
+- **BACKWARD INCOMPATIBLE** The ``cbor2.FrozenDict`` class has now been renamed ``frozendict`` and
+  is not available on Python 3.15 where the built-in ``frozendict`` class must be used instead
+- Added the ``semantic_decoders`` decoder option to add or override decoders for specific semantic
+  tags
+- Added the ``immutable`` decoder flag to always use immutable containers where possible when
+  decoding a CBOR stream
+- Added the ``allow_indefinite`` decoder option to optionally disallow indefinite-length strings
+  and containers
+- Dropped support for Python 3.9
+- Fixed the decoder not rejecting invalid two-byte simple value sequences (0xF800 - 0xF81F)
+
 **5.9.0** (2026-03-22)
 
 - Added the ``max_depth`` decoder parameter to limit the maximum allowed nesting level of
