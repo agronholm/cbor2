@@ -45,12 +45,11 @@ from cbor2 import (
     shareable_decoder,
     undefined,
 )
-from cbor2._cbor2 import loads as raw_loads
 
 if sys.hexversion < 51314855:
     from cbor2 import frozendict
 
-DECODER_MAX_DEPTH = signature(raw_loads).parameters["max_depth"].default
+DECODER_MAX_DEPTH = signature(loads).parameters["max_depth"].default
 
 
 @pytest.fixture
