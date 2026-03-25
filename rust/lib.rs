@@ -35,7 +35,6 @@ mod _cbor2 {
     #[pymodule_export]
     use crate::types::FrozenDict;
 
-    use crate::types::BreakMarkerType;
     use crate::types::UndefinedType;
 
     #[pymodule_export]
@@ -58,7 +57,7 @@ mod _cbor2 {
 
     pub static SYS_MAXSIZE: PyOnceLock<usize> = PyOnceLock::new();
     pub static UNDEFINED: PyOnceLock<Py<UndefinedType>> = PyOnceLock::new();
-    pub static BREAK_MARKER: PyOnceLock<Py<BreakMarkerType>> = PyOnceLock::new();
+    pub static BREAK_MARKER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
     ///  Deserialize an object from an open file.
     ///
@@ -380,7 +379,12 @@ mod _cbor2 {
         m.add("undefined", undefined.clone())?;
         UNDEFINED.get_or_init(py, || undefined.unbind());
 
-        BREAK_MARKER.get_or_try_init(py, || Py::new(py, BreakMarkerType))?;
+        BREAK_MARKER.get_or_try_init(py, || {
+            py.import("builtins")?
+                .getattr("object")?
+                .call0()
+                .map(Bound::unbind)
+        })?;
         SYS_MAXSIZE.get_or_try_init(py, || py.import("sys")?.getattr("maxsize")?.extract())?;
 
         Ok(())

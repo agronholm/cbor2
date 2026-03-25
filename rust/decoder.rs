@@ -6,7 +6,7 @@ use crate::decoder::DecoderResult::{
 #[cfg(not(Py_3_15))]
 use crate::types::FrozenDict;
 use crate::types::{
-    BreakMarkerType, CBORDecodeEOF, CBORDecodeError, CBORSimpleValue, CBORTag, DECIMAL_TYPE,
+    CBORDecodeEOF, CBORDecodeError, CBORSimpleValue, CBORTag, DECIMAL_TYPE,
     FRACTION_TYPE, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE,
     IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE,
 };
@@ -520,8 +520,9 @@ impl CBORDecoder {
                     }
                 })
             } else {
+                let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if item.is_exact_instance_of::<BreakMarkerType>() {
+                    if item.is(break_marker) {
                         Ok(CompleteFrame(
                             PyTuple::new(py, take(&mut items))?.into_any(),
                         ))
@@ -556,8 +557,9 @@ impl CBORDecoder {
                     }
                 })
             } else {
+                let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if item.is_exact_instance_of::<BreakMarkerType>() {
+                    if item.is(break_marker) {
                         Ok(CompleteFrame(
                             replace(&mut list, PyList::empty(py)).into_any(),
                         ))
@@ -657,8 +659,9 @@ impl CBORDecoder {
                     }
                 })
             } else {
+                let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if item.is_exact_instance_of::<BreakMarkerType>() {
+                    if item.is(break_marker) {
                         let container = create_frozen_dict(py, take(&mut items))?;
                         let transformed = maybe_call_object_hook(
                             py,
@@ -701,8 +704,9 @@ impl CBORDecoder {
                     }
                 })
             } else {
+                let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if item.is_exact_instance_of::<BreakMarkerType>() {
+                    if item.is(break_marker) {
                         let dict = replace(&mut dict, PyDict::new(py));
                         let transformed = maybe_call_object_hook(
                             py,

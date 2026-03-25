@@ -361,17 +361,3 @@ impl UndefinedType {
         false
     }
 }
-
-#[pyclass(frozen, module = "cbor2")]
-pub struct BreakMarkerType;
-
-#[pymethods]
-impl BreakMarkerType {
-    fn __repr__(&self) -> &str {
-        "break_marker"
-    }
-
-    fn __bool__(&self) -> bool {
-        true
-    }
-}
