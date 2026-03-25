@@ -10,17 +10,17 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - **MAJOR REWRITE**:
   The Python and C implementations of the encoder and decoder were replaced with a single,
   Rust-based implementation in the interest of maintainability.
+
   Here are some of the highlights:
 
   * Improved memory safety (100% safe-mode Rust)
   * Complete elimination of reference leaks
   * Support for free-threading and subinterpreters
-  * Substantially improved performance
+  * `Substantially improved performance`_
   * Improved decoder error handling where any non-base exception gets wrapped in a
     ``CBORDecodeError``
-  * Iterative, rather than recursive decoding, meaning container nesting depth only theoretically
-    limited by the available memory, rather than C stack size (but limited to 1000 levels by
-    default)
+  * Iterative, rather than recursive decoding, meaning the container nesting depth is limited only
+    by the available memory, rather than the C stack size
 - **BACKWARD INCOMPATIBLE** Changed the signature of the ``tag_hook`` decoder callables to accept
   (``CBORTag``, ``immutable`` as arguments instead of ``CBORDecoder``, ``CBORTag``)
 - **BACKWARD INCOMPATIBLE** Changed the signature of the ``object_hook`` decoder callables to
@@ -46,6 +46,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   and containers
 - Dropped support for Python 3.9
 - Fixed the decoder not rejecting invalid two-byte simple value sequences (0xF800 - 0xF81F)
+
+.. _Substantially improved performance: \
+    https://github.com/agronholm/cbor2/pull/278#issuecomment-4126126089
 
 **5.9.0** (2026-03-22)
 
