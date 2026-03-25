@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
-**UNRELEASED**
+**6.0.0rc1** (2026-03-26)
 
 - **MAJOR REWRITE**:
   The Python and C implementations of the encoder and decoder were replaced with a single,
