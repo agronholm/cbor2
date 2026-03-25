@@ -50,7 +50,7 @@ doc = [
     "packaging",
     "Sphinx >= 8.2.0",
     "sphinx-rtd-theme >= 3.0.0",
-    "sphinx-autodoc-typehints >= 3.9.6",
+    "sphinx-autodoc-typehints >= 3.9.11",
     "typing_extensions; python_version < '3.12'",
 ]
 benchmarks = [
