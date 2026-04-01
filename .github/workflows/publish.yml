@@ -28,7 +28,7 @@ jobs:
       with:
         toolchain: stable
     - name: Build wheels
-      uses: pypa/cibuildwheel@v3.3
+      uses: pypa/cibuildwheel@v3.4
       env:
         CIBW_ARCHS: "auto64"
         CIBW_TEST_GROUPS: "test"
@@ -38,7 +38,7 @@ jobs:
         CIBW_ENVIRONMENT_LINUX: "PATH=$HOME/.cargo/bin:$PATH"
         CIBW_BEFORE_ALL_MACOS: curl -sSf https://sh.rustup.rs | sh -s -- -y
         CIBW_ENVIRONMENT_MACOS: "PATH=$HOME/.cargo/bin:$PATH"
-    - uses: actions/upload-artifact@v6
+    - uses: actions/upload-artifact@v7
       with:
         name: wheels-${{ matrix.os }}
         path: wheelhouse/*.whl
@@ -56,7 +56,7 @@ jobs:
       run: pip install build
     - name: Create the sdist
       run: python -m build -s .
-    - uses: actions/upload-artifact@v6
+    - uses: actions/upload-artifact@v7
       with:
         name: sdist
         path: dist/*
@@ -71,7 +71,7 @@ jobs:
       id-token: write
     steps:
     - name: Download the sdist and binary wheels
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         merge-multiple: true
         path: dist
