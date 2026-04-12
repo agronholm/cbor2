@@ -45,6 +45,7 @@ test = [
     "coverage >= 7",
     "pytest",
     "hypothesis",
+    "tzdata; platform_system == 'Windows'",
 ]
 doc = [
     "packaging",
