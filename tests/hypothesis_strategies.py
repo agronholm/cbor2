@@ -1,6 +1,5 @@
 import sys
 from collections import OrderedDict, defaultdict
-from datetime import timedelta, timezone
 
 from hypothesis import strategies
 from hypothesis.internal.filtering import Ex
@@ -13,12 +12,6 @@ if sys.hexversion < 51314855:
 MAX_SIZE = 5
 MAX_LEAVES = 2
 
-# Seconds in timezones get rounded when serialised, so we can only test whole minute
-# timezones for invariance
-timezones = strategies.integers(min_value=-(24 * 60 - 1), max_value=24 * 60 - 1).map(
-    lambda m: timezone(timedelta(minutes=m))
-)
-
 basic_immutable_strategy = strategies.one_of(
     strategies.none(),
     strategies.booleans(),
@@ -28,7 +21,7 @@ basic_immutable_strategy = strategies.one_of(
     # nan != nan, so we can't test invariance with it
     strategies.floats(allow_nan=False),
     strategies.decimals(allow_nan=False),
-    strategies.datetimes(timezones=timezones),
+    strategies.datetimes(timezones=strategies.timezones()),
     # strategies.just(undefined),
     strategies.fractions(),
     strategies.uuids(),
