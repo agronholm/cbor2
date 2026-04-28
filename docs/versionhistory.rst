@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**6.0.0** (2026-04-28)
+
+- No changes since v6.0.0rc1
+
 **6.0.0rc1** (2026-03-26)
 
 - **MAJOR REWRITE**:
