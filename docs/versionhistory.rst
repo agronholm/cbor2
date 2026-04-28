@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed an error in the mutability logic during decoding, leading to values being decoded as
+  immutable in unexpected places (`#295 <https://github.com/agronholm/cbor2/issues/295>`_)
+
 **6.0.0** (2026-04-28)
 
 - No changes since v6.0.0rc1

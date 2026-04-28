@@ -1580,6 +1580,7 @@ impl CBORDecoder {
                     } else {
                         immutable
                     } || require_immutable;
+                    frames.last_mut().unwrap().immutable = current_immutable;
                 }
                 Ok(CompleteFrame(new_value)) => {
                     frames

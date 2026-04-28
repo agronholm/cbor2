@@ -419,6 +419,13 @@ def test_map(payload: str, expected: dict[int, Any]) -> None:
     assert decoded == expected
 
 
+def test_nested_map() -> None:
+    # Regression test for #295
+    result = loads(unhexlify("a101a102a103f6"))
+    assert result == {1: {2: {3: None}}}
+    assert str(result) == "{1: {2: {3: None}}}"
+
+
 @pytest.mark.parametrize(
     "payload, expected",
     [
