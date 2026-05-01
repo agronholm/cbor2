@@ -293,7 +293,7 @@ impl CBOREncoder {
     }
 
     fn maybe_flush(&mut self, py: Python<'_>) -> PyResult<()> {
-        if self.encode_depth == 0 || (!self.fp.is_none() && self.buffer.len() >= MAX_BUFFER_SIZE) {
+        if self.encode_depth == 0 || (self.fp.is_some() && self.buffer.len() >= MAX_BUFFER_SIZE) {
             self.flush(py)
         } else {
             Ok(())
@@ -488,7 +488,7 @@ impl CBOREncoder {
         let this = slf.borrow();
 
         if let Some(encoders) = &this.encoders {
-            match encoders.bind(py).get_item(&obj.get_type()) {
+            match encoders.bind(py).get_item(obj.get_type()) {
                 Ok(encoder) => {
                     drop(this);
                     return encoder.call1((slf, obj)).map(|_| ());
@@ -537,93 +537,93 @@ impl CBOREncoder {
             let obj_type = obj.get_type();
             let stdlib_encoders =
                 STDLIB_ENCODERS.get_or_try_init(py, || -> PyResult<EncoderLookupVec> {
-                    let mut encoders: EncoderLookupVec = Vec::new();
-                    encoders.push((
-                        py.import("datetime")?
-                            .getattr("datetime")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_datetime,
-                    ));
-                    encoders.push((
-                        py.import("datetime")?
-                            .getattr("date")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_date,
-                    ));
-                    encoders.push((
-                        py.import("decimal")?
-                            .getattr("Decimal")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_decimal,
-                    ));
-                    encoders.push((
-                        py.import("fractions")?
-                            .getattr("Fraction")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_rational,
-                    ));
-                    encoders.push((
-                        py.import("uuid")?.getattr("UUID")?.cast_into()?.unbind(),
-                        CBOREncoder::encode_uuid,
-                    ));
-                    encoders.push((
-                        py.import("re")?.getattr("Pattern")?.cast_into()?.unbind(),
-                        CBOREncoder::encode_regexp,
-                    ));
-                    encoders.push((
-                        py.import("ipaddress")?
-                            .getattr("IPv4Address")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_ipv4_address,
-                    ));
-                    encoders.push((
-                        py.import("ipaddress")?
-                            .getattr("IPv4Network")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_ipv4_network,
-                    ));
-                    encoders.push((
-                        py.import("ipaddress")?
-                            .getattr("IPv4Interface")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_ipv4_interface,
-                    ));
-                    encoders.push((
-                        py.import("ipaddress")?
-                            .getattr("IPv6Address")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_ipv6_address,
-                    ));
-                    encoders.push((
-                        py.import("ipaddress")?
-                            .getattr("IPv6Network")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_ipv6_network,
-                    ));
-                    encoders.push((
-                        py.import("ipaddress")?
-                            .getattr("IPv6Interface")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_ipv6_interface,
-                    ));
-                    encoders.push((
-                        py.import("email.mime.text")?
-                            .getattr("MIMEText")?
-                            .cast_into()?
-                            .unbind(),
-                        CBOREncoder::encode_mime,
-                    ));
-                    Ok(encoders)
+                    Ok(vec![
+                        (
+                            py.import("datetime")?
+                                .getattr("datetime")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_datetime,
+                        ),
+                        (
+                            py.import("datetime")?
+                                .getattr("date")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_date,
+                        ),
+                        (
+                            py.import("decimal")?
+                                .getattr("Decimal")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_decimal,
+                        ),
+                        (
+                            py.import("fractions")?
+                                .getattr("Fraction")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_rational,
+                        ),
+                        (
+                            py.import("uuid")?.getattr("UUID")?.cast_into()?.unbind(),
+                            CBOREncoder::encode_uuid,
+                        ),
+                        (
+                            py.import("re")?.getattr("Pattern")?.cast_into()?.unbind(),
+                            CBOREncoder::encode_regexp,
+                        ),
+                        (
+                            py.import("ipaddress")?
+                                .getattr("IPv4Address")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_ipv4_address,
+                        ),
+                        (
+                            py.import("ipaddress")?
+                                .getattr("IPv4Network")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_ipv4_network,
+                        ),
+                        (
+                            py.import("ipaddress")?
+                                .getattr("IPv4Interface")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_ipv4_interface,
+                        ),
+                        (
+                            py.import("ipaddress")?
+                                .getattr("IPv6Address")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_ipv6_address,
+                        ),
+                        (
+                            py.import("ipaddress")?
+                                .getattr("IPv6Network")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_ipv6_network,
+                        ),
+                        (
+                            py.import("ipaddress")?
+                                .getattr("IPv6Interface")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_ipv6_interface,
+                        ),
+                        (
+                            py.import("email.mime.text")?
+                                .getattr("MIMEText")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_mime,
+                        ),
+                    ])
                 })?;
             for (pytype, callback) in stdlib_encoders {
                 if obj_type.is(pytype) {
@@ -699,7 +699,7 @@ impl CBOREncoder {
         key: &Bound<'py, PyAny>,
     ) -> PyResult<(usize, Bound<'py, PyAny>)> {
         Self::disable_string_referencing(slf, || {
-            let encoded = Self::encode_to_bytes(slf, &key)?;
+            let encoded = Self::encode_to_bytes(slf, key)?;
             let py_bytes = PyBytes::new(slf.py(), encoded.as_slice());
             Ok((encoded.len(), py_bytes.into_any()))
         })
@@ -758,10 +758,8 @@ impl CBOREncoder {
 
         // If string referencing is enabled, check if this string already has an index,
         // and emit a string reference instead if it does
-        if string_referencing {
-            if Self::maybe_stringref(slf, obj)? {
-                return Ok(());
-            }
+        if string_referencing && Self::maybe_stringref(slf, obj)? {
+            return Ok(());
         }
 
         let mut this = slf.borrow_mut();
@@ -776,10 +774,8 @@ impl CBOREncoder {
 
         // If string referencing is enabled, check if this string already has an index,
         // and emit a string reference instead if it does
-        if string_referencing {
-            if Self::maybe_stringref(slf, obj)? {
-                return Ok(());
-            }
+        if string_referencing && Self::maybe_stringref(slf, obj)? {
+            return Ok(());
         }
 
         let mut this = slf.borrow_mut();
@@ -910,7 +906,7 @@ impl CBOREncoder {
         }
         let mut result = slf.borrow_mut().encode_length(slf.py(), 6, Some(tag));
         if result.is_ok() {
-            result = Self::encode(slf, &value);
+            result = Self::encode(slf, value);
         }
         slf.borrow_mut().string_referencing = old_string_referencing;
         // TODO: restore the string/bytestring references to the instance
@@ -971,12 +967,11 @@ impl CBOREncoder {
                     // integer instead
                     let timestamp_float: f64 = py_timestamp.extract()?;
                     let timestamp_int: u32 = timestamp_float as u32;
-                    let arg: Bound<'_, PyAny>;
-                    if timestamp_int as f64 == timestamp_float {
-                        arg = PyInt::new(py, timestamp_int).into_any();
+                    let arg: Bound<'_, PyAny> = if timestamp_int as f64 == timestamp_float {
+                        PyInt::new(py, timestamp_int).into_any()
                     } else {
-                        arg = py_timestamp;
-                    }
+                        py_timestamp
+                    };
                     Self::encode_semantic(slf, 1, &arg)
                 }
             }
@@ -1042,7 +1037,7 @@ impl CBOREncoder {
     fn encode_regexp(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 35
         let pattern = obj.getattr("pattern")?;
-        Self::encode_semantic(slf, 35, &pattern.str()?.as_any())
+        Self::encode_semantic(slf, 35, pattern.str()?.as_any())
     }
 
     fn encode_mime(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {

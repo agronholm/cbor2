@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 mod decoder;
 mod encoder;
 mod types;

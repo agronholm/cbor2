@@ -238,7 +238,7 @@ impl FrozenDict {
             dict: dict.unbind(),
             hash: None,
         };
-        Ok(Bound::new(py, frozendict)?)
+        Bound::new(py, frozendict)
     }
 }
 

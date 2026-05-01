@@ -6,9 +6,9 @@ use crate::decoder::DecoderResult::{
 #[cfg(not(Py_3_15))]
 use crate::types::FrozenDict;
 use crate::types::{
-    CBORDecodeEOF, CBORDecodeError, CBORSimpleValue, CBORTag, DECIMAL_TYPE,
-    FRACTION_TYPE, IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE,
-    IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE, UUID_TYPE,
+    CBORDecodeEOF, CBORDecodeError, CBORSimpleValue, CBORTag, DECIMAL_TYPE, FRACTION_TYPE,
+    IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE,
+    IPV6NETWORK_TYPE, UUID_TYPE,
 };
 use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
 use half::f16;
@@ -436,9 +436,7 @@ impl CBORDecoder {
                                         intern!(py, "decode"),
                                         (intern!(py, "utf-8"), str_errors),
                                     )
-                                    .and_then(|string| {
-                                        string.cast_into().map_err(|e| PyErr::from(e))
-                                    }),
+                                    .and_then(|string| string.cast_into().map_err(PyErr::from)),
                             }?;
                             string = string.add(decoded)?.cast_into()?;
                         }
@@ -669,7 +667,7 @@ impl CBORDecoder {
                             object_hook.as_ref(),
                             immutable,
                         )?;
-                        return Ok(CompleteFrame(transformed));
+                        Ok(CompleteFrame(transformed))
                     } else if let Some(key) = key.take() {
                         items.push((key, item));
                         Ok(ContinueFrame(true))
@@ -714,7 +712,7 @@ impl CBORDecoder {
                             object_hook.as_ref(),
                             immutable,
                         )?;
-                        return Ok(CompleteFrame(transformed));
+                        Ok(CompleteFrame(transformed))
                     } else if let Some(key) = key.take() {
                         dict.set_item(key, item)?;
                         Ok(ContinueFrame(true))
@@ -741,7 +739,7 @@ impl CBORDecoder {
     ) -> PyResult<DecoderResult<'py>> {
         let tagnum = self.decode_length_finite(py, subtype)?;
         if let Some(semantic_decoders) = &self.semantic_decoders {
-            match semantic_decoders.bind(py).get_item(&tagnum) {
+            match semantic_decoders.bind(py).get_item(tagnum) {
                 Ok(decoder) => {
                     let name = decoder.getattr_opt(intern!(py, NAME_ATTR))?;
 
@@ -925,7 +923,7 @@ impl CBORDecoder {
                 py,
                 CBORDecodeError::new_err(format!(
                     "expected string for tag, got {} instead",
-                    value_type.to_string()
+                    value_type
                 )),
                 Some(PyErr::from(e)),
             )
@@ -939,18 +937,18 @@ impl CBORDecoder {
             let mut temp_str = datetime_str.to_string().replacen("Z", "+00:00", 1);
 
             // Pad any microseconds part with zeros
-            if let Some((first, second)) = temp_str.split_once('.') {
-                if let Some(index) = second.find(|c: char| !c.is_numeric()) {
-                    let (mut micros, tz_part) = second.split_at(index);
-                    // Cut off excess zeroes from the start of the microseconds part
-                    if micros.len() >= 6 {
-                        micros = &micros[..6];
-                    }
-
-                    // Reconstitute the datetime string, right-padding the microseconds part
-                    // with zeroes
-                    temp_str = format!("{first}.{micros:0<6}{tz_part}");
+            if let Some((first, second)) = temp_str.split_once('.')
+                && let Some(index) = second.find(|c: char| !c.is_numeric())
+            {
+                let (mut micros, tz_part) = second.split_at(index);
+                // Cut off excess zeroes from the start of the microseconds part
+                if micros.len() >= 6 {
+                    micros = &micros[..6];
                 }
+
+                // Reconstitute the datetime string, right-padding the microseconds part
+                // with zeroes
+                temp_str = format!("{first}.{micros:0<6}{tz_part}");
             }
 
             datetime_str = temp_str.into_pyobject(py)?;
@@ -1256,7 +1254,7 @@ impl CBORDecoder {
         } else {
             Some(PySet::empty(py)?.into_any())
         };
-        let container = set_or_none.as_ref().map(|set| set.clone());
+        let container = set_or_none.clone();
         let callback = move |item: Bound<'py, PyAny>, _immutable: bool| {
             let container: Bound<'py, PyAny> = if let Some(set) = set_or_none.take() {
                 set.call_method1(intern!(py, "update"), (item,))?;
@@ -1608,16 +1606,16 @@ impl CBORDecoder {
                 }
                 Ok(StringValue(string, length)) => {
                     // Conditionally add the string to the innermost string namespace
-                    if let Some(namespace) = string_namespaces.last_mut() {
-                        if match namespace.len() {
+                    if let Some(namespace) = string_namespaces.last_mut()
+                        && match namespace.len() {
                             0..24 => length >= 3,
                             24..256 => length >= 4,
                             256..65536 => length >= 5,
                             65536..4294967296 => length >= 6,
                             _ => length >= 11,
-                        } {
-                            namespace.push(string.clone());
                         }
+                    {
+                        namespace.push(string.clone());
                     }
                     value = Some(string);
                 }
@@ -1682,13 +1680,9 @@ impl CBORDecoder {
                     // If a ValueError was raised, wrap it in a CBORDecodeError
                     return if err.is_instance_of::<CBORDecodeError>(py) {
                         Err(err)
-                    } else if err.is_instance_of::<PyValueError>(py) {
-                        Err(create_exc_from(
-                            py,
-                            CBORDecodeError::new_err(err.to_string()),
-                            Some(err),
-                        ))
-                    } else if err.is_instance_of::<PyException>(py) {
+                    } else if err.is_instance_of::<PyValueError>(py)
+                        || err.is_instance_of::<PyException>(py)
+                    {
                         Err(create_exc_from(
                             py,
                             CBORDecodeError::new_err(err.to_string()),
