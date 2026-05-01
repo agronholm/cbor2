@@ -172,6 +172,9 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
 /// :param allow_indefinite:
 ///     if :data:`False`, raise a :exc:`CBORDecodeError` when encountering an indefinite-length
 ///     string or container in the input stream
+/// :param allow_duplicate_keys:
+///     if :data:`False`, raise a :exc:`CBORDecodeError` when a map key that has already been
+///     decoded in the same map is encountered
 ///
 /// .. _CBOR: https://cbor.io/
 #[pyclass(module = "cbor2")]
@@ -187,6 +190,8 @@ pub struct CBORDecoder {
     max_depth: usize,
     #[pyo3(get)]
     allow_indefinite: bool,
+    #[pyo3(get)]
+    allow_duplicate_keys: bool,
 
     read_method: Option<Py<PyAny>>,
     buffer: Option<Py<PyBytes>>,
@@ -207,6 +212,7 @@ impl CBORDecoder {
         read_size: usize,
         max_depth: usize,
         allow_indefinite: bool,
+        allow_duplicate_keys: bool,
     ) -> PyResult<Self> {
         let available_bytes = if let Some(buffer) = buffer.as_ref() {
             buffer.len()?
@@ -222,6 +228,7 @@ impl CBORDecoder {
             read_size,
             max_depth,
             allow_indefinite,
+            allow_duplicate_keys,
             semantic_decoders: semantic_decoders.map(|d| d.clone().unbind()),
             read_method: None,
             buffer: buffer.map(Bound::unbind),
@@ -618,6 +625,7 @@ impl CBORDecoder {
         }
 
         let object_hook = self.object_hook.as_ref().map(|hook| hook.clone_ref(py));
+        let allow_duplicate_keys = self.allow_duplicate_keys;
         let length_or_none = self.decode_length(py, subtype)?;
 
         // Return immediately if this is an empty dict
@@ -636,10 +644,30 @@ impl CBORDecoder {
 
         let mut key: Option<Bound<'py, PyAny>> = None;
         if immutable {
+            let seen_keys: Option<Bound<'py, PySet>> = if allow_duplicate_keys {
+                None
+            } else {
+                Some(PySet::empty(py)?)
+            };
+            let check_duplicate = move |key: &Bound<'py, PyAny>| -> PyResult<()> {
+                let seen = seen_keys.as_ref().unwrap();
+                if seen.contains(key)? {
+                    let repr = key.repr()?;
+                    return Err(CBORDecodeError::new_err(format!(
+                        "Duplicate map key: {}",
+                        repr.to_str()?
+                    )));
+                }
+                seen.add(key.clone())
+            };
+
             let mut items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
             let callback: Box<DecoderCallback<'py>> = if let Some(length) = length_or_none {
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
                     if let Some(key) = key.take() {
+                        if !allow_duplicate_keys {
+                            check_duplicate(&key)?;
+                        }
                         items.push((key, item));
                         if items.len() == length {
                             let transformed = maybe_call_object_hook(
@@ -669,6 +697,9 @@ impl CBORDecoder {
                         )?;
                         Ok(CompleteFrame(transformed))
                     } else if let Some(key) = key.take() {
+                        if !allow_duplicate_keys {
+                            check_duplicate(&key)?;
+                        }
                         items.push((key, item));
                         Ok(ContinueFrame(true))
                     } else {
@@ -679,13 +710,29 @@ impl CBORDecoder {
             };
             Ok(BeginFrame(callback, true, None, DisplayName::String("map")))
         } else {
+            fn check_duplicate(key: &Bound<PyAny>, dict: &Bound<PyDict>) -> PyResult<()> {
+                if dict.contains(key)? {
+                    let repr = key.repr()?;
+                    return Err(CBORDecodeError::new_err(format!(
+                        "Duplicate map key: {}",
+                        repr.to_str()?
+                    )));
+                }
+                Ok(())
+            }
+
             let mut dict = PyDict::new(py);
             let container = dict.clone().into_any();
             let callback: Box<DecoderCallback<'py>> = if let Some(length) = length_or_none {
+                let mut count = 0usize;
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
                     if let Some(key) = key.take() {
-                        dict.set_item(key, item)?;
-                        if dict.len() == length {
+                        if !allow_duplicate_keys {
+                            check_duplicate(&key, &dict)?;
+                        }
+                        dict.set_item(&key, item)?;
+                        count += 1;
+                        if count == length {
                             let dict = replace(&mut dict, PyDict::new(py));
                             let transformed = maybe_call_object_hook(
                                 py,
@@ -714,7 +761,10 @@ impl CBORDecoder {
                         )?;
                         Ok(CompleteFrame(transformed))
                     } else if let Some(key) = key.take() {
-                        dict.set_item(key, item)?;
+                        if !allow_duplicate_keys {
+                            check_duplicate(&key, &dict)?;
+                        }
+                        dict.set_item(&key, item)?;
                         Ok(ContinueFrame(true))
                     } else {
                         key = Some(item);
@@ -1287,6 +1337,7 @@ impl CBORDecoder {
         read_size = 4096,
         max_depth = 400,
         allow_indefinite = true,
+        allow_duplicate_keys = true,
     ))]
     pub fn new(
         py: Python<'_>,
@@ -1298,6 +1349,7 @@ impl CBORDecoder {
         read_size: usize,
         max_depth: usize,
         allow_indefinite: bool,
+        allow_duplicate_keys: bool,
     ) -> PyResult<Self> {
         Self::new_internal(
             py,
@@ -1310,6 +1362,7 @@ impl CBORDecoder {
             read_size,
             max_depth,
             allow_indefinite,
+            allow_duplicate_keys,
         )
     }
 

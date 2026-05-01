@@ -176,6 +176,32 @@ def test_allow_indefinite() -> None:
         decoder.decode()
 
 
+class TestAllowDuplicateKeys:
+    def test_default(self) -> None:
+        decoder = CBORDecoder(BytesIO())
+        assert decoder.allow_duplicate_keys
+
+    def test_false(self) -> None:
+        decoder = CBORDecoder(BytesIO(), allow_duplicate_keys=False)
+        assert not decoder.allow_duplicate_keys
+
+    def test_default_allows_duplicates(self) -> None:
+        # Definite map {"a": 1, "a": 2} — last value wins
+        assert loads(unhexlify("a2616101616102")) == {"a": 2}
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param("a2616101616102", id="definite"),
+            pytest.param("bf616101616102ff", id="indefinite"),
+        ],
+    )
+    @pytest.mark.parametrize("immutable", [False, True])
+    def test_raises_on_duplicate(self, payload: str, immutable: bool) -> None:
+        with pytest.raises(CBORDecodeError, match="Duplicate map key: 'a'"):
+            loads(unhexlify(payload), allow_duplicate_keys=False, immutable=immutable)
+
+
 def test_readonly_attributes() -> None:
     decoder = CBORDecoder(BytesIO())
     assert decoder.read_size == 4096

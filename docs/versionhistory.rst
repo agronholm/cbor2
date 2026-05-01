@@ -5,6 +5,13 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Added the ``allow_duplicate_keys`` parameter to :class:`CBORDecoder`, :func:`load` and
+  :func:`loads` (default: ``True``). When set to ``False``, a :exc:`CBORDecodeError` is raised
+  upon encountering a duplicate key within the same map.
+  (`#283 <https://github.com/agronholm/cbor2/pull/283>`_)
+
 **6.0.1** (2026-04-29)
 
 - Fixed an error in the mutability logic during decoding, leading to values being decoded as

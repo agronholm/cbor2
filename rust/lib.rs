@@ -87,6 +87,9 @@ mod _cbor2 {
     /// :param allow_indefinite:
     ///     if :data:`False`, raise a :exc:`CBORDecodeError` when encountering an indefinite-length
     ///     string or container in the input stream
+    /// :param allow_duplicate_keys:
+    ///     if :data:`False`, raise a :exc:`CBORDecodeError` when a map key that has already been
+    ///     decoded in the same map is encountered
     /// :param immutable:
     ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
     ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
@@ -105,6 +108,7 @@ mod _cbor2 {
         read_size = 4096,
         max_depth = 400,
         allow_indefinite = true,
+        allow_duplicate_keys = true,
         immutable = false,
     ))]
     fn load<'py>(
@@ -117,6 +121,7 @@ mod _cbor2 {
         read_size: usize,
         max_depth: usize,
         allow_indefinite: bool,
+        allow_duplicate_keys: bool,
         immutable: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let mut decoder = CBORDecoder::new(
@@ -129,6 +134,7 @@ mod _cbor2 {
             read_size,
             max_depth,
             allow_indefinite,
+            allow_duplicate_keys,
         )?;
         decoder.decode(py, immutable)
     }
@@ -158,6 +164,9 @@ mod _cbor2 {
     /// :param allow_indefinite:
     ///     if :data:`False`, raise a :exc:`CBORDecodeError` when encountering an indefinite-length
     ///     string or container in the input stream
+    /// :param allow_duplicate_keys:
+    ///     if :data:`False`, raise a :exc:`CBORDecodeError` when a map key that has already been
+    ///     decoded in the same map is encountered
     /// :param immutable:
     ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
     ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
@@ -175,6 +184,7 @@ mod _cbor2 {
         str_errors = "strict",
         max_depth = 400,
         allow_indefinite = true,
+        allow_duplicate_keys = true,
         immutable = false,
     ))]
     fn loads<'py>(
@@ -186,6 +196,7 @@ mod _cbor2 {
         str_errors: &str,
         max_depth: usize,
         allow_indefinite: bool,
+        allow_duplicate_keys: bool,
         immutable: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let mut decoder = CBORDecoder::new_internal(
@@ -199,6 +210,7 @@ mod _cbor2 {
             0,
             max_depth,
             allow_indefinite,
+            allow_duplicate_keys,
         )?;
         decoder.decode(py, immutable)
     }
