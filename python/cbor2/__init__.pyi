@@ -29,6 +29,11 @@ if sys.version_info >= (3, 13):
 else:
     from typing_extensions import TypeVar
 
+if sys.version_info >= (3, 12):
+    from collections.abc import Buffer
+else:
+    from typing_extensions import Buffer
+
 if sys.version_info >= (3, 11):
     from typing import Self
 else:
@@ -219,7 +224,7 @@ def load(
     immutable: bool = ...,
 ) -> Any: ...
 def loads(
-    data: bytes,
+    data: Buffer,
     *,
     tag_hook: TagHook | None = ...,
     object_hook: ObjectHook | None = ...,

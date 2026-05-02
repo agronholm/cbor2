@@ -10,6 +10,8 @@ use pyo3::prelude::pymodule;
 /// A Python module implemented in Rust.
 #[pymodule]
 mod _cbor2 {
+    use pyo3::buffer::PyBuffer;
+    use pyo3::exceptions::PyTypeError;
     use pyo3::prelude::*;
     use pyo3::sync::PyOnceLock;
     use pyo3::types::{PyBytes, PyMapping};
@@ -142,7 +144,10 @@ mod _cbor2 {
     /// Deserialize an object from a bytestring.
     ///
     /// :param data:
-    ///     the bytestring to deserialize
+    ///     the bytestring (or any object implementing the buffer protocol) to deserialize
+    ///
+    ///     .. note:: Types other than :class:`bytes` will be converted to :class:`bytes`, involving
+    ///               memory copying.
     /// :param tag_hook:
     ///     callable that takes 2 arguments: the decoder instance, and the :class:`.CBORTag`
     ///     to be decoded. This callback is invoked for any tags for which there is no
@@ -189,7 +194,7 @@ mod _cbor2 {
     ))]
     fn loads<'py>(
         py: Python<'py>,
-        data: Bound<'py, PyBytes>,
+        data: &Bound<'py, PyAny>,
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
         semantic_decoders: Option<&Bound<'py, PyMapping>>,
@@ -199,10 +204,23 @@ mod _cbor2 {
         allow_duplicate_keys: bool,
         immutable: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let bytes = if let Ok(bytes) = data.cast::<PyBytes>() {
+            bytes.clone()
+        } else if let Ok(pybuf) = PyBuffer::<u8>::get(data) {
+            PyBytes::new_with(py, pybuf.item_count(), |target| {
+                pybuf.copy_to_slice(py, target)
+            })?
+        } else {
+            return Err(PyTypeError::new_err(format!(
+                "a bytes-like object is required, not '{}'",
+                data.get_type().qualname()?
+            )));
+        };
+
         let mut decoder = CBORDecoder::new_internal(
             py,
             None,
-            Some(data),
+            Some(bytes),
             tag_hook,
             object_hook,
             semantic_decoders,
