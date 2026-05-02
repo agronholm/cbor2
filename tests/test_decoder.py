@@ -1356,3 +1356,16 @@ def test_override_semantic_decoder() -> None:
 
     payload = unhexlify("c11a514b67b0")  # datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)
     assert loads(payload, semantic_decoders={1: date_decoder}) == datetime(2026, 2, 18)
+
+
+@pytest.mark.parametrize(
+    "input_type",
+    [
+        pytest.param(bytes, id="bytes"),
+        pytest.param(bytearray, id="bytearray"),
+        pytest.param(memoryview, id="memoryview"),
+    ],
+)
+def test_loads_buffer_input(input_type: type) -> None:
+    payload = unhexlify("82010a")
+    assert loads(input_type(payload)) == [1, 10]
