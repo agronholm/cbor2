@@ -323,7 +323,7 @@ impl CBOREncoder {
                     ..24 => length >= 3,
                     24..256 => length >= 4,
                     256..65536 => length >= 5,
-                    65536..4294967296 => length >= 7,
+                    65536..=4294967295 => length >= 7,
                     _ => length >= 11,
                 };
 
@@ -736,7 +736,7 @@ impl CBOREncoder {
                     self.write_byte(py, major_tag | 25)?;
                     self.write_internal(py, (len as u16).to_be_bytes().to_vec())
                 }
-                65536..4294967296 => {
+                65536..=4294967295 => {
                     self.write_byte(py, major_tag | 26)?;
                     self.write_internal(py, (len as u32).to_be_bytes().to_vec())
                 }
