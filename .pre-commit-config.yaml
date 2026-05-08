@@ -43,7 +43,7 @@ repos:
       - id: cargo-fmt
         name: cargo fmt
         description: Check Rust code formatting.
-        entry: cargo fmt --manifest-path rust/Cargo.toml -- --check
+        entry: cargo fmt --manifest-path rust/Cargo.toml
         language: system
         types: [rust]
         pass_filenames: false

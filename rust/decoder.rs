@@ -63,7 +63,7 @@ enum DecoderResult<'a> {
 
 enum DisplayName<'a> {
     String(&'static str),
-    SemanticTag(usize),
+    SemanticTag(u64),
     PythonName(Bound<'a, PyAny>),
 }
 
@@ -309,7 +309,7 @@ impl CBORDecoder {
         Ok((major_type, subtype))
     }
 
-    fn decode_length_finite(&mut self, py: Python<'_>, subtype: u8) -> PyResult<usize> {
+    fn decode_length_finite(&mut self, py: Python<'_>, subtype: u8) -> PyResult<u64> {
         match self.decode_length(py, subtype)? {
             Some(length) => Ok(length),
             None => Err(CBORDecodeError::new_err(
@@ -317,6 +317,20 @@ impl CBORDecoder {
             )),
         }
     }
+
+    /// Like [`decode_length`], but converts `Some(u64)` to `Some(usize)`, returning
+    /// a [`CBORDecodeError`] if the value exceeds the platform's address space.
+    fn decode_length_as_usize(&mut self, py: Python<'_>, subtype: u8) -> PyResult<Option<usize>> {
+        match self.decode_length(py, subtype)? {
+            Some(length) => usize::try_from(length).map(Some).map_err(|_| {
+                CBORDecodeError::new_err(format!(
+                    "huge item length {length} exceeds the system address space"
+                ))
+            }),
+            None => Ok(None),
+        }
+    }
+
     //
     // Decoders for major tags (0-7)
     //
@@ -327,13 +341,13 @@ impl CBORDecoder {
     ///
     /// :param subtype:
     /// :return: the length of the item, or :data:`None` to indicate an indefinite-length item
-    fn decode_length(&mut self, py: Python<'_>, subtype: u8) -> PyResult<Option<usize>> {
+    fn decode_length(&mut self, py: Python<'_>, subtype: u8) -> PyResult<Option<u64>> {
         let length = match subtype {
-            ..24 => Some(subtype as usize),
-            24 => Some(self.read_exact::<1>(py)?[0] as usize),
-            25 => Some(u16::from_be_bytes(self.read_exact(py)?) as usize),
-            26 => Some(u32::from_be_bytes(self.read_exact(py)?) as usize),
-            27 => Some(u64::from_be_bytes(self.read_exact(py)?) as usize),
+            ..24 => Some(subtype as u64),
+            24 => Some(self.read_exact::<1>(py)?[0] as u64),
+            25 => Some(u16::from_be_bytes(self.read_exact(py)?) as u64),
+            26 => Some(u32::from_be_bytes(self.read_exact(py)?) as u64),
+            27 => Some(u64::from_be_bytes(self.read_exact(py)?)),
             31 => {
                 if !self.allow_indefinite {
                     return Err(CBORDecodeError::new_err(
@@ -353,13 +367,13 @@ impl CBORDecoder {
 
     fn decode_uint<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<DecoderResult<'py>> {
         // Major tag 0
-        let uint = self.decode_length_finite(py, subtype)?;
+        let uint: u64 = self.decode_length_finite(py, subtype)?;
         Ok(Value(uint.into_bound_py_any(py)?))
     }
 
     fn decode_negint<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<DecoderResult<'py>> {
         // Major tag 1
-        let uint = self.decode_length_finite(py, subtype)?;
+        let uint: u64 = self.decode_length_finite(py, subtype)?;
         let signed_int = -(uint as i128) - 1;
         Ok(Value(signed_int.into_bound_py_any(py)?))
     }
@@ -370,7 +384,7 @@ impl CBORDecoder {
         subtype: u8,
     ) -> PyResult<DecoderResult<'py>> {
         // Major tag 2
-        match self.decode_length(py, subtype)? {
+        match self.decode_length_as_usize(py, subtype)? {
             None => {
                 // Indefinite length
                 let mut bytes = PyBytes::new(py, b"");
@@ -385,6 +399,7 @@ impl CBORDecoder {
                                     "chunk too long in an indefinite bytestring chunk: {length}"
                                 )));
                             }
+                            let length = length as usize;
                             let chunk = self.read(py, length)?;
                             bytes = bytes.add(chunk)?.cast_into()?;
                         }
@@ -419,7 +434,7 @@ impl CBORDecoder {
 
     fn decode_string<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<DecoderResult<'py>> {
         // Major tag 3
-        match self.decode_length(py, subtype)? {
+        match self.decode_length_as_usize(py, subtype)? {
             None => {
                 // Indefinite length
                 let mut string = PyString::new(py, "");
@@ -434,6 +449,7 @@ impl CBORDecoder {
                                     "chunk too long in an indefinite text string chunk: {length}"
                                 )));
                             }
+                            let length = length as usize;
                             let bytes = self.read(py, length)?;
                             let decoded = match self.str_errors.as_ref() {
                                 None => PyString::from_bytes(py, bytes.as_slice()),
@@ -506,7 +522,7 @@ impl CBORDecoder {
         immutable: bool,
     ) -> PyResult<DecoderResult<'py>> {
         // Major tag 4
-        let optional_length = self.decode_length(py, subtype)?;
+        let optional_length = self.decode_length_as_usize(py, subtype)?;
         if immutable {
             let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
             let callback: Box<DecoderCallback<'py>> = if let Some(length) = optional_length {
@@ -626,7 +642,7 @@ impl CBORDecoder {
 
         let object_hook = self.object_hook.as_ref().map(|hook| hook.clone_ref(py));
         let allow_duplicate_keys = self.allow_duplicate_keys;
-        let length_or_none = self.decode_length(py, subtype)?;
+        let length_or_none = self.decode_length_as_usize(py, subtype)?;
 
         // Return immediately if this is an empty dict
         if let Some(length) = length_or_none

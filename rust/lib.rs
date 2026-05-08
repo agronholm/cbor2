@@ -59,7 +59,7 @@ mod _cbor2 {
     #[pymodule_export]
     use crate::types::CBORDecodeEOF;
 
-    pub static SYS_MAXSIZE: PyOnceLock<usize> = PyOnceLock::new();
+    pub static SYS_MAXSIZE: PyOnceLock<u64> = PyOnceLock::new();
     pub static UNDEFINED: PyOnceLock<Py<UndefinedType>> = PyOnceLock::new();
     pub static BREAK_MARKER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 

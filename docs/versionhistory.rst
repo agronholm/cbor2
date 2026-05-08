@@ -14,7 +14,7 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Added support for decoding from any object supporting the buffer API (e.g. ``memoryview`` or
   ``bytearray``) in addition to ``bytes``
   (`#297 <https://github.com/agronholm/cbor2/issues/297>`_)
-- Fixed compilation failing on 32-bit systems
+- Fixed compatibility issues with 32-bit systems
   (`#300 <https://github.com/agronholm/cbor2/issues/300>`_)
 
 **6.0.1** (2026-04-29)
