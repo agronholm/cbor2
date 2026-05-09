@@ -38,7 +38,6 @@ repos:
       - id: rst-directive-colons
       - id: rst-inline-touching-normal
 
-
   - repo: https://github.com/AndrejOrsula/pre-commit-cargo
     rev: 0.4.0
     hooks:

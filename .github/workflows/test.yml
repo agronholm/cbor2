@@ -54,6 +54,35 @@ jobs:
         parallel: true
         files: coverage.xml coverage.lcov
 
+  test-i686:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Build and test in 32-bit container
+      run: |
+        HOST_UID="$(id -u)"
+        HOST_GID="$(id -g)"
+        docker run \
+          --platform linux/i386 \
+          --user "${HOST_UID}:${HOST_GID}" \
+          -v "${{ github.workspace }}:/workspace" \
+          -w /workspace \
+          -e RUST_BACKTRACE=1 \
+          -e "RUSTFLAGS=--deny warnings" \
+          -e TZ=America/New_York \
+          python:3.14 \
+          bash -c '
+            export CARGO_HOME=/tmp/cargo
+            export RUSTUP_HOME=/tmp/rustup
+            mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
+            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --no-modify-path --default-host i686-unknown-linux-gnu &&
+            export PATH="$PATH:$CARGO_HOME/bin" &&
+            python -m venv .venv &&
+            source .venv/bin/activate &&
+            pip install --group test -e . &&
+            python -m pytest --color=yes -v
+          '
+
   coveralls:
     name: Finish Coveralls
     needs: test
