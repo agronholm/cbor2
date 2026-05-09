@@ -58,20 +58,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
-      with:
-        platforms: linux/386
     - name: Build and test in 32-bit container
       run: |
-        docker run --rm \
+        docker run \
+          --platform linux/i386
           -v "${{ github.workspace }}:/workspace" \
           -w /workspace \
           -e RUST_BACKTRACE=1 \
           -e "RUSTFLAGS=--deny warnings" \
           -e TZ=America/New_York \
           -e SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 \
-          i386/python:3.14-bookworm \
           bash -c '
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
             . "$HOME/.cargo/env" &&
