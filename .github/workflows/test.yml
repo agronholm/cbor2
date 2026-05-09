@@ -73,6 +73,7 @@ jobs:
           -e SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 \
           python:3.14
           bash -c '
+            python -V &&
             pip -V &&
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
             . "$HOME/.cargo/env" &&
