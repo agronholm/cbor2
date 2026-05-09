@@ -80,7 +80,7 @@ jobs:
             python -m venv .venv &&
             source .venv/bin/activate &&
             pip install --group test -e . &&
-            python -m pytest -v
+            python -m pytest --color=yes -v
           '
 
   coveralls:
