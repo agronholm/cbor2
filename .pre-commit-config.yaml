@@ -38,19 +38,9 @@ repos:
       - id: rst-directive-colons
       - id: rst-inline-touching-normal
 
-  - repo: local
+  - repo: https://github.com/AndrejOrsula/pre-commit-cargo
+    rev: 0.4.0
     hooks:
       - id: cargo-fmt
-        name: cargo fmt
-        description: Check Rust code formatting.
-        entry: cargo fmt --manifest-path rust/Cargo.toml
-        language: system
-        types: [rust]
-        pass_filenames: false
       - id: cargo-clippy
-        name: cargo clippy
-        description: Lint Rust code with Clippy.
-        entry: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
-        language: system
-        types: [rust]
-        pass_filenames: false
+        args: ["--manifest-path", "rust/Cargo.toml" , "--all-targets" , "--", "-D warnings"]
