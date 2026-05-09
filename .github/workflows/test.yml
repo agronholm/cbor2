@@ -73,11 +73,11 @@ jobs:
           -e SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 \
           python:3.14 \
           bash -c '
-            export HOME=/tmp/home
-            mkdir -p $HOME
+            export CARGO_HOME=/tmp/cargo
+            export RUSTUP_HOME=/tmp/rustup
+            mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
-            . "$HOME/.cargo/env" &&
-            env | grep PATH &&
+            export PATH="$PATH:$CARGO_HOME/bin"
             pip install --group test -e . &&
             python -m pytest -v
           '
