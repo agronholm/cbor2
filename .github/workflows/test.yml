@@ -56,8 +56,6 @@ jobs:
 
   test-i686:
     runs-on: ubuntu-latest
-    container:
-      image: i386/python:3.14
     steps:
     - uses: actions/checkout@v6
     - name: Build and test in 32-bit container
