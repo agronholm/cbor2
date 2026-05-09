@@ -56,24 +56,26 @@ jobs:
 
   test-i686:
     runs-on: ubuntu-latest
+    container:
+      image: i386/python:3.14
     steps:
     - uses: actions/checkout@v6
     - name: Build and test in 32-bit container
       run: |
-        docker run \
-          --platform linux/i386 \
-          -v "${{ github.workspace }}:/workspace" \
-          -w /workspace \
-          -e RUST_BACKTRACE=1 \
-          -e "RUSTFLAGS=--deny warnings" \
-          -e TZ=America/New_York \
-          -e SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 \
-          bash -c '
-            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
-            . "$HOME/.cargo/env" &&
-            pip install --group test -e . &&
-            python -m pytest -v
-          '
+        eval "$(cargo llvm-cov show-env --manifest-path rust/Cargo.toml --sh)"
+        pip install --group test -e .
+        coverage run -m pytest -v
+      env:
+        RUST_BACKTRACE: "1"
+        RUSTFLAGS: "--deny warnings"
+        TZ: America/New_York
+    - name: Generate Python coverage report
+      run: coverage xml
+    - name: Upload Coverage
+      uses: coverallsapp/github-action@v2
+      with:
+        parallel: true
+        files: coverage.xml coverage.lcov
 
   coveralls:
     name: Finish Coveralls
