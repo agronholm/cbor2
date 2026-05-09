@@ -76,7 +76,7 @@ jobs:
             export CARGO_HOME=/tmp/cargo
             export RUSTUP_HOME=/tmp/rustup
             mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
-            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --no-modify-path &&
+            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --no-modify-path --default-host i686-unknown-linux-gnu &&
             export PATH="$PATH:$CARGO_HOME/bin"
             pip install --group test -e . &&
             python -m pytest -v
