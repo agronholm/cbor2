@@ -70,14 +70,15 @@ jobs:
           -e RUST_BACKTRACE=1 \
           -e "RUSTFLAGS=--deny warnings" \
           -e TZ=America/New_York \
-          -e SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 \
           python:3.14 \
           bash -c '
             export CARGO_HOME=/tmp/cargo
             export RUSTUP_HOME=/tmp/rustup
             mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --no-modify-path --default-host i686-unknown-linux-gnu &&
-            export PATH="$PATH:$CARGO_HOME/bin"
+            export PATH="$PATH:$CARGO_HOME/bin" &&
+            python -m venv .venv &&
+            source .venv/bin/activate &&
             pip install --group test -e . &&
             python -m pytest -v
           '
