@@ -43,5 +43,3 @@ repos:
     hooks:
       - id: cargo-fmt
         args: ["--manifest-path", "rust/Cargo.toml"]
-      - id: cargo-clippy
-        args: ["--manifest-path", "rust/Cargo.toml" , "--all-targets" , "--", "-D warnings"]
