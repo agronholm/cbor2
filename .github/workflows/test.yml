@@ -61,7 +61,7 @@ jobs:
     - name: Build and test in 32-bit container
       run: |
         docker run \
-          --platform linux/i386
+          --platform linux/i386 \
           -v "${{ github.workspace }}:/workspace" \
           -w /workspace \
           -e RUST_BACKTRACE=1 \
