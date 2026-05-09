@@ -68,6 +68,7 @@ jobs:
           -e "RUSTFLAGS=--deny warnings" \
           -e TZ=America/New_York \
           -e SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 \
+          python:3.14 \
           bash -c '
             wget -qO- https://sh.rustup.rs | sh -s -- -y &&
             . "$HOME/.cargo/env" &&
