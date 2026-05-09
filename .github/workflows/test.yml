@@ -75,6 +75,7 @@ jobs:
           bash -c '
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
             . "$HOME/.cargo/env" &&
+            pip -V &&
             pip install --group test -e . &&
             python -m pytest -v
           '
