@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
-**UNRELEASED**
+**6.1.0** (2026-05-12)
 
 - Added the ``allow_duplicate_keys`` parameter to :class:`CBORDecoder`, :func:`load` and
   :func:`loads` (default: ``True``). When set to ``False``, a :exc:`CBORDecodeError` is raised
