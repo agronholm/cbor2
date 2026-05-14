@@ -1369,3 +1369,17 @@ def test_override_semantic_decoder() -> None:
 def test_loads_buffer_input(input_type: type) -> None:
     payload = unhexlify("82010a")
     assert loads(input_type(payload)) == [1, 10]
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param([b"x" * 4096], id="read"),
+        pytest.param([b"x" * 4089, [b"x" * 4096]], id="read_exact"),
+    ],
+)
+def test_load_exceeds_buffer_size(data: object) -> None:
+    """Regression test for #304."""
+    payload = dumps(data)
+    buf = BytesIO(payload)
+    assert load(buf) == data

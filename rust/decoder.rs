@@ -285,12 +285,18 @@ impl CBORDecoder {
             // Combine the remnants of the partial buffer with new data read from the file
             let needed_bytes = N - self.available_bytes;
             let mut concatenated_buffer: Vec<u8> = self.buffer.take().unwrap().extract(py)?;
+            if self.read_position > 0 {
+                concatenated_buffer.drain(..self.read_position);
+            }
+            concatenated_buffer.truncate(needed_bytes);
             let (new_bytes, amount_read) = self.read_from_fp(py, needed_bytes)?;
             concatenated_buffer.extend_from_slice(&new_bytes[..needed_bytes]);
             self.buffer = Some(new_bytes.unbind());
             self.available_bytes = amount_read - needed_bytes;
             self.read_position = needed_bytes;
-            Ok(concatenated_buffer.try_into().unwrap())
+            Ok(concatenated_buffer
+                .try_into()
+                .expect("buffer size mismatch"))
         } else {
             // Return a slice from the existing bytes object
             let slice: [u8; N] = self.buffer.as_ref().unwrap().bind(py).as_bytes()
@@ -1503,7 +1509,7 @@ impl CBORDecoder {
             // Combine the remnants of the partial buffer with new data read from the file
             let needed_bytes = amount - self.available_bytes;
             let mut concatenated_buffer: Vec<u8> =
-                self.buffer.take().unwrap().as_bytes(py).to_vec();
+                self.buffer.take().unwrap().as_bytes(py)[self.read_position..].to_vec();
             let (new_bytes, amount_read) = self.read_from_fp(py, needed_bytes)?;
             concatenated_buffer.extend_from_slice(&new_bytes[..needed_bytes]);
             self.buffer = Some(new_bytes.unbind());
