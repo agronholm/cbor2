@@ -5,6 +5,12 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed incorrect tracking of string references for definite-length text strings of length greater
+  than 65536
+  (`#308 <https://github.com/agronholm/cbor2/pull/308>`_; PR by @sahvx655-wq)
+
 **6.1.1** (2026-05-14)
 
 - Fixed ``cbor2.load()`` returning corrupted data for payloads exceeding 4096 bytes
