@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
-**UNRELEASED**
+**6.1.2** (2026-06-02)
 
 - Fixed incorrect tracking of string references for definite-length text strings of length greater
   than 65536
