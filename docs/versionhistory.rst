@@ -5,6 +5,12 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed ``cbor2.load()`` crash caused by incorrect handling
+  of internal read buffer extension during stream deserialization.
+  (`#307 <https://github.com/agronholm/cbor2/pull/307>`_; PR by @noderyos)
+
 **6.1.1** (2026-05-14)
 
 - Fixed ``cbor2.load()`` returning corrupted data for payloads exceeding 4096 bytes
