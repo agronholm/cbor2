@@ -490,7 +490,7 @@ impl CBORDecoder {
                 };
                 Ok(StringValue(decoded_string, length))
             }
-            Some(mut length) => {
+            Some(length) => {
                 // Incrementally decode the string, in chunks of 65536 bytes
                 let decoder_class = INCREMENTAL_UTF8_DECODER
                     .get_or_try_init(py, || -> PyResult<Py<PyAny>> {
@@ -507,11 +507,12 @@ impl CBORDecoder {
                     Some(str_errors) => decoder_class.call1((str_errors,))?,
                 };
                 let mut string = PyString::new(py, "").into_any();
-                while length > 0 {
-                    let chunk_size = length.min(65536);
+                let mut remaining_length = length;
+                while remaining_length > 0 {
+                    let chunk_size = remaining_length.min(65536);
                     let chunk = self.read(py, chunk_size)?;
-                    length -= chunk_size;
-                    let is_final_chunk = length == 0;
+                    remaining_length -= chunk_size;
+                    let is_final_chunk = remaining_length == 0;
                     let decoded_chunk =
                         decoder.call_method1(intern!(py, "decode"), (chunk, is_final_chunk))?;
                     string = string.add(decoded_chunk)?;
