@@ -963,6 +963,19 @@ class TestStringReference:
         with pytest.raises(CBORDecodeError, match="string reference 3 not found$"):
             loads(unhexlify("d9010086656669727374d81900667365636f6e64d81900d81901d81903"))
 
+    def test_string_ref_long_text_string(self) -> None:
+        """Regression test for #308."""
+        big_string = "a" * 65537
+        payload = (
+            b"\xd9\x01\x00"  # tag 256 (string namespace)
+            b"\x82"  # array of 2
+            b"\x7a"
+            + struct.pack(">I", 65537)  # text string, 4-byte length
+            + big_string.encode("ascii")  # 65537 bytes of 'a'
+            + b"\xd8\x19\x00"  # tag 25, value 0 (string reference to index 0)
+        )
+        assert loads(payload) == [big_string, big_string]
+
 
 @pytest.mark.parametrize(
     "payload, expected",
