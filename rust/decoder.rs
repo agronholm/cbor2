@@ -288,7 +288,7 @@ impl CBORDecoder {
             if self.read_position > 0 {
                 concatenated_buffer.drain(..self.read_position);
             }
-            concatenated_buffer.truncate(needed_bytes);
+            concatenated_buffer.truncate(self.available_bytes);
             let (new_bytes, amount_read) = self.read_from_fp(py, needed_bytes)?;
             concatenated_buffer.extend_from_slice(&new_bytes[..needed_bytes]);
             self.buffer = Some(new_bytes.unbind());

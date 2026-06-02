@@ -1396,3 +1396,15 @@ def test_load_exceeds_buffer_size(data: object) -> None:
     payload = dumps(data)
     buf = BytesIO(payload)
     assert load(buf) == data
+
+
+def test_load_buffer_truncation() -> None:
+    """
+    With read_size=4096, load() will request more bytes than are currently
+    available in the internal buffer (requesting 8 bytes while only 6 remain),
+    triggering buffer truncation/extension.
+    """
+    data = [3.14] * 455
+    payload = dumps(data)
+    buf = BytesIO(payload)
+    assert load(buf, read_size=4096) == data
