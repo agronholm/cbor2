@@ -858,9 +858,9 @@ def test_ipaddress(payload: bytes, expected: Any) -> None:
 @pytest.mark.parametrize(
     "payload, pattern",
     [
-        pytest.param("d834821818" "46" "c0000200ffff", "IPv4 network is too long", id="ipv4"),
+        pytest.param("d83482181846c0000200ffff", "IPv4 network is too long", id="ipv4"),
         pytest.param(
-            "d836821830" "52" "20010db81234" + "00" * 10 + "ffff",
+            "d8368218305220010db81234" + "00" * 10 + "ffff",
             "IPv6 network is too long",
             id="ipv6",
         ),
