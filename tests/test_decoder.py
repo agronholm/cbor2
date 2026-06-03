@@ -855,6 +855,22 @@ def test_ipaddress(payload: bytes, expected: Any) -> None:
     assert loads(unhexlify(payload)) == expected
 
 
+@pytest.mark.parametrize(
+    "payload, pattern",
+    [
+        pytest.param("d834821818" "46" "c0000200ffff", "IPv4 network is too long", id="ipv4"),
+        pytest.param(
+            "d836821830" "52" "20010db81234" + "00" * 10 + "ffff",
+            "IPv6 network is too long",
+            id="ipv6",
+        ),
+    ],
+)
+def test_ipnetwork_address_too_long(payload: str, pattern: str) -> None:
+    with pytest.raises(CBORDecodeError, match=pattern):
+        loads(unhexlify(payload))
+
+
 class TestDeprecatedIPAddress:
     @pytest.mark.parametrize(
         "payload, expected",

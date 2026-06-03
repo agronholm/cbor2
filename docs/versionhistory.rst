@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed the IPv4/IPv6 network decoders (tags 52 and 54) silently truncating an address byte string
+  that is longer than the address size instead of rejecting it as malformed
+
 **6.1.2** (2026-06-02)
 
 - Fixed incorrect tracking of string references for definite-length text strings of length greater
