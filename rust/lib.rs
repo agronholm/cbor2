@@ -75,6 +75,13 @@ mod _cbor2 {
     ///     callable that takes 2 arguments: the decoder instance, and a dictionary. This
     ///     callback is invoked for each deserialized :class:`dict` object. The return value
     ///     is substituted for the dict in the deserialized output.
+    /// :param array_hook:
+    ///     callable that takes 2 arguments: the decoded array (a :class:`list`, or a
+    ///     :class:`tuple` when ``immutable`` is true), and a boolean that is :data:`True` if
+    ///     the array used indefinite-length encoding. This callback is invoked for each
+    ///     deserialized array, and its return value is substituted for the array in the
+    ///     deserialized output. It allows callers to preserve the distinction between
+    ///     definite- and indefinite-length arrays, which is otherwise lost after decoding.
     /// :param semantic_decoders:
     ///     An optional mapping for overriding the decoding for select semantic tags.
     ///     The value is a mapping of semantic tags (integers) to callables that take
@@ -105,6 +112,7 @@ mod _cbor2 {
         *,
         tag_hook = None,
         object_hook = None,
+        array_hook = None,
         semantic_decoders = None,
         str_errors = "strict",
         read_size = 4096,
@@ -118,6 +126,7 @@ mod _cbor2 {
         fp: &Bound<'py, PyAny>,
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
+        array_hook: Option<&Bound<'py, PyAny>>,
         semantic_decoders: Option<&Bound<'py, PyMapping>>,
         str_errors: &str,
         read_size: usize,
@@ -131,6 +140,7 @@ mod _cbor2 {
             fp,
             tag_hook,
             object_hook,
+            array_hook,
             semantic_decoders,
             str_errors,
             read_size,
@@ -157,6 +167,13 @@ mod _cbor2 {
     ///     callable that takes 2 arguments: the decoder instance, and a dictionary. This
     ///     callback is invoked for each deserialized :class:`dict` object. The return value
     ///     is substituted for the dict in the deserialized output.
+    /// :param array_hook:
+    ///     callable that takes 2 arguments: the decoded array (a :class:`list`, or a
+    ///     :class:`tuple` when ``immutable`` is true), and a boolean that is :data:`True` if
+    ///     the array used indefinite-length encoding. This callback is invoked for each
+    ///     deserialized array, and its return value is substituted for the array in the
+    ///     deserialized output. It allows callers to preserve the distinction between
+    ///     definite- and indefinite-length arrays, which is otherwise lost after decoding.
     /// :param semantic_decoders:
     ///     An optional mapping for overriding the decoding for select semantic tags.
     ///     The value is a mapping of semantic tags (integers) to callables that take
@@ -185,6 +202,7 @@ mod _cbor2 {
         *,
         tag_hook = None,
         object_hook = None,
+        array_hook = None,
         semantic_decoders = None,
         str_errors = "strict",
         max_depth = 400,
@@ -197,6 +215,7 @@ mod _cbor2 {
         data: &Bound<'py, PyAny>,
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
+        array_hook: Option<&Bound<'py, PyAny>>,
         semantic_decoders: Option<&Bound<'py, PyMapping>>,
         str_errors: &str,
         max_depth: usize,
@@ -223,6 +242,7 @@ mod _cbor2 {
             Some(bytes),
             tag_hook,
             object_hook,
+            array_hook,
             semantic_decoders,
             str_errors,
             0,
