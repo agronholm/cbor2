@@ -5,6 +5,13 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed the content of a semantic tag with no designated decoder being decoded as immutable
+  (``tuple``/``frozendict``) regardless of the ``immutable`` flag. The nested array/map of such a
+  tag now honours ``immutable`` like every other container. This is a further instance of the
+  mutability bug fixed in 6.0.1 (`#295 <https://github.com/agronholm/cbor2/issues/295>`_).
+
 **6.1.2** (2026-06-02)
 
 - Fixed incorrect tracking of string references for definite-length text strings of length greater
