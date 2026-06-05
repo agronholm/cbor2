@@ -5,6 +5,13 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed the decoder registering 6-byte strings in the string reference namespace at indices
+  65536–4294967295 where the encoder does not, desynchronising the namespace and resolving later
+  string references to the wrong value
+  (`#313 <https://github.com/agronholm/cbor2/pull/313>`_; PR by @sahvx655-wq)
+
 **6.1.2** (2026-06-02)
 
 - Fixed incorrect tracking of string references for definite-length text strings of length greater
