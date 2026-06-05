@@ -986,9 +986,12 @@ class TestStringReference:
             b"\xd9\x01\x00"  # tag 256 (string namespace)
             b"\x9f"  # indefinite-length array
             + (b"\x6b" + b"a" * 11) * 65536  # fill the namespace to index 65536
-            + b"\x66" + b"b" * 6  # 6-byte string at index 65536 (must NOT be registered)
-            + b"\x67" + b"c" * 7  # 7-byte string registered at index 65536 instead
-            + b"\xd8\x19\x1a" + struct.pack(">I", 65536)  # reference to index 65536
+            + b"\x66"
+            + b"b" * 6  # 6-byte string at index 65536 (must NOT be registered)
+            + b"\x67"
+            + b"c" * 7  # 7-byte string registered at index 65536 instead
+            + b"\xd8\x19\x1a"
+            + struct.pack(">I", 65536)  # reference to index 65536
             + b"\xff"  # break
         )
         assert loads(payload)[-1] == "ccccccc"
