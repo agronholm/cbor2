@@ -13,6 +13,13 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   indefinite-length encoding. Its return value is substituted for the array in the output. This
   allows callers to preserve the distinction between definite- and indefinite-length arrays, which
   is otherwise lost after decoding.
+- Fixed the decoder registering 6-byte strings in the string reference namespace at indices
+  65536–4294967295 where the encoder does not, desynchronising the namespace and resolving later
+  string references to the wrong value
+  (`#313 <https://github.com/agronholm/cbor2/pull/313>`_; PR by @sahvx655-wq)
+- Fixed the IPv4/IPv6 network decoders (tags 52 and 54) silently truncating an address byte string
+  that is longer than the address size instead of rejecting it as malformed
+  (`#309 <https://github.com/agronholm/cbor2/pull/309>`_; PR by @sahvx655-wq)
 
 **6.1.2** (2026-06-02)
 
