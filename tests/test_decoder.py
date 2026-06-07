@@ -855,6 +855,22 @@ def test_ipaddress(payload: bytes, expected: Any) -> None:
     assert loads(unhexlify(payload)) == expected
 
 
+@pytest.mark.parametrize(
+    "payload, pattern",
+    [
+        pytest.param("d83482181846c0000200ffff", "IPv4 network is too long", id="ipv4"),
+        pytest.param(
+            "d8368218305220010db81234" + "00" * 10 + "ffff",
+            "IPv6 network is too long",
+            id="ipv6",
+        ),
+    ],
+)
+def test_ipnetwork_address_too_long(payload: str, pattern: str) -> None:
+    with pytest.raises(CBORDecodeError, match=pattern):
+        loads(unhexlify(payload))
+
+
 class TestDeprecatedIPAddress:
     @pytest.mark.parametrize(
         "payload, expected",
@@ -975,6 +991,26 @@ class TestStringReference:
             + b"\xd8\x19\x00"  # tag 25, value 0 (string reference to index 0)
         )
         assert loads(payload) == [big_string, big_string]
+
+    def test_string_ref_namespace_index_over_65536(self) -> None:
+        """
+        A reference at namespace index 65536 occupies 7 bytes (tag 25 + 4-byte uint), so a
+        6-byte string at that index must not be registered, matching the encoder.
+
+        """
+        payload = (
+            b"\xd9\x01\x00"  # tag 256 (string namespace)
+            b"\x9f"  # indefinite-length array
+            + (b"\x6b" + b"a" * 11) * 65536  # fill the namespace to index 65536
+            + b"\x66"
+            + b"b" * 6  # 6-byte string at index 65536 (must NOT be registered)
+            + b"\x67"
+            + b"c" * 7  # 7-byte string registered at index 65536 instead
+            + b"\xd8\x19\x1a"
+            + struct.pack(">I", 65536)  # reference to index 65536
+            + b"\xff"  # break
+        )
+        assert loads(payload)[-1] == "ccccccc"
 
 
 @pytest.mark.parametrize(
