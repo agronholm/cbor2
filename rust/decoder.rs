@@ -1155,6 +1155,12 @@ impl CBORDecoder {
                 && let Ok(address) = second_item.cast::<PyBytes>()
             {
                 let mut address_vec: Vec<u8> = address.extract()?;
+                if address_vec.len() > 4 {
+                    return Err(CBORDecodeError::new_err(format!(
+                        "address byte string for IPv4 network is too long ({} bytes)",
+                        address_vec.len()
+                    )));
+                }
                 address_vec.resize(4, 0);
                 IPV4NETWORK_TYPE.get(py)?.call1(((address_vec, prefix),))?
             } else if let Ok(address) = first_item.cast::<PyBytes>()
@@ -1193,6 +1199,12 @@ impl CBORDecoder {
                 && let Ok(address) = second_item.cast::<PyBytes>()
             {
                 let mut address_vec: Vec<u8> = address.extract()?;
+                if address_vec.len() > 16 {
+                    return Err(CBORDecodeError::new_err(format!(
+                        "address byte string for IPv6 network is too long ({} bytes)",
+                        address_vec.len()
+                    )));
+                }
                 address_vec.resize(16, 0);
                 Ok((
                     IPV6NETWORK_TYPE.get(py)?,
