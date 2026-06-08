@@ -677,6 +677,16 @@ def test_encode_stringrefs_datetime() -> None:
     assert dumps(value, string_referencing=True) == expected
 
 
+def test_encode_stringrefs_non_ascii() -> None:
+    # "€€" is 2 code points but 6 UTF-8 bytes; the reference threshold is measured in
+    # encoded bytes, so it must be registered (index 0) just like the decoder counts it
+    value = ["€€", "abc", "abc"]
+    encoded = dumps(value, string_referencing=True)
+    expected = unhexlify("d901008366e282ace282ac63616263d81901")
+    assert encoded == expected
+    assert loads(encoded) == value
+
+
 @pytest.mark.parametrize(
     "tag",
     [

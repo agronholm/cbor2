@@ -303,12 +303,19 @@ impl CBOREncoder {
     fn maybe_stringref(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
         let py = slf.py();
         let mut this = slf.borrow_mut();
-        let (index, is_string) = if let Ok(py_string) = value.cast::<PyString>() {
+        let (index, is_string, length) = if let Ok(py_string) = value.cast::<PyString>() {
             let string: String = py_string.extract()?;
-            (this.string_references.get(&string).copied(), true)
+            // The threshold compares against the string's encoded size, which for text is the
+            // number of UTF-8 bytes, not the number of code points
+            (
+                this.string_references.get(&string).copied(),
+                true,
+                string.len(),
+            )
         } else {
             let bytes: Vec<u8> = value.cast::<PyBytes>()?.extract()?;
-            (this.bytes_references.get(&bytes).copied(), false)
+            let length = bytes.len();
+            (this.bytes_references.get(&bytes).copied(), false, length)
         };
         match index {
             Some(index) => {
@@ -317,7 +324,6 @@ impl CBOREncoder {
                 Ok(true)
             }
             None => {
-                let length = value.len()?;
                 let next_index = this.string_references.len() + this.bytes_references.len();
                 let is_referenced = match next_index {
                     ..24 => length >= 3,
