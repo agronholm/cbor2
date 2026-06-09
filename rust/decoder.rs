@@ -393,7 +393,7 @@ impl CBORDecoder {
         match self.decode_length_as_usize(py, subtype)? {
             None => {
                 // Indefinite length
-                let mut bytes = PyBytes::new(py, b"");
+                let mut buffer: Vec<u8> = Vec::new();
                 let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
                 loop {
                     let (major_type, subtype) = self.read_major_and_subtype(py)?;
@@ -407,9 +407,9 @@ impl CBORDecoder {
                             }
                             let length = length as usize;
                             let chunk = self.read(py, length)?;
-                            bytes = bytes.add(chunk)?.cast_into()?;
+                            buffer.extend_from_slice(&chunk);
                         }
-                        (7, 31) => break Ok(Value(bytes.into_any())), // break marker
+                        (7, 31) => break Ok(Value(PyBytes::new(py, &buffer).into_any())), // break marker
                         _ => {
                             return Err(CBORDecodeError::new_err(format!(
                                 "non-byte string (major type {major_type}) found in indefinite \
@@ -425,15 +425,15 @@ impl CBORDecoder {
             }
             Some(length) => {
                 // Incrementally read the bytestring, in chunks of 65536 bytes
-                let mut bytes = PyBytes::new(py, b"");
+                let mut buffer: Vec<u8> = Vec::new();
                 let mut remaining_length = length;
                 while remaining_length > 0 {
                     let chunk_size = remaining_length.min(65536);
                     let chunk = self.read(py, chunk_size)?;
                     remaining_length -= chunk_size;
-                    bytes = bytes.add(chunk)?.cast_into()?;
+                    buffer.extend_from_slice(&chunk);
                 }
-                Ok(StringValue(bytes.into_any(), length))
+                Ok(StringValue(PyBytes::new(py, &buffer).into_any(), length))
             }
         }
     }
@@ -443,7 +443,7 @@ impl CBORDecoder {
         match self.decode_length_as_usize(py, subtype)? {
             None => {
                 // Indefinite length
-                let mut string = PyString::new(py, "");
+                let mut parts: Vec<Bound<'py, PyString>> = Vec::new();
                 loop {
                     let (major_type, subtype) = self.read_major_and_subtype(py)?;
                     let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
@@ -467,9 +467,14 @@ impl CBORDecoder {
                                     )
                                     .and_then(|string| string.cast_into().map_err(PyErr::from)),
                             }?;
-                            string = string.add(decoded)?.cast_into()?;
+                            parts.push(decoded);
                         }
-                        (7, 31) => break Ok(Value(string.into_any())), // break marker
+                        (7, 31) => {
+                            // break marker
+                            break PyString::new(py, "")
+                                .call_method1(intern!(py, "join"), (PyList::new(py, parts)?,))
+                                .map(|joined| Value(joined.into_any()));
+                        }
                         _ => {
                             return Err(CBORDecodeError::new_err(format!(
                                 "non-text string (major type {major_type}) found in indefinite \
@@ -506,7 +511,7 @@ impl CBORDecoder {
                     None => decoder_class.call0()?,
                     Some(str_errors) => decoder_class.call1((str_errors,))?,
                 };
-                let mut string = PyString::new(py, "").into_any();
+                let mut parts: Vec<Bound<'py, PyAny>> = Vec::new();
                 let mut remaining_length = length;
                 while remaining_length > 0 {
                     let chunk_size = remaining_length.min(65536);
@@ -515,9 +520,11 @@ impl CBORDecoder {
                     let is_final_chunk = remaining_length == 0;
                     let decoded_chunk =
                         decoder.call_method1(intern!(py, "decode"), (chunk, is_final_chunk))?;
-                    string = string.add(decoded_chunk)?;
+                    parts.push(decoded_chunk);
                 }
-                Ok(StringValue(string.into_any(), length))
+                let joined = PyString::new(py, "")
+                    .call_method1(intern!(py, "join"), (PyList::new(py, parts)?,))?;
+                Ok(StringValue(joined.into_any(), length))
             }
         }
     }

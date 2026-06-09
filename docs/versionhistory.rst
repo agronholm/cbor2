@@ -7,6 +7,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed quadratic decoding time for indefinite-length and large definite-length byte and text
+  strings, caused by concatenating each chunk onto the accumulated result with ``+`` instead of
+  building the result once
+  (`#316 <https://github.com/agronholm/cbor2/pull/316>`_; PR by @sahvx655-wq)
 - Fixed the decoder registering 6-byte strings in the string reference namespace at indices
   65536–4294967295 where the encoder does not, desynchronising the namespace and resolving later
   string references to the wrong value
