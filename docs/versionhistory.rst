@@ -7,6 +7,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed ``datetime_as_timestamp`` encoding whole-second datetimes before 1970 or after 2106 as
+  floats instead of integers, because the timestamp was narrowed through an unsigned 32-bit integer
+  (PR by @sahvx655-wq)
 - Fixed the decoder registering 6-byte strings in the string reference namespace at indices
   65536–4294967295 where the encoder does not, desynchronising the namespace and resolving later
   string references to the wrong value
