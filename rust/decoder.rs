@@ -21,6 +21,7 @@ use pyo3::types::{
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, PyErrArguments, intern, pyclass};
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::mem::{replace, take};
 
 const IMMUTABLE_ATTR: &str = "_cbor2_immutable";
@@ -393,47 +394,53 @@ impl CBORDecoder {
         match self.decode_length_as_usize(py, subtype)? {
             None => {
                 // Indefinite length
-                let mut buffer: Vec<u8> = Vec::new();
                 let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
-                loop {
-                    let (major_type, subtype) = self.read_major_and_subtype(py)?;
-                    match (major_type, subtype) {
-                        (2, _) => {
-                            let length = self.decode_length_finite(py, subtype)?;
-                            if length > sys_maxsize {
+                let bytes = PyBytes::new_with_writer(py, 0, |writer| {
+                    loop {
+                        let (major_type, subtype) = self.read_major_and_subtype(py)?;
+                        match (major_type, subtype) {
+                            (2, _) => {
+                                let length = self.decode_length_finite(py, subtype)?;
+                                if length > sys_maxsize {
+                                    return Err(CBORDecodeError::new_err(format!(
+                                        "chunk too long in an indefinite bytestring chunk: {length}"
+                                    )));
+                                }
+                                let length = length as usize;
+                                let chunk = self.read(py, length)?;
+                                writer.write_all(&chunk)?;
+                            }
+                            (7, 31) => break Ok(()), // break marker
+                            _ => {
                                 return Err(CBORDecodeError::new_err(format!(
-                                    "chunk too long in an indefinite bytestring chunk: {length}"
+                                    "non-byte string (major type {major_type}) found in indefinite \
+                                    length byte string"
                                 )));
                             }
-                            let length = length as usize;
-                            let chunk = self.read(py, length)?;
-                            buffer.extend_from_slice(&chunk);
-                        }
-                        (7, 31) => break Ok(Value(PyBytes::new(py, &buffer).into_any())), // break marker
-                        _ => {
-                            return Err(CBORDecodeError::new_err(format!(
-                                "non-byte string (major type {major_type}) found in indefinite \
-                                    length byte string"
-                            )));
                         }
                     }
-                }
+                })?;
+                Ok(Value(bytes.into_any()))
             }
             Some(length) if length <= 65536 => {
                 let bytes = self.read(py, length)?;
                 Ok(StringValue(PyBytes::new(py, &bytes).into_any(), length))
             }
             Some(length) => {
-                // Incrementally read the bytestring, in chunks of 65536 bytes
-                let mut buffer: Vec<u8> = Vec::new();
-                let mut remaining_length = length;
-                while remaining_length > 0 {
-                    let chunk_size = remaining_length.min(65536);
-                    let chunk = self.read(py, chunk_size)?;
-                    remaining_length -= chunk_size;
-                    buffer.extend_from_slice(&chunk);
-                }
-                Ok(StringValue(PyBytes::new(py, &buffer).into_any(), length))
+                // Incrementally read the bytestring, in chunks of 65536 bytes. The claimed
+                // length is not reserved up front, as it is untrusted until the data has
+                // actually been read.
+                let bytes = PyBytes::new_with_writer(py, 0, |writer| {
+                    let mut remaining_length = length;
+                    while remaining_length > 0 {
+                        let chunk_size = remaining_length.min(65536);
+                        let chunk = self.read(py, chunk_size)?;
+                        remaining_length -= chunk_size;
+                        writer.write_all(&chunk)?;
+                    }
+                    Ok(())
+                })?;
+                Ok(StringValue(bytes.into_any(), length))
             }
         }
     }
