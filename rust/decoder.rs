@@ -21,7 +21,6 @@ use pyo3::types::{
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, PyErrArguments, intern, pyclass};
 use std::fmt::{Display, Formatter};
-use std::io::Write;
 use std::mem::{replace, take};
 
 const IMMUTABLE_ATTR: &str = "_cbor2_immutable";
@@ -428,9 +427,10 @@ impl CBORDecoder {
             }
             Some(length) => {
                 // Incrementally read the bytestring, in chunks of 65536 bytes. The claimed
-                // length is not reserved up front, as it is untrusted until the data has
-                // actually been read.
-                let bytes = PyBytes::new_with_writer(py, 0, |writer| {
+                // length is untrusted until the data has actually been read, so no more than
+                // 1 MiB of it is reserved up front; a truncated payload claiming a huge length
+                // can then force at most a 1 MiB allocation.
+                let bytes = PyBytes::new_with_writer(py, length.min(1_048_576), |writer| {
                     let mut remaining_length = length;
                     while remaining_length > 0 {
                         let chunk_size = remaining_length.min(65536);
