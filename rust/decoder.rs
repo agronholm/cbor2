@@ -428,9 +428,9 @@ impl CBORDecoder {
             Some(length) => {
                 // Incrementally read the bytestring, in chunks of 65536 bytes. The claimed
                 // length is untrusted until the data has actually been read, so no more than
-                // 1 MiB of it is reserved up front; a truncated payload claiming a huge length
-                // can then force at most a 1 MiB allocation.
-                let bytes = PyBytes::new_with_writer(py, length.min(1_048_576), |writer| {
+                // 64 KiB of it is reserved up front; a truncated payload claiming a huge length
+                // can then force at most a 64 KiB allocation.
+                let bytes = PyBytes::new_with_writer(py, length.min(65536), |writer| {
                     let mut remaining_length = length;
                     while remaining_length > 0 {
                         let chunk_size = remaining_length.min(65536);
