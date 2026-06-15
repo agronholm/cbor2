@@ -47,9 +47,10 @@ static FROZEN_DICT: PyImportable = PyImportable::new("builtins", "frozendict");
 enum DecoderResult<'a> {
     BeginFrame(
         Box<DecoderCallback<'a>>,
-        bool,
+        bool, // requested_immutable
         Option<Bound<'a, PyAny>>,
         DisplayName<'a>,
+        bool, // accepts_break: an indefinite-length container that a break code terminates
     ),
     ContinueFrame(bool),
     CompleteFrame(Bound<'a, PyAny>),
@@ -86,6 +87,9 @@ struct StackFrame<'py> {
     shareable_index: Option<usize>,
     typename: DisplayName<'py>,
     contains_string_namespace: bool,
+    // Whether a CBOR break code is a legal terminator here (only indefinite-length
+    // arrays and maps). A break reaching any other frame is ill-formed input.
+    accepts_break: bool,
 }
 
 /// Decorates a function to be a two-stage decoder.
@@ -565,6 +569,7 @@ impl CBORDecoder {
                 false,
                 None,
                 DisplayName::String("array"),
+                optional_length.is_none(),
             ))
         } else {
             let mut list = PyList::empty(py);
@@ -602,6 +607,7 @@ impl CBORDecoder {
                 false,
                 Some(container),
                 DisplayName::String("array"),
+                optional_length.is_none(),
             ))
         }
     }
@@ -731,7 +737,13 @@ impl CBORDecoder {
                     }
                 })
             };
-            Ok(BeginFrame(callback, true, None, DisplayName::String("map")))
+            Ok(BeginFrame(
+                callback,
+                true,
+                None,
+                DisplayName::String("map"),
+                length_or_none.is_none(),
+            ))
         } else {
             fn check_duplicate(key: &Bound<PyAny>, dict: &Bound<PyDict>) -> PyResult<()> {
                 if dict.contains(key)? {
@@ -800,6 +812,7 @@ impl CBORDecoder {
                 true,
                 Some(container),
                 DisplayName::String("map"),
+                length_or_none.is_none(),
             ))
         }
     }
@@ -851,6 +864,7 @@ impl CBORDecoder {
                             } else {
                                 DisplayName::PythonName(name.clone())
                             },
+                            false,
                         ))
                     } else {
                         let callback =
@@ -862,6 +876,7 @@ impl CBORDecoder {
                             immutable,
                             None,
                             DisplayName::SemanticTag(tagnum),
+                            false,
                         ))
                     };
                 }
@@ -925,6 +940,7 @@ impl CBORDecoder {
                     true,
                     Some(container),
                     DisplayName::SemanticTag(tagnum),
+                    false,
                 ));
             }
         };
@@ -933,6 +949,7 @@ impl CBORDecoder {
             true,
             None,
             DisplayName::String(typename),
+            false,
         ))
     }
 
@@ -1355,6 +1372,7 @@ impl CBORDecoder {
             true,
             container,
             DisplayName::String("set"),
+            false,
         ))
     }
 }
@@ -1591,6 +1609,15 @@ impl CBORDecoder {
             let result: PyResult<DecoderResult<'py>> = if let Some(previous_value) = value.take() {
                 // Call the decoder callback of the last frame
                 let frame = frames.last_mut().unwrap();
+                // A break code is only a valid terminator inside an indefinite-length
+                // array or map. Reaching any other frame means it appeared where a data
+                // item was expected, which is ill-formed (RFC 8949 §3.2.1).
+                if !frame.accepts_break && previous_value.is(BREAK_MARKER.get(py).unwrap().bind(py))
+                {
+                    return Err(CBORDecodeError::new_err(
+                        "CBOR break code (0xff) found outside of an indefinite-length item",
+                    ));
+                }
                 if let Some(decoder_callback) = frame.decoder_callback.as_mut() {
                     decoder_callback(previous_value, frame.immutable)
                         .map_err(|e| wrap_exception(py, e, &frame.typename))
@@ -1637,7 +1664,13 @@ impl CBORDecoder {
             };
 
             match result {
-                Ok(BeginFrame(callback, requested_immutable, container, typename)) => {
+                Ok(BeginFrame(
+                    callback,
+                    requested_immutable,
+                    container,
+                    typename,
+                    accepts_break,
+                )) => {
                     if let Some(frame) = frames.last_mut()
                         && let Some(container) = container
                         && let Some(shareable_index) = frame.shareable_index
@@ -1655,6 +1688,7 @@ impl CBORDecoder {
                             shareable_index: None,
                             typename,
                             contains_string_namespace: false,
+                            accepts_break,
                         },
                     )?;
                 }
@@ -1688,6 +1722,7 @@ impl CBORDecoder {
                             shareable_index: None,
                             typename: DisplayName::String("string namespace"),
                             contains_string_namespace: true,
+                            accepts_break: false,
                         },
                     )?;
                     string_namespaces.push(Vec::new());
@@ -1738,6 +1773,7 @@ impl CBORDecoder {
                             shareable_index: Some(shareables.len()),
                             typename: DisplayName::String("shareable value"),
                             contains_string_namespace: false,
+                            accepts_break: false,
                         },
                     )?;
                     shareables.push(None);
@@ -1794,7 +1830,14 @@ impl CBORDecoder {
                     self.available_bytes = 0;
                     self.read_position = 0;
                 }
-                return Ok(value.expect("stack is empty but final return value is missing"));
+                let final_value = value.expect("stack is empty but final return value is missing");
+                // A naked break code at the top level is ill-formed (RFC 8949 §3.2.1).
+                if final_value.is(BREAK_MARKER.get(py).unwrap().bind(py)) {
+                    return Err(CBORDecodeError::new_err(
+                        "CBOR break code (0xff) found outside of an indefinite-length item",
+                    ));
+                }
+                return Ok(final_value);
             }
         }
     }

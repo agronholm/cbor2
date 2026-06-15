@@ -7,6 +7,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed the decoder leaking the internal break-marker sentinel (or accepting it as a data item)
+  when a CBOR break code (``0xff``) appears outside an indefinite-length item, instead of rejecting
+  such input as ill-formed
+  (`#305 <https://github.com/agronholm/cbor2/issues/305>`_)
 - Fixed the decoder registering 6-byte strings in the string reference namespace at indices
   65536–4294967295 where the encoder does not, desynchronising the namespace and resolving later
   string references to the wrong value
