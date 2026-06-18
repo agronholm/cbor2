@@ -48,6 +48,7 @@ _TContainer = TypeVar("_TContainer", default=None)
 TagHook: TypeAlias = Callable[[CBORTag, bool], Any]
 SemanticDecoderCallback: TypeAlias = Callable[[Any, bool], Any]
 ObjectHook: TypeAlias = Callable[[Mapping[Any, Any], bool], Any]
+ArrayHook: TypeAlias = Callable[[Sequence[Any], bool], Any]
 EncoderHook: TypeAlias = Callable[[CBOREncoder, Any], Any]
 ShareableDecoderCallback: TypeAlias = Callable[[Any], Any]
 ShareableDecoderInitializer: TypeAlias = Callable[[bool], tuple[Any, ShareableDecoderCallback]]
@@ -117,6 +118,7 @@ class CBORDecoder:
     fp: IO[bytes]
     tag_hook: TagHook | None
     object_hook: ObjectHook | None
+    array_hook: ArrayHook | None
     str_errors: str
     def __new__(
         cls,
@@ -124,6 +126,7 @@ class CBORDecoder:
         *,
         tag_hook: TagHook | None = ...,
         object_hook: ObjectHook | None = ...,
+        array_hook: ArrayHook | None = ...,
         semantic_decoders: Mapping[int, SemanticDecoderCallback | ShareableDecoderInitializer]
         | None = ...,
         str_errors: str = ...,
@@ -214,6 +217,7 @@ def load(
     *,
     tag_hook: TagHook | None = ...,
     object_hook: ObjectHook | None = ...,
+    array_hook: ArrayHook | None = ...,
     semantic_decoders: Mapping[int, SemanticDecoderCallback | ShareableDecoderInitializer]
     | None = ...,
     str_errors: str = ...,
@@ -228,6 +232,7 @@ def loads(
     *,
     tag_hook: TagHook | None = ...,
     object_hook: ObjectHook | None = ...,
+    array_hook: ArrayHook | None = ...,
     semantic_decoders: Mapping[int, SemanticDecoderCallback | ShareableDecoderInitializer]
     | None = ...,
     str_errors: str = ...,

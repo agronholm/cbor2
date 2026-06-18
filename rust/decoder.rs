@@ -156,6 +156,13 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
 ///     callable that takes 2 arguments: the decoder instance, and a dictionary. This
 ///     callback is invoked for each deserialized :class:`dict` object. The return value
 ///     is substituted for the dict in the deserialized output.
+/// :param array_hook:
+///     callable that takes 2 arguments: the decoded array (a :class:`list`, or a
+///     :class:`tuple` when ``immutable`` is true), and a boolean that is :data:`True` if
+///     the array used indefinite-length encoding. This callback is invoked for each
+///     deserialized array, and its return value is substituted for the array in the
+///     deserialized output. It allows callers to preserve the distinction between
+///     definite- and indefinite-length arrays, which is otherwise lost after decoding.
 /// :param semantic_decoders:
 ///     An optional mapping for overriding the decoding for select semantic tags.
 ///     The value is a mapping of semantic tags (integers) to callables that take
@@ -180,6 +187,7 @@ pub struct CBORDecoder {
     fp: Option<Py<PyAny>>,
     tag_hook: Option<Py<PyAny>>,
     object_hook: Option<Py<PyAny>>,
+    array_hook: Option<Py<PyAny>>,
     semantic_decoders: Option<Py<PyMapping>>,
     str_errors: Option<Py<PyString>>,
     #[pyo3(get)]
@@ -205,6 +213,7 @@ impl CBORDecoder {
         buffer: Option<Bound<PyBytes>>,
         tag_hook: Option<&Bound<'_, PyAny>>,
         object_hook: Option<&Bound<'_, PyAny>>,
+        array_hook: Option<&Bound<'_, PyAny>>,
         semantic_decoders: Option<&Bound<'_, PyMapping>>,
         str_errors: &str,
         read_size: usize,
@@ -222,6 +231,7 @@ impl CBORDecoder {
             fp: None,
             tag_hook: None,
             object_hook: None,
+            array_hook: None,
             str_errors: None,
             read_size,
             max_depth,
@@ -239,6 +249,7 @@ impl CBORDecoder {
         };
         this.set_tag_hook(tag_hook)?;
         this.set_object_hook(object_hook)?;
+        this.set_array_hook(array_hook)?;
         this.set_str_errors(&bound_str_errors)?;
         Ok(this)
     }
@@ -547,20 +558,51 @@ impl CBORDecoder {
         immutable: bool,
     ) -> PyResult<DecoderResult<'py>> {
         // Major tag 4
+
+        // Apply the array_hook (if any) to a completed array, passing whether it used
+        // indefinite-length encoding. This lets callers preserve that distinction, which is
+        // otherwise lost once an array is decoded into a plain list/tuple.
+        #[inline]
+        fn maybe_call_array_hook<'py>(
+            py: Python<'py>,
+            value: Bound<'py, PyAny>,
+            indefinite: bool,
+            array_hook: Option<&Py<PyAny>>,
+        ) -> PyResult<Bound<'py, PyAny>> {
+            if let Some(array_hook) = array_hook {
+                array_hook.bind(py).call1((value, indefinite))
+            } else {
+                Ok(value)
+            }
+        }
+
+        // `optional_length == None` signals an indefinite-length array; the definite-length
+        // completion sites below pass `false` and the indefinite (break-marker) sites pass `true`.
         let optional_length = self.decode_length_as_usize(py, subtype)?;
+        let array_hook = self.array_hook.as_ref().map(|hook| hook.clone_ref(py));
         if immutable {
             let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
             let callback: Box<DecoderCallback<'py>> = if let Some(length) = optional_length {
                 if length == 0 {
-                    return Ok(Value(PyTuple::empty(py).into_any()));
+                    let value = PyTuple::empty(py).into_any();
+                    return Ok(Value(maybe_call_array_hook(
+                        py,
+                        value,
+                        false,
+                        array_hook.as_ref(),
+                    )?));
                 }
 
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
                     items.push(item);
                     if items.len() == length {
-                        Ok(CompleteFrame(
-                            PyTuple::new(py, take(&mut items))?.into_any(),
-                        ))
+                        let value = PyTuple::new(py, take(&mut items))?.into_any();
+                        Ok(CompleteFrame(maybe_call_array_hook(
+                            py,
+                            value,
+                            false,
+                            array_hook.as_ref(),
+                        )?))
                     } else {
                         Ok(ContinueFrame(false))
                     }
@@ -569,9 +611,13 @@ impl CBORDecoder {
                 let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
                     if item.is(break_marker) {
-                        Ok(CompleteFrame(
-                            PyTuple::new(py, take(&mut items))?.into_any(),
-                        ))
+                        let value = PyTuple::new(py, take(&mut items))?.into_any();
+                        Ok(CompleteFrame(maybe_call_array_hook(
+                            py,
+                            value,
+                            true,
+                            array_hook.as_ref(),
+                        )?))
                     } else {
                         items.push(item);
                         Ok(ContinueFrame(false))
@@ -589,15 +635,25 @@ impl CBORDecoder {
             let container = list.clone().into_any();
             let callback: Box<DecoderCallback<'py>> = if let Some(length) = optional_length {
                 if length == 0 {
-                    return Ok(Value(PyList::empty(py).into_any()));
+                    let value = PyList::empty(py).into_any();
+                    return Ok(Value(maybe_call_array_hook(
+                        py,
+                        value,
+                        false,
+                        array_hook.as_ref(),
+                    )?));
                 }
 
                 Box::new(move |item, _immutable: bool| {
                     list.append(item)?;
                     if list.len() == length {
-                        Ok(CompleteFrame(
-                            replace(&mut list, PyList::empty(py)).into_any(),
-                        ))
+                        let value = replace(&mut list, PyList::empty(py)).into_any();
+                        Ok(CompleteFrame(maybe_call_array_hook(
+                            py,
+                            value,
+                            false,
+                            array_hook.as_ref(),
+                        )?))
                     } else {
                         Ok(ContinueFrame(false))
                     }
@@ -606,9 +662,13 @@ impl CBORDecoder {
                 let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
                     if item.is(break_marker) {
-                        Ok(CompleteFrame(
-                            replace(&mut list, PyList::empty(py)).into_any(),
-                        ))
+                        let value = replace(&mut list, PyList::empty(py)).into_any();
+                        Ok(CompleteFrame(maybe_call_array_hook(
+                            py,
+                            value,
+                            true,
+                            array_hook.as_ref(),
+                        )?))
                     } else {
                         list.append(item)?;
                         Ok(ContinueFrame(false))
@@ -1385,6 +1445,7 @@ impl CBORDecoder {
         *,
         tag_hook = None,
         object_hook = None,
+        array_hook = None,
         semantic_decoders = None,
         str_errors = "strict",
         read_size = 4096,
@@ -1397,6 +1458,7 @@ impl CBORDecoder {
         fp: &Bound<'_, PyAny>,
         tag_hook: Option<&Bound<'_, PyAny>>,
         object_hook: Option<&Bound<'_, PyAny>>,
+        array_hook: Option<&Bound<'_, PyAny>>,
         semantic_decoders: Option<&Bound<'_, PyMapping>>,
         str_errors: &str,
         read_size: usize,
@@ -1410,6 +1472,7 @@ impl CBORDecoder {
             None,
             tag_hook,
             object_hook,
+            array_hook,
             semantic_decoders,
             str_errors,
             read_size,
@@ -1489,6 +1552,29 @@ impl CBORDecoder {
             self.object_hook = Some(object_hook.clone().unbind());
         } else {
             self.object_hook = None;
+        }
+        Ok(())
+    }
+
+    #[getter]
+    fn array_hook(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.array_hook
+            .as_ref()
+            .map(|array_hook| array_hook.clone_ref(py))
+    }
+
+    #[setter]
+    fn set_array_hook(&mut self, array_hook: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        if let Some(array_hook) = array_hook {
+            if !array_hook.is_callable() {
+                return Err(PyErr::new::<PyTypeError, _>(
+                    "array_hook must be callable or None",
+                ));
+            }
+
+            self.array_hook = Some(array_hook.clone().unbind());
+        } else {
+            self.array_hook = None;
         }
         Ok(())
     }

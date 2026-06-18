@@ -7,6 +7,12 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Added the ``array_hook`` parameter to :class:`CBORDecoder`, :func:`load` and :func:`loads`.
+  When set, it is called for each decoded array with two arguments: the array (a :class:`list`,
+  or a :class:`tuple` when ``immutable`` is true) and a boolean indicating whether the array used
+  indefinite-length encoding. Its return value is substituted for the array in the output. This
+  allows callers to preserve the distinction between definite- and indefinite-length arrays, which
+  is otherwise lost after decoding.
 - Fixed the decoder registering 6-byte strings in the string reference namespace at indices
   65536–4294967295 where the encoder does not, desynchronising the namespace and resolving later
   string references to the wrong value

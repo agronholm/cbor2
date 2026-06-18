@@ -6,7 +6,7 @@ import re
 import struct
 import sys
 from binascii import unhexlify
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -1100,6 +1100,104 @@ def test_object_hook_exception() -> None:
     payload = unhexlify("A2616103616205")
     with pytest.raises(CBORDecodeError) as exc_info:
         loads(payload, object_hook=object_hook)
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert exc_info.value.__cause__.args[0] == "foo"
+
+
+class TestArrayHookAttribute:
+    def test_success(self) -> None:
+        def array_hook(value: Sequence[Any], indefinite: bool) -> Sequence[Any]:
+            return value
+
+        decoder = CBORDecoder(BytesIO(), array_hook=array_hook)
+        assert decoder.array_hook is array_hook
+
+    def test_not_callable(self) -> None:
+        with pytest.raises(TypeError, match="array_hook must be callable or None"):
+            CBORDecoder(BytesIO(), array_hook="foo")  # type: ignore[arg-type]
+
+    def test_delete(self) -> None:
+        decoder = CBORDecoder(BytesIO())
+        with pytest.raises(AttributeError):
+            del decoder.array_hook
+
+
+def test_array_hook_definite() -> None:
+    """A definite-length array invokes the hook with indefinite=False."""
+    calls: list[tuple[Any, bool]] = []
+
+    def array_hook(value: Sequence[Any], indefinite: bool) -> Sequence[Any]:
+        calls.append((list(value), indefinite))
+        return value
+
+    decoded = loads(unhexlify("83010203"), array_hook=array_hook)
+    assert decoded == [1, 2, 3]
+    assert calls == [([1, 2, 3], False)]
+
+
+def test_array_hook_indefinite() -> None:
+    """An indefinite-length array invokes the hook with indefinite=True."""
+    calls: list[tuple[Any, bool]] = []
+
+    def array_hook(value: Sequence[Any], indefinite: bool) -> Sequence[Any]:
+        calls.append((list(value), indefinite))
+        return value
+
+    decoded = loads(unhexlify("9f010203ff"), array_hook=array_hook)
+    assert decoded == [1, 2, 3]
+    assert calls == [([1, 2, 3], True)]
+
+
+def test_array_hook_return_value_replaces() -> None:
+    """The hook's return value replaces the decoded array, preserving indefiniteness."""
+
+    class IndefiniteList(list[Any]):
+        pass
+
+    def array_hook(value: Sequence[Any], indefinite: bool) -> Sequence[Any]:
+        return IndefiniteList(value) if indefinite else list(value)
+
+    definite = loads(unhexlify("83010203"), array_hook=array_hook)
+    indefinite = loads(unhexlify("9f010203ff"), array_hook=array_hook)
+    assert type(definite) is list
+    assert type(indefinite) is IndefiniteList
+    assert definite == indefinite == [1, 2, 3]
+
+
+def test_array_hook_nested() -> None:
+    """The hook fires for each array with the correct indefinite flag, innermost first."""
+    calls: list[tuple[Any, bool]] = []
+
+    def array_hook(value: Sequence[Any], indefinite: bool) -> Sequence[Any]:
+        calls.append((list(value), indefinite))
+        return value
+
+    # Definite outer array containing one indefinite inner array: 81 9f 01 02 ff
+    decoded = loads(unhexlify("819f0102ff"), array_hook=array_hook)
+    assert decoded == [[1, 2]]
+    assert calls == [([1, 2], True), ([[1, 2]], False)]
+
+
+def test_array_hook_immutable() -> None:
+    """Under immutable=True arrays are tuples; the hook still reports indefiniteness."""
+    calls: list[tuple[Any, bool]] = []
+
+    def array_hook(value: Sequence[Any], indefinite: bool) -> Sequence[Any]:
+        calls.append((tuple(value), indefinite))
+        return value
+
+    decoded = loads(unhexlify("9f010203ff"), array_hook=array_hook, immutable=True)
+    assert decoded == (1, 2, 3)
+    assert calls == [((1, 2, 3), True)]
+
+
+def test_array_hook_exception() -> None:
+    def array_hook(value: Sequence[Any], indefinite: bool) -> NoReturn:
+        raise RuntimeError("foo")
+
+    with pytest.raises(CBORDecodeError) as exc_info:
+        loads(unhexlify("83010203"), array_hook=array_hook)
 
     assert isinstance(exc_info.value.__cause__, RuntimeError)
     assert exc_info.value.__cause__.args[0] == "foo"
