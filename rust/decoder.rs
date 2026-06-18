@@ -937,7 +937,7 @@ impl CBORDecoder {
                 });
                 return Ok(BeginFrame(
                     callback,
-                    true,
+                    immutable,
                     Some(container),
                     DisplayName::SemanticTag(tagnum),
                     false,
