@@ -1082,6 +1082,22 @@ def test_tag_hook() -> None:
     assert decoded == "olleH"
 
 
+def test_unknown_tag_value_respects_immutable() -> None:
+    # The content of a tag with no designated decoder must honour the ``immutable``
+    # flag, like every other container. Previously it was always decoded immutable.
+    payload = dumps(CBORTag(6000, [1, 2, 3]))
+    mutable = loads(payload)
+    assert isinstance(mutable.value, list)
+    immutable = loads(payload, immutable=True)
+    assert isinstance(immutable.value, tuple)
+
+    map_payload = dumps(CBORTag(6000, {"a": 1}))
+    assert isinstance(loads(map_payload).value, dict)
+    immutable_map = loads(map_payload, immutable=True).value
+    assert not isinstance(immutable_map, dict)
+    assert immutable_map["a"] == 1
+
+
 def test_object_hook() -> None:
     class DummyType:
         def __init__(self, state: Mapping[Any, Any], immutable: bool) -> None:
