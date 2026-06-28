@@ -18,6 +18,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   strings, caused by concatenating each chunk onto the accumulated result with ``+`` instead of
   building the result once
   (`#316 <https://github.com/agronholm/cbor2/pull/316>`_; PR by @sahvx655-wq)
+- Fixed ``datetime_as_timestamp`` encoding whole-second datetimes before 1970 or after 2106 as
+  floats instead of integers, because the timestamp was narrowed through an unsigned 32-bit integer
+  (`#317 <https://github.com/agronholm/cbor2/pull/317>`_; PR by @sahvx655-wq)
 
 **6.1.2** (2026-06-02)
 
