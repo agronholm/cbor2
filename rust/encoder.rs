@@ -314,8 +314,7 @@ impl CBOREncoder {
             )
         } else {
             let bytes: Vec<u8> = value.cast::<PyBytes>()?.extract()?;
-            let length = bytes.len();
-            (this.bytes_references.get(&bytes).copied(), false, length)
+            (this.bytes_references.get(&bytes).copied(), false, bytes.len())
         };
         match index {
             Some(index) => {
