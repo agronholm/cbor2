@@ -43,3 +43,5 @@ repos:
     hooks:
       - id: cargo-fmt
         args: ["--manifest-path", "rust/Cargo.toml"]
+ci:
+  autoupdate_schedule: quarterly
