@@ -305,8 +305,6 @@ impl CBOREncoder {
         let mut this = slf.borrow_mut();
         let (index, is_string, length) = if let Ok(py_string) = value.cast::<PyString>() {
             let string: String = py_string.extract()?;
-            // The threshold compares against the string's encoded size, which for text is the
-            // number of UTF-8 bytes, not the number of code points
             (
                 this.string_references.get(&string).copied(),
                 true,
