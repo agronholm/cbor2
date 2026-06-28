@@ -397,7 +397,10 @@ def test_string_invalid_utf8(payload: str) -> None:
 
 
 def test_string_oversized() -> None:
-    with pytest.raises(CBORDecodeEOF, match="premature end of stream"):
+    # This payload embeds a break code (0xff) inside a definite-length map, which is
+    # now rejected as ill-formed before the truncated tail is reached (premature end
+    # of stream is exercised separately).
+    with pytest.raises(CBORDecodeError, match="break code"):
         loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799"))
 
 
@@ -1293,6 +1296,50 @@ def test_invalid_indefinite_data_item(data: str) -> None:
 def test_indefinite_overflow(data: str) -> None:
     with pytest.raises(CBORDecodeError):
         loads(unhexlify(data))
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param("ff", id="naked"),
+        pytest.param("ff01", id="before-data"),
+        pytest.param("8301ff02", id="definite-array-element"),
+        pytest.param("81ff", id="definite-array-only-element"),
+        pytest.param("8181ff", id="nested-definite-array"),
+        pytest.param("a1ff01", id="definite-map-key"),
+        pytest.param("a101ff", id="definite-map-value"),
+        pytest.param("d818ff", id="tag-content"),
+        pytest.param("d81cff", id="shareable"),
+        pytest.param("d90100ff", id="string-namespace"),
+        pytest.param("d9d9f7ff", id="self-describe-tag"),
+        pytest.param("d90102ff", id="set"),
+    ],
+)
+def test_break_outside_indefinite(data: str) -> None:
+    """A break code (0xff) where a data item is expected is ill-formed (RFC 8949 sect. 3.2.1)."""
+    with pytest.raises(CBORDecodeError, match="break code"):
+        loads(unhexlify(data))
+
+
+def test_break_outside_indefinite_disabled() -> None:
+    # A naked break must be rejected even when indefinite-length items are disabled.
+    with pytest.raises(CBORDecodeError, match="break code"):
+        loads(unhexlify("ff"), allow_indefinite=False)
+
+
+@pytest.mark.parametrize(
+    "data, expected",
+    [
+        pytest.param("9f01ff", [1], id="array"),
+        pytest.param("9fff", [], id="empty-array"),
+        pytest.param("bf616101ff", {"a": 1}, id="map"),
+        pytest.param("9f9f01ffff", [[1]], id="nested-array"),
+        pytest.param("829f01ff02", [[1], 2], id="indefinite-in-definite"),
+    ],
+)
+def test_break_terminates_indefinite(data: str, expected: object) -> None:
+    # The break code still correctly terminates a real indefinite-length container.
+    assert loads(unhexlify(data)) == expected
 
 
 def test_invalid_cbor() -> None:
