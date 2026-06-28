@@ -21,6 +21,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Fixed ``datetime_as_timestamp`` encoding whole-second datetimes before 1970 or after 2106 as
   floats instead of integers, because the timestamp was narrowed through an unsigned 32-bit integer
   (`#317 <https://github.com/agronholm/cbor2/pull/317>`_; PR by @sahvx655-wq)
+- Fixed the encoder measuring text strings by code point count instead of UTF-8 byte length when
+  deciding whether to add them to the string reference namespace, desynchronising it from the
+  decoder (which counts bytes) and corrupting later string references for non-ASCII strings
+  (`#314 <https://github.com/agronholm/cbor2/pull/314>`_; PR by @sahvx655-wq)
 
 **6.1.2** (2026-06-02)
 
