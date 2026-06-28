@@ -299,6 +299,18 @@ def test_simple_val_as_key() -> None:
             "c11a514b67b0",
             id="timestamp/eet",
         ),
+        pytest.param(
+            datetime(1969, 12, 31, 0, 0, 0, tzinfo=timezone.utc),
+            True,
+            "c13a0001517f",
+            id="timestamp/pre-epoch",
+        ),
+        pytest.param(
+            datetime(2200, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            True,
+            "c11b00000001b09e1900",
+            id="timestamp/post-2106",
+        ),
     ],
 )
 def test_datetime(value: datetime, as_timestamp: bool, expected: str) -> None:

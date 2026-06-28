@@ -14,7 +14,6 @@ use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
 use half::f16;
 use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::sync::PyOnceLock;
 use pyo3::types::{
     PyBytes, PyCFunction, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyListMethods, PyMapping,
     PySet, PyString, PyTuple,
@@ -34,7 +33,6 @@ static DATETIME_FROMISOFORMAT: PyImportable =
 static DATETIME_FROMTIMESTAMP: PyImportable =
     PyImportable::new("datetime", "datetime.fromtimestamp");
 static EMAIL_PARSER: PyImportable = PyImportable::new("email.parser", "Parser");
-static INCREMENTAL_UTF8_DECODER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static INT_FROMBYTES: PyImportable = PyImportable::new("builtins", "int.from_bytes");
 static IPADDRESS_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_address");
 static IPNETWORK_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_network");
@@ -393,46 +391,53 @@ impl CBORDecoder {
         match self.decode_length_as_usize(py, subtype)? {
             None => {
                 // Indefinite length
-                let mut bytes = PyBytes::new(py, b"");
                 let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
-                loop {
-                    let (major_type, subtype) = self.read_major_and_subtype(py)?;
-                    match (major_type, subtype) {
-                        (2, _) => {
-                            let length = self.decode_length_finite(py, subtype)?;
-                            if length > sys_maxsize {
+                let bytes = PyBytes::new_with_writer(py, 0, |writer| {
+                    loop {
+                        let (major_type, subtype) = self.read_major_and_subtype(py)?;
+                        match (major_type, subtype) {
+                            (2, _) => {
+                                let length = self.decode_length_finite(py, subtype)?;
+                                if length > sys_maxsize {
+                                    return Err(CBORDecodeError::new_err(format!(
+                                        "chunk too long in an indefinite bytestring chunk: {length}"
+                                    )));
+                                }
+                                let length = length as usize;
+                                let chunk = self.read(py, length)?;
+                                writer.write_all(&chunk)?;
+                            }
+                            (7, 31) => break Ok(()), // break marker
+                            _ => {
                                 return Err(CBORDecodeError::new_err(format!(
-                                    "chunk too long in an indefinite bytestring chunk: {length}"
+                                    "non-byte string (major type {major_type}) found in indefinite \
+                                    length byte string"
                                 )));
                             }
-                            let length = length as usize;
-                            let chunk = self.read(py, length)?;
-                            bytes = bytes.add(chunk)?.cast_into()?;
-                        }
-                        (7, 31) => break Ok(Value(bytes.into_any())), // break marker
-                        _ => {
-                            return Err(CBORDecodeError::new_err(format!(
-                                "non-byte string (major type {major_type}) found in indefinite \
-                                    length byte string"
-                            )));
                         }
                     }
-                }
+                })?;
+                Ok(Value(bytes.into_any()))
             }
             Some(length) if length <= 65536 => {
                 let bytes = self.read(py, length)?;
                 Ok(StringValue(PyBytes::new(py, &bytes).into_any(), length))
             }
             Some(length) => {
-                // Incrementally read the bytestring, in chunks of 65536 bytes
-                let mut bytes = PyBytes::new(py, b"");
-                let mut remaining_length = length;
-                while remaining_length > 0 {
-                    let chunk_size = remaining_length.min(65536);
-                    let chunk = self.read(py, chunk_size)?;
-                    remaining_length -= chunk_size;
-                    bytes = bytes.add(chunk)?.cast_into()?;
-                }
+                // Incrementally read the bytestring, in chunks of 65536 bytes. The claimed
+                // length is untrusted until the data has actually been read, so no more than
+                // 64 KiB of it is reserved up front; a truncated payload claiming a huge length
+                // can then force at most a 64 KiB allocation.
+                let bytes = PyBytes::new_with_writer(py, length.min(65536), |writer| {
+                    let mut remaining_length = length;
+                    while remaining_length > 0 {
+                        let chunk_size = remaining_length.min(65536);
+                        let chunk = self.read(py, chunk_size)?;
+                        remaining_length -= chunk_size;
+                        writer.write_all(&chunk)?;
+                    }
+                    Ok(())
+                })?;
                 Ok(StringValue(bytes.into_any(), length))
             }
         }
@@ -443,7 +448,7 @@ impl CBORDecoder {
         match self.decode_length_as_usize(py, subtype)? {
             None => {
                 // Indefinite length
-                let mut string = PyString::new(py, "");
+                let mut parts: Vec<Bound<'py, PyString>> = Vec::new();
                 loop {
                     let (major_type, subtype) = self.read_major_and_subtype(py)?;
                     let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
@@ -467,9 +472,14 @@ impl CBORDecoder {
                                     )
                                     .and_then(|string| string.cast_into().map_err(PyErr::from)),
                             }?;
-                            string = string.add(decoded)?.cast_into()?;
+                            parts.push(decoded);
                         }
-                        (7, 31) => break Ok(Value(string.into_any())), // break marker
+                        (7, 31) => {
+                            // break marker
+                            break PyString::new(py, "")
+                                .call_method1(intern!(py, "join"), (PyList::new(py, parts)?,))
+                                .map(|joined| Value(joined.into_any()));
+                        }
                         _ => {
                             return Err(CBORDecodeError::new_err(format!(
                                 "non-text string (major type {major_type}) found in indefinite \
@@ -491,33 +501,41 @@ impl CBORDecoder {
                 Ok(StringValue(decoded_string, length))
             }
             Some(length) => {
-                // Incrementally decode the string, in chunks of 65536 bytes
-                let decoder_class = INCREMENTAL_UTF8_DECODER
-                    .get_or_try_init(py, || -> PyResult<Py<PyAny>> {
-                        let decoder = py
-                            .import("codecs")?
-                            .getattr("lookup")?
-                            .call1(("utf-8",))?
-                            .getattr("incrementaldecoder")?;
-                        Ok(decoder.unbind())
-                    })?
-                    .bind(py);
-                let decoder = match self.str_errors.as_ref() {
-                    None => decoder_class.call0()?,
-                    Some(str_errors) => decoder_class.call1((str_errors,))?,
+                // Read the string into a single bytes object in chunks of 65536 bytes, then
+                // decode it in one pass. As with the bytestring path, the claimed length is
+                // untrusted until the data has actually been read, so no more than 64 KiB of it
+                // is reserved up front; a truncated payload claiming a huge length can then force
+                // at most a 64 KiB allocation. Decoding the assembled bytes as a whole also keeps
+                // multi-byte characters straddling a chunk boundary intact, so no incremental
+                // decoder is needed.
+                let bytes = PyBytes::new_with_writer(py, length.min(65536), |writer| {
+                    let mut remaining_length = length;
+                    while remaining_length > 0 {
+                        let chunk_size = remaining_length.min(65536);
+                        let chunk = self.read(py, chunk_size)?;
+                        remaining_length -= chunk_size;
+                        writer.write_all(&chunk)?;
+                    }
+                    Ok(())
+                })?;
+                let errors = match self.str_errors.as_ref() {
+                    None => None,
+                    // set_str_errors only ever stores these values
+                    Some(str_errors) => Some(match str_errors.to_str(py)? {
+                        "ignore" => c"ignore",
+                        "replace" => c"replace",
+                        "backslashreplace" => c"backslashreplace",
+                        "surrogateescape" => c"surrogateescape",
+                        other => {
+                            return Err(CBORDecodeError::new_err(format!(
+                                "invalid str_errors value: '{other}'"
+                            )));
+                        }
+                    }),
                 };
-                let mut string = PyString::new(py, "").into_any();
-                let mut remaining_length = length;
-                while remaining_length > 0 {
-                    let chunk_size = remaining_length.min(65536);
-                    let chunk = self.read(py, chunk_size)?;
-                    remaining_length -= chunk_size;
-                    let is_final_chunk = remaining_length == 0;
-                    let decoded_chunk =
-                        decoder.call_method1(intern!(py, "decode"), (chunk, is_final_chunk))?;
-                    string = string.add(decoded_chunk)?;
-                }
-                Ok(StringValue(string.into_any(), length))
+                let decoded =
+                    PyString::from_encoded_object(bytes.as_any(), Some(c"utf-8"), errors)?;
+                Ok(StringValue(decoded.into_any(), length))
             }
         }
     }

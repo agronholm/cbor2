@@ -27,6 +27,7 @@ from ipaddress import (
 )
 from pathlib import Path
 from socket import socketpair
+from time import perf_counter
 from typing import Any, NoReturn
 from uuid import UUID
 
@@ -420,6 +421,29 @@ def test_string_issue_264_multiple_chunks_utf8_boundary() -> None:
     result = loads(payload)
     assert result == expected
     assert len(result) == 131170  # 65535 + 1 + 65533 + 1 + 100 characters
+
+
+def test_indefinite_bytestring_many_chunks() -> None:
+    # An indefinite-length byte string assembled from many single-byte chunks used to be
+    # concatenated with repeated "+", which is quadratic in the number of chunks. The time
+    # bound is generous; only the quadratic behaviour blows past it.
+    count = 400000
+    payload = b"\x5f" + b"\x41\x2a" * count + b"\xff"
+    start = perf_counter()
+    result = loads(payload)
+    assert perf_counter() - start < 2.0
+    assert result == b"\x2a" * count
+
+
+def test_indefinite_string_many_chunks() -> None:
+    # Same quadratic concatenation issue for indefinite-length text strings; the final chunk
+    # carries a multi-byte character to exercise the join path.
+    count = 400000
+    payload = b"\x7f" + b"\x61\x61" * (count - 1) + b"\x62\xc3\xb6" + b"\xff"
+    start = perf_counter()
+    result = loads(payload)
+    assert perf_counter() - start < 2.0
+    assert result == "a" * (count - 1) + "ö"
 
 
 @pytest.mark.parametrize(

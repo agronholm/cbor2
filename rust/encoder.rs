@@ -972,7 +972,7 @@ impl CBOREncoder {
                     // If the timestamp can be converted to an integer without loss, encode that
                     // integer instead
                     let timestamp_float: f64 = py_timestamp.extract()?;
-                    let timestamp_int: u32 = timestamp_float as u32;
+                    let timestamp_int: i64 = timestamp_float as i64;
                     let arg: Bound<'_, PyAny> = if timestamp_int as f64 == timestamp_float {
                         PyInt::new(py, timestamp_int).into_any()
                     } else {
