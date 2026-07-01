@@ -21,14 +21,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     environment: release
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Install the Rust toolchain
       uses: actions-rs/toolchain@v1
       if: runner.os == 'Windows'
       with:
         toolchain: stable
     - name: Build wheels
-      uses: pypa/cibuildwheel@v3.4
+      uses: pypa/cibuildwheel@v4.1
       env:
         CIBW_ARCHS: "auto"
         CIBW_TEST_GROUPS: "test"
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
@@ -87,7 +87,7 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - id: changelog
       uses: agronholm/release-notes@v1
       with:
