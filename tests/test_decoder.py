@@ -873,6 +873,16 @@ def test_uuid_invalid_type() -> None:
             IPv6Interface("fe80::202:2ff:ffff:fe03:303%2/64"),
             id="ipv6if_num_zoneid",
         ),
+        pytest.param(
+            "d8368350fe8000000000020202fffffffe030303f64465746830",
+            IPv6Address("fe80::202:2ff:ffff:fe03:303%eth0"),
+            id="ipv6addr_str_zoneid",
+        ),
+        pytest.param(
+            "d8368350fe8000000000020202fffffffe030303f64132",
+            IPv6Address("fe80::202:2ff:ffff:fe03:303%2"),
+            id="ipv6addr_num_zoneid",
+        ),
     ],
 )
 def test_ipaddress(payload: bytes, expected: Any) -> None:
