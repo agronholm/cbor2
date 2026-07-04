@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
-**UNRELEASED**
+**6.1.3** (2026-07-04)
 
 - Fixed the content of a semantic tag with no designated decoder being decoded as immutable
   (``tuple``/``frozendict``) regardless of the ``immutable`` flag. The nested array/map of such a
@@ -18,6 +18,22 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Fixed the IPv4/IPv6 network decoders (tags 52 and 54) silently truncating an address byte string
   that is longer than the address size instead of rejecting it as malformed
   (`#309 <https://github.com/agronholm/cbor2/pull/309>`_; PR by @sahvx655-wq)
+- Fixed quadratic decoding time for indefinite-length and large definite-length byte and text
+  strings, caused by concatenating each chunk onto the accumulated result with ``+`` instead of
+  building the result once
+  (`#316 <https://github.com/agronholm/cbor2/pull/316>`_; PR by @sahvx655-wq)
+- Fixed ``datetime_as_timestamp`` encoding whole-second datetimes before 1970 or after 2106 as
+  floats instead of integers, because the timestamp was narrowed through an unsigned 32-bit integer
+  (`#317 <https://github.com/agronholm/cbor2/pull/317>`_; PR by @sahvx655-wq)
+- Fixed the encoder measuring text strings by code point count instead of UTF-8 byte length when
+  deciding whether to add them to the string reference namespace, desynchronising it from the
+  decoder (which counts bytes) and corrupting later string references for non-ASCII strings
+  (`#314 <https://github.com/agronholm/cbor2/pull/314>`_; PR by @sahvx655-wq)
+- Fixed the decoder rejecting scoped IPv6 addresses (tag 54) with a ``CBORDecodeError`` reading
+  ``invalid types in input array``; the encoder emits them as ``[address, null, zone id]`` but the
+  decoder only handled the network and interface array forms, so a scoped
+  :class:`~ipaddress.IPv6Address` could not be decoded back
+  (`#324 <https://github.com/agronholm/cbor2/pull/324>`_; PR by @sahvx655-wq)
 
 **6.1.2** (2026-06-02)
 

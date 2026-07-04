@@ -299,6 +299,18 @@ def test_simple_val_as_key() -> None:
             "c11a514b67b0",
             id="timestamp/eet",
         ),
+        pytest.param(
+            datetime(1969, 12, 31, 0, 0, 0, tzinfo=timezone.utc),
+            True,
+            "c13a0001517f",
+            id="timestamp/pre-epoch",
+        ),
+        pytest.param(
+            datetime(2200, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            True,
+            "c11b00000001b09e1900",
+            id="timestamp/post-2106",
+        ),
     ],
 )
 def test_datetime(value: datetime, as_timestamp: bool, expected: str) -> None:
@@ -675,6 +687,16 @@ def test_encode_stringrefs_datetime() -> None:
     value = [datetime(2026, 1, 19, tzinfo=timezone.utc), "abc", "abc"]
     expected = unhexlify("D9010083C074323032362D30312D31395430303A30303A30305A63616263D81901")
     assert dumps(value, string_referencing=True) == expected
+
+
+def test_encode_stringrefs_non_ascii() -> None:
+    # "€€" is 2 code points but 6 UTF-8 bytes; the reference threshold is measured in
+    # encoded bytes, so it must be registered (index 0) just like the decoder counts it
+    value = ["€€", "abc", "abc"]
+    encoded = dumps(value, string_referencing=True)
+    expected = unhexlify("d901008366e282ace282ac63616263d81901")
+    assert encoded == expected
+    assert loads(encoded) == value
 
 
 @pytest.mark.parametrize(

@@ -303,12 +303,20 @@ impl CBOREncoder {
     fn maybe_stringref(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
         let py = slf.py();
         let mut this = slf.borrow_mut();
-        let (index, is_string) = if let Ok(py_string) = value.cast::<PyString>() {
+        let (index, is_string, length) = if let Ok(py_string) = value.cast::<PyString>() {
             let string: String = py_string.extract()?;
-            (this.string_references.get(&string).copied(), true)
+            (
+                this.string_references.get(&string).copied(),
+                true,
+                string.len(),
+            )
         } else {
             let bytes: Vec<u8> = value.cast::<PyBytes>()?.extract()?;
-            (this.bytes_references.get(&bytes).copied(), false)
+            (
+                this.bytes_references.get(&bytes).copied(),
+                false,
+                bytes.len(),
+            )
         };
         match index {
             Some(index) => {
@@ -317,7 +325,6 @@ impl CBOREncoder {
                 Ok(true)
             }
             None => {
-                let length = value.len()?;
                 let next_index = this.string_references.len() + this.bytes_references.len();
                 let is_referenced = match next_index {
                     ..24 => length >= 3,
@@ -966,7 +973,7 @@ impl CBOREncoder {
                     // If the timestamp can be converted to an integer without loss, encode that
                     // integer instead
                     let timestamp_float: f64 = py_timestamp.extract()?;
-                    let timestamp_int: u32 = timestamp_float as u32;
+                    let timestamp_int: i64 = timestamp_float as i64;
                     let arg: Bound<'_, PyAny> = if timestamp_int as f64 == timestamp_float {
                         PyInt::new(py, timestamp_int).into_any()
                     } else {
