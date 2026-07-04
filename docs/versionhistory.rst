@@ -25,6 +25,11 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   deciding whether to add them to the string reference namespace, desynchronising it from the
   decoder (which counts bytes) and corrupting later string references for non-ASCII strings
   (`#314 <https://github.com/agronholm/cbor2/pull/314>`_; PR by @sahvx655-wq)
+- Fixed the decoder rejecting scoped IPv6 addresses (tag 54) with a ``CBORDecodeError`` reading
+  ``invalid types in input array``; the encoder emits them as ``[address, null, zone id]`` but the
+  decoder only handled the network and interface array forms, so a scoped
+  :class:`~ipaddress.IPv6Address` could not be decoded back
+  (`#324 <https://github.com/agronholm/cbor2/pull/324>`_; PR by @sahvx655-wq)
 
 **6.1.2** (2026-06-02)
 

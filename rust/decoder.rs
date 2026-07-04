@@ -1208,35 +1208,12 @@ impl CBORDecoder {
         {
             // The decoded value was a 2-item (or 3 with zone ID) array.
             // Check the types of the elements:
-            // (int, bytes) -> network
-            // (bytes, int) -> interface
+            // (bytes, null) -> scoped address
+            // (int, bytes)  -> network
+            // (bytes, int)  -> interface
             let first_item = tuple.get_item(0)?;
             let second_item = tuple.get_item(1)?;
             let zone_id = tuple.get_item(2).ok();
-            let (class, addr_bytes, prefix) = if let Ok(prefix) = first_item.cast::<PyInt>()
-                && let Ok(address) = second_item.cast::<PyBytes>()
-            {
-                let mut address_vec: Vec<u8> = address.extract()?;
-                if address_vec.len() > 16 {
-                    return Err(CBORDecodeError::new_err(format!(
-                        "address byte string for IPv6 network is too long ({} bytes)",
-                        address_vec.len()
-                    )));
-                }
-                address_vec.resize(16, 0);
-                Ok((
-                    IPV6NETWORK_TYPE.get(py)?,
-                    PyBytes::new(py, address_vec.as_slice()),
-                    prefix,
-                ))
-            } else if let Ok(address) = first_item.cast_into::<PyBytes>()
-                && let Ok(prefix) = second_item.cast::<PyInt>()
-            {
-                Ok((IPV6INTERFACE_TYPE.get(py)?, address, prefix))
-            } else {
-                Err(CBORDecodeError::new_err("invalid types in input array"))
-            }?;
-            let addr_obj = ipv6addr_class.call1((addr_bytes,))?;
 
             // Format the zone ID suffix if a zone ID was included
             // (bytes or integer as the last item of a 3-tuple)
@@ -1255,8 +1232,41 @@ impl CBORDecoder {
                 String::default()
             };
 
-            let formatted_addr = format!("{addr_obj}{zone_id_suffix}/{prefix}");
-            class.call1((formatted_addr,))?
+            if second_item.is_none()
+                && let Ok(address) = first_item.cast::<PyBytes>()
+            {
+                // A scoped address is encoded as [address, null, zone id]; with no prefix
+                // length it decodes to a bare IPv6 address rather than a network or interface.
+                let addr_obj = ipv6addr_class.call1((address,))?;
+                ipv6addr_class.call1((format!("{addr_obj}{zone_id_suffix}"),))?
+            } else {
+                let (class, addr_bytes, prefix) = if let Ok(prefix) = first_item.cast::<PyInt>()
+                    && let Ok(address) = second_item.cast::<PyBytes>()
+                {
+                    let mut address_vec: Vec<u8> = address.extract()?;
+                    if address_vec.len() > 16 {
+                        return Err(CBORDecodeError::new_err(format!(
+                            "address byte string for IPv6 network is too long ({} bytes)",
+                            address_vec.len()
+                        )));
+                    }
+                    address_vec.resize(16, 0);
+                    Ok((
+                        IPV6NETWORK_TYPE.get(py)?,
+                        PyBytes::new(py, address_vec.as_slice()),
+                        prefix,
+                    ))
+                } else if let Ok(address) = first_item.cast_into::<PyBytes>()
+                    && let Ok(prefix) = second_item.cast::<PyInt>()
+                {
+                    Ok((IPV6INTERFACE_TYPE.get(py)?, address, prefix))
+                } else {
+                    Err(CBORDecodeError::new_err("invalid types in input array"))
+                }?;
+                let addr_obj = ipv6addr_class.call1((addr_bytes,))?;
+                let formatted_addr = format!("{addr_obj}{zone_id_suffix}/{prefix}");
+                class.call1((formatted_addr,))?
+            }
         } else {
             return Err(CBORDecodeError::new_err(
                 "input value must be a bytestring or an array of 2 elements",
