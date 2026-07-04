@@ -1104,7 +1104,7 @@ def test_unknown_tag_value_respects_immutable() -> None:
     map_payload = dumps(CBORTag(6000, {"a": 1}))
     assert isinstance(loads(map_payload).value, dict)
     immutable_map = loads(map_payload, immutable=True).value
-    assert not isinstance(immutable_map, dict)
+    assert isinstance(immutable_map, frozendict)
     assert immutable_map["a"] == 1
 
 
