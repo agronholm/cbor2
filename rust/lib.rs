@@ -2,6 +2,8 @@
 
 mod decoder;
 mod encoder;
+mod stream_decoder;
+mod tokens;
 mod types;
 mod utils;
 
@@ -28,6 +30,15 @@ mod _cbor2 {
 
     #[pymodule_export]
     use crate::decoder::shareable_decoder;
+
+    #[pymodule_export]
+    use crate::stream_decoder::CBORStreamDecoder;
+
+    #[pymodule_export]
+    use crate::tokens::{
+        ArrayStart, Boolean, Break, ByteString, ByteStringStart, Float, Integer, MapStart,
+        MoreType, Null, Simple, Tag, TextString, TextStringStart, UndefinedToken,
+    };
 
     #[pymodule_export]
     use crate::types::CBORTag;
@@ -59,9 +70,9 @@ mod _cbor2 {
     #[pymodule_export]
     use crate::types::CBORDecodeEOF;
 
-    pub static SYS_MAXSIZE: PyOnceLock<u64> = PyOnceLock::new();
     pub static UNDEFINED: PyOnceLock<Py<UndefinedType>> = PyOnceLock::new();
     pub static BREAK_MARKER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    pub static MORE: PyOnceLock<Py<crate::tokens::MoreType>> = PyOnceLock::new();
 
     ///  Deserialize an object from an open file.
     ///
@@ -411,13 +422,16 @@ mod _cbor2 {
         m.add("undefined", undefined.clone())?;
         UNDEFINED.get_or_init(py, || undefined.unbind());
 
+        let more = Bound::new(py, crate::tokens::MoreType)?;
+        m.add("MORE", more.clone())?;
+        MORE.get_or_init(py, || more.unbind());
+
         BREAK_MARKER.get_or_try_init(py, || {
             py.import("builtins")?
                 .getattr("object")?
                 .call0()
                 .map(Bound::unbind)
         })?;
-        SYS_MAXSIZE.get_or_try_init(py, || py.import("sys")?.getattr("maxsize")?.extract())?;
 
         Ok(())
     }

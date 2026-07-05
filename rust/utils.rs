@@ -1,6 +1,8 @@
+use crate::types::{CBORDecodeEOF, CBORDecodeError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::{PyErr, PyResult, Python};
+use pyo3::{PyErr, PyErrArguments, PyResult, Python};
+use std::fmt::Display;
 
 pub struct PyImportable {
     lock: PyOnceLock<Py<PyAny>>,
@@ -36,4 +38,25 @@ pub fn create_exc_from(py: Python<'_>, exc: PyErr, cause: Option<PyErr>) -> PyEr
 
 pub fn raise_exc_from<T>(py: Python<'_>, exc: PyErr, cause: Option<PyErr>) -> PyResult<T> {
     Err(create_exc_from(py, exc, cause))
+}
+
+/// Wraps an error raised while decoding an item of the given ``typename`` in a
+/// [`CBORDecodeError`], preserving [`CBORDecodeEOF`] errors as-is and attaching
+/// non-CBOR errors as the cause.
+pub fn wrap_decode_error(py: Python<'_>, err: PyErr, typename: &dyn Display) -> PyErr {
+    if err.is_instance_of::<CBORDecodeEOF>(py) {
+        err
+    } else if err.is_instance_of::<CBORDecodeError>(py) {
+        CBORDecodeError::new_err(format!(
+            "error decoding {}: {}",
+            typename,
+            err.arguments(py)
+        ))
+    } else {
+        create_exc_from(
+            py,
+            CBORDecodeError::new_err(format!("error decoding {}", typename)),
+            Some(err),
+        )
+    }
 }

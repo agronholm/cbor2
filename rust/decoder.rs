@@ -1,30 +1,36 @@
-use crate::_cbor2::{BREAK_MARKER, SYS_MAXSIZE, UNDEFINED};
-use crate::decoder::DecoderResult::{
-    BeginFrame, CompleteFrame, ContinueFrame, Shareable, SharedReference, StringNamespace,
-    StringReference, StringValue, Value,
-};
+//! The high-level CBOR decoder.
+//!
+//! [`CBORDecoder`] consumes the primitive token stream produced by
+//! [`crate::stream_decoder::CBORStreamDecoder`] and assembles it into fully
+//! formed Python objects, applying semantic-tag decoders, hooks, shared/string
+//! references, ``immutable`` handling and depth limits.
+//!
+//! The assembler is a plain-data stack machine (see [`Frame`]) rather than a
+//! closure-based one, so its state can be suspended between calls. This enables
+//! both the one-shot [`CBORDecoder::decode`] fast path and the incremental
+//! [`CBORDecoder::push`] API.
+
+use crate::_cbor2::{BREAK_MARKER, MORE, UNDEFINED};
+use crate::stream_decoder::{CBORStreamDecoder, Token};
 #[cfg(not(Py_3_15))]
 use crate::types::FrozenDict;
 use crate::types::{
-    CBORDecodeEOF, CBORDecodeError, CBORSimpleValue, CBORTag, DECIMAL_TYPE, FRACTION_TYPE,
-    IPV4ADDRESS_TYPE, IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE,
-    IPV6NETWORK_TYPE, UUID_TYPE,
+    CBORDecodeError, CBORSimpleValue, CBORTag, DECIMAL_TYPE, FRACTION_TYPE, IPV4ADDRESS_TYPE,
+    IPV4INTERFACE_TYPE, IPV4NETWORK_TYPE, IPV6ADDRESS_TYPE, IPV6INTERFACE_TYPE, IPV6NETWORK_TYPE,
+    UUID_TYPE,
 };
-use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
-use half::f16;
-use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
+use crate::utils::{PyImportable, create_exc_from, wrap_decode_error};
+use pyo3::exceptions::{PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{
     PyBytes, PyCFunction, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyListMethods, PyMapping,
     PySet, PyString, PyTuple,
 };
-use pyo3::{IntoPyObjectExt, Py, PyAny, PyErrArguments, intern, pyclass};
+use pyo3::{IntoPyObjectExt, intern};
 use std::fmt::{Display, Formatter};
-use std::mem::{replace, take};
 
 const IMMUTABLE_ATTR: &str = "_cbor2_immutable";
 const NAME_ATTR: &str = "_cbor2_name";
-const SEEK_CUR: u8 = 1;
 
 static DATE_FROMISOFORMAT: PyImportable = PyImportable::new("datetime", "date.fromisoformat");
 static DATE_FROMORDINAL: PyImportable = PyImportable::new("datetime", "date.fromordinal");
@@ -42,48 +48,26 @@ static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
 #[cfg(Py_3_15)]
 static FROZEN_DICT: PyImportable = PyImportable::new("builtins", "frozendict");
 
-enum DecoderResult<'a> {
-    BeginFrame(
-        Box<DecoderCallback<'a>>,
-        bool,
-        Option<Bound<'a, PyAny>>,
-        DisplayName<'a>,
-    ),
-    ContinueFrame(bool),
-    CompleteFrame(Bound<'a, PyAny>),
-    Value(Bound<'a, PyAny>),
-    StringValue(Bound<'a, PyAny>, usize),
-    StringNamespace,
-    StringReference(usize),
-    Shareable,
-    SharedReference(usize),
-}
+/// A transform applied to the (single) decoded content of a semantic tag.
+type TransformFn = for<'py> fn(Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>;
 
-enum DisplayName<'a> {
+/// A human-readable name for the item currently being assembled, used when
+/// wrapping errors in a [`CBORDecodeError`].
+#[derive(Clone)]
+enum DisplayName {
     String(&'static str),
     SemanticTag(u64),
-    PythonName(Bound<'a, PyAny>),
+    PythonName(String),
 }
 
-impl<'a> Display for DisplayName<'a> {
+impl Display for DisplayName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             DisplayName::String(s) => f.write_str(s),
             DisplayName::SemanticTag(tagnum) => write!(f, "semantic tag {}", tagnum),
-            DisplayName::PythonName(obj) => write!(f, "{}", obj),
+            DisplayName::PythonName(name) => f.write_str(name),
         }
     }
-}
-
-type DecoderCallback<'py> =
-    dyn 'py + FnMut(Bound<'py, PyAny>, bool) -> PyResult<DecoderResult<'py>>;
-
-struct StackFrame<'py> {
-    immutable: bool,
-    decoder_callback: Option<Box<DecoderCallback<'py>>>,
-    shareable_index: Option<usize>,
-    typename: DisplayName<'py>,
-    contains_string_namespace: bool,
 }
 
 /// Decorates a function to be a two-stage decoder.
@@ -138,6 +122,98 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
     Ok(array)
 }
 
+//
+// Assembler stack machine
+//
+
+enum ArrayStorage {
+    List(Py<PyList>),
+    Tuple(Vec<Py<PyAny>>),
+}
+
+enum MapStorage {
+    Dict(Py<PyDict>),
+    Items(Vec<(Py<PyAny>, Py<PyAny>)>),
+}
+
+enum FrameKind {
+    Array {
+        storage: ArrayStorage,
+        remaining: Option<usize>,
+    },
+    Map {
+        storage: MapStorage,
+        pending_key: Option<Py<PyAny>>,
+        remaining: Option<usize>,
+        seen_keys: Option<Py<PySet>>,
+        map_immutable: bool,
+    },
+    Set {
+        set: Option<Py<PySet>>,
+        set_immutable: bool,
+    },
+    ByteStringChunks(Vec<Py<PyBytes>>),
+    TextStringChunks(Vec<Py<PyString>>),
+    BuiltinTag(TransformFn),
+    UserSemantic(Py<PyAny>),
+    ShareablePhase2(Py<PyAny>),
+    TagHook {
+        tag: Py<PyAny>,
+        tag_immutable: bool,
+    },
+    StringRef,
+    SharedRef,
+    Shareable {
+        index: usize,
+    },
+    StringNamespace,
+}
+
+struct Frame {
+    immutable: bool,
+    typename: DisplayName,
+    kind: FrameKind,
+}
+
+/// The suspendable state of the assembler.
+struct AssemblerState {
+    frames: Vec<Frame>,
+    shareables: Vec<Option<Py<PyAny>>>,
+    string_namespaces: Vec<Vec<Py<PyAny>>>,
+    pending_value: Option<Py<PyAny>>,
+    current_immutable: bool,
+    top_level_immutable: bool,
+}
+
+impl AssemblerState {
+    fn new(immutable: bool) -> Self {
+        Self {
+            frames: Vec::new(),
+            shareables: Vec::new(),
+            string_namespaces: Vec::new(),
+            pending_value: None,
+            current_immutable: immutable,
+            top_level_immutable: immutable,
+        }
+    }
+}
+
+/// The result of feeding a value to the innermost frame.
+enum Action<'py> {
+    /// The frame needs another item; the flag forces it to be immutable.
+    Continue(bool),
+    /// The frame is complete with the given value.
+    Complete(Bound<'py, PyAny>),
+    /// Register the value as shareable ``index`` (unless already set), then complete.
+    CompleteShareable(usize, Bound<'py, PyAny>),
+    /// Resolve the value (a string reference index) against the active namespace.
+    ResolveStringRef(Bound<'py, PyAny>),
+    /// Resolve the value (a shared reference index) against the shareables.
+    ResolveSharedRef(Bound<'py, PyAny>),
+    /// Pop the innermost string namespace, then complete with the value.
+    CompletePopNamespace(Bound<'py, PyAny>),
+}
+
 /// The CBORDecoder class implements a fully featured `CBOR`_ decoder with
 /// several extensions for handling shared references, big integers, rational
 /// numbers and so on. Typically, the class is not used directly, but the
@@ -145,6 +221,9 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
 /// and use the class.
 ///
 /// When the class is constructed manually, the main entry point is :meth:`decode`.
+///
+/// The underlying low-level token stream is available as :attr:`stream`, and
+/// tokens may be fed into the decoder one at a time with :meth:`push`.
 ///
 /// :param fp: the file to read from (any file-like object opened for reading in binary mode)
 /// :param tag_hook:
@@ -177,25 +256,25 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
 /// .. _CBOR: https://cbor.io/
 #[pyclass(module = "cbor2")]
 pub struct CBORDecoder {
-    fp: Option<Py<PyAny>>,
+    // The stream decoder is held inline as a plain Rust value so that the fast
+    // path (`load`/`loads`) drives it with direct Rust calls, without allocating
+    // a second Python object or taking a runtime borrow. It is promoted to a
+    // shared `Py<CBORStreamDecoder>` lazily, the first time `stream` is accessed.
+    reader: Option<CBORStreamDecoder>,
+    stream: Option<Py<CBORStreamDecoder>>,
     tag_hook: Option<Py<PyAny>>,
     object_hook: Option<Py<PyAny>>,
     semantic_decoders: Option<Py<PyMapping>>,
-    str_errors: Option<Py<PyString>>,
-    #[pyo3(get)]
-    read_size: usize,
     #[pyo3(get)]
     max_depth: usize,
     #[pyo3(get)]
-    allow_indefinite: bool,
-    #[pyo3(get)]
     allow_duplicate_keys: bool,
-
-    read_method: Option<Py<PyAny>>,
-    buffer: Option<Py<PyBytes>>,
-    read_position: usize,
-    available_bytes: usize,
-    fp_is_seekable: bool,
+    // Policy: whether indefinite-length strings/containers are accepted. This is
+    // a high-level decoding concern, so it is enforced here rather than in the
+    // token stream (which always emits the corresponding "start" tokens).
+    #[pyo3(get)]
+    allow_indefinite: bool,
+    assembler: Option<AssemblerState>,
 }
 
 impl CBORDecoder {
@@ -212,800 +291,913 @@ impl CBORDecoder {
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
     ) -> PyResult<Self> {
-        let available_bytes = if let Some(buffer) = buffer.as_ref() {
-            buffer.len()?
-        } else {
-            0
-        };
-        let bound_str_errors = PyString::new(py, str_errors);
+        let reader = CBORStreamDecoder::new_internal(py, fp, buffer, str_errors, read_size)?;
         let mut this = Self {
-            fp: None,
+            reader: Some(reader),
+            stream: None,
             tag_hook: None,
             object_hook: None,
-            str_errors: None,
-            read_size,
-            max_depth,
-            allow_indefinite,
-            allow_duplicate_keys,
             semantic_decoders: semantic_decoders.map(|d| d.clone().unbind()),
-            read_method: None,
-            buffer: buffer.map(Bound::unbind),
-            read_position: 0,
-            available_bytes,
-            fp_is_seekable: false,
-        };
-        if let Some(fp) = fp {
-            this.set_fp(fp)?
+            max_depth,
+            allow_duplicate_keys,
+            allow_indefinite,
+            assembler: None,
         };
         this.set_tag_hook(tag_hook)?;
         this.set_object_hook(object_hook)?;
-        this.set_str_errors(&bound_str_errors)?;
         Ok(this)
     }
 
-    fn read_from_fp<'py>(
+    /// Runs `f` with shared access to the stream decoder, whether it is still
+    /// held inline or has been promoted to a Python object.
+    fn with_reader<R>(&self, py: Python<'_>, f: impl FnOnce(&CBORStreamDecoder) -> R) -> R {
+        match &self.reader {
+            Some(reader) => f(reader),
+            None => f(&self.stream.as_ref().unwrap().bind(py).borrow()),
+        }
+    }
+
+    /// Runs `f` with mutable access to the stream decoder.
+    fn with_reader_mut<R>(
         &mut self,
-        py: Python<'py>,
-        minimum_amount: usize,
-    ) -> PyResult<(Bound<'py, PyBytes>, usize)> {
-        let read_size: usize = if self.fp_is_seekable {
-            self.read_size
-        } else {
-            1
-        };
-        let bytes_to_read = minimum_amount.max(read_size);
-        let num_read_bytes = if let Some(read) = self.read_method.as_ref() {
-            let bytes_from_fp: Bound<PyBytes> =
-                read.bind(py).call1((&bytes_to_read,))?.cast_into()?;
-            let num_read_bytes = bytes_from_fp.len()?;
-            if num_read_bytes >= minimum_amount {
-                return Ok((bytes_from_fp, num_read_bytes));
-            }
-            num_read_bytes
-        } else {
-            0
-        };
-        Err(CBORDecodeEOF::new_err(format!(
-            "premature end of stream (expected to read at least {minimum_amount} \
-                 bytes, got {num_read_bytes} instead)"
-        )))
-    }
-
-    fn read_exact<const N: usize>(&mut self, py: Python<'_>) -> PyResult<[u8; N]> {
-        if self.available_bytes == 0 {
-            // No buffer
-            let (new_bytes, amount_read) = self.read_from_fp(py, N)?;
-            self.read_position = N;
-            self.available_bytes = amount_read - N;
-            self.buffer = Some(new_bytes.unbind());
-            Ok(self.buffer.as_ref().unwrap().as_bytes(py)[..N].try_into()?)
-        } else if self.available_bytes < N {
-            // Combine the remnants of the partial buffer with new data read from the file
-            let needed_bytes = N - self.available_bytes;
-            let mut concatenated_buffer: Vec<u8> = self.buffer.take().unwrap().extract(py)?;
-            if self.read_position > 0 {
-                concatenated_buffer.drain(..self.read_position);
-            }
-            concatenated_buffer.truncate(self.available_bytes);
-            let (new_bytes, amount_read) = self.read_from_fp(py, needed_bytes)?;
-            concatenated_buffer.extend_from_slice(&new_bytes[..needed_bytes]);
-            self.buffer = Some(new_bytes.unbind());
-            self.available_bytes = amount_read - needed_bytes;
-            self.read_position = needed_bytes;
-            Ok(concatenated_buffer
-                .try_into()
-                .expect("buffer size mismatch"))
-        } else {
-            // Return a slice from the existing bytes object
-            let slice: [u8; N] = self.buffer.as_ref().unwrap().bind(py).as_bytes()
-                [self.read_position..self.read_position + N]
-                .try_into()?;
-            self.available_bytes -= N;
-            self.read_position += N;
-            Ok(slice)
-        }
-    }
-
-    fn read_major_and_subtype(&mut self, py: Python<'_>) -> PyResult<(u8, u8)> {
-        let initial_byte = self.read_exact::<1>(py)?[0];
-        let major_type = initial_byte >> 5;
-        let subtype = initial_byte & 31;
-        Ok((major_type, subtype))
-    }
-
-    fn decode_length_finite(&mut self, py: Python<'_>, subtype: u8) -> PyResult<u64> {
-        match self.decode_length(py, subtype)? {
-            Some(length) => Ok(length),
-            None => Err(CBORDecodeError::new_err(
-                "indefinite length not allowed here",
-            )),
-        }
-    }
-
-    /// Like [`decode_length`], but converts `Some(u64)` to `Some(usize)`, returning
-    /// a [`CBORDecodeError`] if the value exceeds the platform's address space.
-    fn decode_length_as_usize(&mut self, py: Python<'_>, subtype: u8) -> PyResult<Option<usize>> {
-        match self.decode_length(py, subtype)? {
-            Some(length) => usize::try_from(length).map(Some).map_err(|_| {
-                CBORDecodeError::new_err(format!(
-                    "huge item length {length} exceeds the system address space"
-                ))
-            }),
-            None => Ok(None),
+        py: Python<'_>,
+        f: impl FnOnce(&mut CBORStreamDecoder) -> R,
+    ) -> R {
+        match &mut self.reader {
+            Some(reader) => f(reader),
+            None => f(&mut self.stream.as_ref().unwrap().bind(py).borrow_mut()),
         }
     }
 
     //
-    // Decoders for major tags (0-7)
+    // Immutability tracking helpers (mirroring the previous closure machine)
     //
 
-    /// Decode the length of the next item.
-    ///
-    /// This is a low-level operation that may be needed by custom decoder callbacks.
-    ///
-    /// :param subtype:
-    /// :return: the length of the item, or :data:`None` to indicate an indefinite-length item
-    fn decode_length(&mut self, py: Python<'_>, subtype: u8) -> PyResult<Option<u64>> {
-        let length = match subtype {
-            ..24 => Some(subtype as u64),
-            24 => Some(self.read_exact::<1>(py)?[0] as u64),
-            25 => Some(u16::from_be_bytes(self.read_exact(py)?) as u64),
-            26 => Some(u32::from_be_bytes(self.read_exact(py)?) as u64),
-            27 => Some(u64::from_be_bytes(self.read_exact(py)?)),
-            31 => {
-                if !self.allow_indefinite {
-                    return Err(CBORDecodeError::new_err(
-                        "encountered indefinite length but it has been disabled",
-                    ));
-                }
-                None
-            }
-            _ => {
-                return Err(CBORDecodeError::new_err(format!(
-                    "unknown unsigned integer subtype 0x{subtype:x}"
-                )));
-            }
-        };
-        Ok(length)
+    fn begin_frame(state: &mut AssemblerState, requested_immutable: bool) {
+        state.current_immutable = state.current_immutable || requested_immutable;
     }
 
-    fn decode_uint<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<DecoderResult<'py>> {
-        // Major tag 0
-        let uint: u64 = self.decode_length_finite(py, subtype)?;
-        Ok(Value(uint.into_bound_py_any(py)?))
-    }
-
-    fn decode_negint<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<DecoderResult<'py>> {
-        // Major tag 1
-        let uint: u64 = self.decode_length_finite(py, subtype)?;
-        let signed_int = -(uint as i128) - 1;
-        Ok(Value(signed_int.into_bound_py_any(py)?))
-    }
-
-    fn decode_bytestring<'py>(
-        &mut self,
-        py: Python<'py>,
-        subtype: u8,
-    ) -> PyResult<DecoderResult<'py>> {
-        // Major tag 2
-        match self.decode_length_as_usize(py, subtype)? {
-            None => {
-                // Indefinite length
-                let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
-                let bytes = PyBytes::new_with_writer(py, 0, |writer| {
-                    loop {
-                        let (major_type, subtype) = self.read_major_and_subtype(py)?;
-                        match (major_type, subtype) {
-                            (2, _) => {
-                                let length = self.decode_length_finite(py, subtype)?;
-                                if length > sys_maxsize {
-                                    return Err(CBORDecodeError::new_err(format!(
-                                        "chunk too long in an indefinite bytestring chunk: {length}"
-                                    )));
-                                }
-                                let length = length as usize;
-                                let chunk = self.read(py, length)?;
-                                writer.write_all(&chunk)?;
-                            }
-                            (7, 31) => break Ok(()), // break marker
-                            _ => {
-                                return Err(CBORDecodeError::new_err(format!(
-                                    "non-byte string (major type {major_type}) found in indefinite \
-                                    length byte string"
-                                )));
-                            }
-                        }
-                    }
-                })?;
-                Ok(Value(bytes.into_any()))
-            }
-            Some(length) if length <= 65536 => {
-                let bytes = self.read(py, length)?;
-                Ok(StringValue(PyBytes::new(py, &bytes).into_any(), length))
-            }
-            Some(length) => {
-                // Incrementally read the bytestring, in chunks of 65536 bytes. The claimed
-                // length is untrusted until the data has actually been read, so no more than
-                // 64 KiB of it is reserved up front; a truncated payload claiming a huge length
-                // can then force at most a 64 KiB allocation.
-                let bytes = PyBytes::new_with_writer(py, length.min(65536), |writer| {
-                    let mut remaining_length = length;
-                    while remaining_length > 0 {
-                        let chunk_size = remaining_length.min(65536);
-                        let chunk = self.read(py, chunk_size)?;
-                        remaining_length -= chunk_size;
-                        writer.write_all(&chunk)?;
-                    }
-                    Ok(())
-                })?;
-                Ok(StringValue(bytes.into_any(), length))
-            }
-        }
-    }
-
-    fn decode_string<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<DecoderResult<'py>> {
-        // Major tag 3
-        match self.decode_length_as_usize(py, subtype)? {
-            None => {
-                // Indefinite length
-                let mut parts: Vec<Bound<'py, PyString>> = Vec::new();
-                loop {
-                    let (major_type, subtype) = self.read_major_and_subtype(py)?;
-                    let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
-                    match (major_type, subtype) {
-                        (3, _) => {
-                            let length = self.decode_length_finite(py, subtype)?;
-                            if length > sys_maxsize {
-                                return Err(CBORDecodeError::new_err(format!(
-                                    "chunk too long in an indefinite text string chunk: {length}"
-                                )));
-                            }
-                            let length = length as usize;
-                            let bytes = self.read(py, length)?;
-                            let decoded = match self.str_errors.as_ref() {
-                                None => PyString::from_bytes(py, bytes.as_slice()),
-                                Some(str_errors) => bytes
-                                    .into_bound_py_any(py)?
-                                    .call_method1(
-                                        intern!(py, "decode"),
-                                        (intern!(py, "utf-8"), str_errors),
-                                    )
-                                    .and_then(|string| string.cast_into().map_err(PyErr::from)),
-                            }?;
-                            parts.push(decoded);
-                        }
-                        (7, 31) => {
-                            // break marker
-                            break PyString::new(py, "")
-                                .call_method1(intern!(py, "join"), (PyList::new(py, parts)?,))
-                                .map(|joined| Value(joined.into_any()));
-                        }
-                        _ => {
-                            return Err(CBORDecodeError::new_err(format!(
-                                "non-text string (major type {major_type}) found in indefinite \
-                                    length text string"
-                            )));
-                        }
-                    }
-                }
-            }
-            Some(length) if length <= 65536 => {
-                let bytes = self.read(py, length)?;
-                let decoded_string: Bound<'_, PyAny> = match self.str_errors.as_ref() {
-                    None => PyString::from_bytes(py, bytes.as_slice())?.into_any(),
-                    Some(str_errors) => bytes.into_bound_py_any(py)?.call_method1(
-                        intern!(py, "decode"),
-                        (intern!(py, "utf-8"), str_errors.bind(py)),
-                    )?,
-                };
-                Ok(StringValue(decoded_string, length))
-            }
-            Some(length) => {
-                // Read the string into a single bytes object in chunks of 65536 bytes, then
-                // decode it in one pass. As with the bytestring path, the claimed length is
-                // untrusted until the data has actually been read, so no more than 64 KiB of it
-                // is reserved up front; a truncated payload claiming a huge length can then force
-                // at most a 64 KiB allocation. Decoding the assembled bytes as a whole also keeps
-                // multi-byte characters straddling a chunk boundary intact, so no incremental
-                // decoder is needed.
-                let bytes = PyBytes::new_with_writer(py, length.min(65536), |writer| {
-                    let mut remaining_length = length;
-                    while remaining_length > 0 {
-                        let chunk_size = remaining_length.min(65536);
-                        let chunk = self.read(py, chunk_size)?;
-                        remaining_length -= chunk_size;
-                        writer.write_all(&chunk)?;
-                    }
-                    Ok(())
-                })?;
-                let errors = match self.str_errors.as_ref() {
-                    None => None,
-                    // set_str_errors only ever stores these values
-                    Some(str_errors) => Some(match str_errors.to_str(py)? {
-                        "ignore" => c"ignore",
-                        "replace" => c"replace",
-                        "backslashreplace" => c"backslashreplace",
-                        "surrogateescape" => c"surrogateescape",
-                        other => {
-                            return Err(CBORDecodeError::new_err(format!(
-                                "invalid str_errors value: '{other}'"
-                            )));
-                        }
-                    }),
-                };
-                let decoded =
-                    PyString::from_encoded_object(bytes.as_any(), Some(c"utf-8"), errors)?;
-                Ok(StringValue(decoded.into_any(), length))
-            }
-        }
-    }
-
-    fn decode_array<'py>(
-        &mut self,
-        py: Python<'py>,
-        subtype: u8,
-        immutable: bool,
-    ) -> PyResult<DecoderResult<'py>> {
-        // Major tag 4
-        let optional_length = self.decode_length_as_usize(py, subtype)?;
-        if immutable {
-            let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
-            let callback: Box<DecoderCallback<'py>> = if let Some(length) = optional_length {
-                if length == 0 {
-                    return Ok(Value(PyTuple::empty(py).into_any()));
-                }
-
-                Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    items.push(item);
-                    if items.len() == length {
-                        Ok(CompleteFrame(
-                            PyTuple::new(py, take(&mut items))?.into_any(),
-                        ))
-                    } else {
-                        Ok(ContinueFrame(false))
-                    }
-                })
-            } else {
-                let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
-                Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if item.is(break_marker) {
-                        Ok(CompleteFrame(
-                            PyTuple::new(py, take(&mut items))?.into_any(),
-                        ))
-                    } else {
-                        items.push(item);
-                        Ok(ContinueFrame(false))
-                    }
-                })
-            };
-            Ok(BeginFrame(
-                callback,
-                false,
-                None,
-                DisplayName::String("array"),
-            ))
+    fn continue_frame(state: &mut AssemblerState, require_immutable: bool) {
+        let base = if state.frames.len() >= 2 {
+            state.frames[state.frames.len() - 2].immutable
         } else {
-            let mut list = PyList::empty(py);
-            let container = list.clone().into_any();
-            let callback: Box<DecoderCallback<'py>> = if let Some(length) = optional_length {
-                if length == 0 {
-                    return Ok(Value(PyList::empty(py).into_any()));
-                }
-
-                Box::new(move |item, _immutable: bool| {
-                    list.append(item)?;
-                    if list.len() == length {
-                        Ok(CompleteFrame(
-                            replace(&mut list, PyList::empty(py)).into_any(),
-                        ))
-                    } else {
-                        Ok(ContinueFrame(false))
-                    }
-                })
-            } else {
-                let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
-                Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if item.is(break_marker) {
-                        Ok(CompleteFrame(
-                            replace(&mut list, PyList::empty(py)).into_any(),
-                        ))
-                    } else {
-                        list.append(item)?;
-                        Ok(ContinueFrame(false))
-                    }
-                })
-            };
-            Ok(BeginFrame(
-                callback,
-                false,
-                Some(container),
-                DisplayName::String("array"),
-            ))
-        }
+            state.top_level_immutable
+        };
+        state.current_immutable = base || require_immutable;
+        state.frames.last_mut().unwrap().immutable = state.current_immutable;
     }
 
-    fn decode_map<'py>(
-        &mut self,
-        py: Python<'py>,
-        subtype: u8,
-        immutable: bool,
-    ) -> PyResult<DecoderResult<'py>> {
-        // Major tag 5
+    fn after_pop(state: &mut AssemblerState) {
+        state.current_immutable = state
+            .frames
+            .last()
+            .map_or(state.top_level_immutable, |frame| frame.immutable);
+    }
 
-        #[cfg(Py_3_15)]
-        fn create_frozen_dict<'py>(
-            py: Python<'py>,
-            items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
-        ) -> PyResult<Bound<'py, PyAny>> {
-            FROZEN_DICT
-                .get(py)?
-                .call1((items,))?
-                .cast_into()
-                .map_err(|e| PyErr::from(e))
-        }
-        #[cfg(not(Py_3_15))]
-        fn create_frozen_dict<'py>(
-            py: Python<'py>,
-            items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
-        ) -> PyResult<Bound<'py, PyAny>> {
-            FrozenDict::from_items(py, items).map(|dict| dict.into_any())
-        }
-
-        #[inline]
-        fn maybe_call_object_hook<'py>(
-            py: Python<'py>,
-            dict: Bound<'py, PyAny>,
-            object_hook: Option<&Py<PyAny>>,
-            immutable: bool,
-        ) -> PyResult<Bound<'py, PyAny>> {
-            if let Some(object_hook) = object_hook {
-                object_hook.bind(py).call1((dict, immutable))
-            } else {
-                Ok(dict)
-            }
-        }
-
-        let object_hook = self.object_hook.as_ref().map(|hook| hook.clone_ref(py));
-        let allow_duplicate_keys = self.allow_duplicate_keys;
-        let length_or_none = self.decode_length_as_usize(py, subtype)?;
-
-        // Return immediately if this is an empty dict
-        if let Some(length) = length_or_none
-            && length == 0
+    /// Pushes a frame, enforcing ``max_depth`` and performing early
+    /// registration of a shareable container.
+    fn push_frame(
+        &self,
+        state: &mut AssemblerState,
+        frame: Frame,
+        container: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        if let Some(container) = &container
+            && let Some(top) = state.frames.last()
+            && let FrameKind::Shareable { index } = top.kind
         {
-            let container: Bound<'py, PyAny> = if immutable {
+            state.shareables[index] = Some(container.clone().unbind());
+            state.frames.pop();
+        }
+
+        if state.frames.len() >= self.max_depth {
+            return Err(CBORDecodeError::new_err(format!(
+                "maximum container nesting depth ({}) exceeded",
+                self.max_depth
+            )));
+        }
+
+        state.frames.push(frame);
+        Ok(())
+    }
+
+    fn push_single_child(
+        &self,
+        state: &mut AssemblerState,
+        kind: FrameKind,
+        typename: DisplayName,
+        requested_immutable: bool,
+        container: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        Self::begin_frame(state, requested_immutable);
+        let frame = Frame {
+            immutable: state.current_immutable,
+            typename,
+            kind,
+        };
+        self.push_frame(state, frame, container)
+    }
+
+    /// Enforces the ``allow_indefinite`` policy for indefinite-length items.
+    fn check_indefinite_allowed(&self) -> PyResult<()> {
+        if self.allow_indefinite {
+            Ok(())
+        } else {
+            Err(CBORDecodeError::new_err(
+                "encountered indefinite length but it has been disabled",
+            ))
+        }
+    }
+
+    fn maybe_object_hook<'py>(
+        &self,
+        py: Python<'py>,
+        dict: Bound<'py, PyAny>,
+        immutable: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(object_hook) = &self.object_hook {
+            object_hook.bind(py).call1((dict, immutable))
+        } else {
+            Ok(dict)
+        }
+    }
+
+    //
+    // Token processing
+    //
+
+    /// Processes a freshly obtained token against the current assembler state.
+    fn process_token<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        token: Token<'py>,
+    ) -> PyResult<()> {
+        // String chunk frames intercept the raw token stream.
+        if let Some(frame) = state.frames.last() {
+            match frame.kind {
+                FrameKind::ByteStringChunks(_) => return self.feed_byte_chunk(py, state, token),
+                FrameKind::TextStringChunks(_) => return self.feed_text_chunk(py, state, token),
+                _ => {}
+            }
+        }
+
+        match token {
+            Token::Break => {
+                // An indefinite-length array or map terminates on break; anywhere
+                // else the break is treated as an ordinary marker value (matching
+                // the reference decoder), which typically leads to a later error.
+                let closes_container = matches!(
+                    state.frames.last().map(|frame| &frame.kind),
+                    Some(FrameKind::Array {
+                        remaining: None,
+                        ..
+                    }) | Some(FrameKind::Map {
+                        remaining: None,
+                        ..
+                    })
+                );
+                if closes_container {
+                    self.handle_break(py, state)
+                } else {
+                    state.pending_value = Some(BREAK_MARKER.get(py).unwrap().clone_ref(py));
+                    Ok(())
+                }
+            }
+            Token::Integer(value) => {
+                state.pending_value = Some(value.unbind());
+                Ok(())
+            }
+            Token::Float(value) => {
+                state.pending_value = Some(value.into_bound_py_any(py)?.unbind());
+                Ok(())
+            }
+            Token::Boolean(value) => {
+                state.pending_value = Some(value.into_bound_py_any(py)?.unbind());
+                Ok(())
+            }
+            Token::Null => {
+                state.pending_value = Some(py.None());
+                Ok(())
+            }
+            Token::Undefined => {
+                state.pending_value = Some(
+                    UNDEFINED
+                        .get(py)
+                        .unwrap()
+                        .bind(py)
+                        .clone()
+                        .into_any()
+                        .unbind(),
+                );
+                Ok(())
+            }
+            Token::Simple(value) => {
+                let simple = CBORSimpleValue::new(value.into_pyobject(py)?)?;
+                state.pending_value = Some(Bound::new(py, simple)?.into_any().unbind());
+                Ok(())
+            }
+            Token::ByteString(value, length) => {
+                Self::track_string(state, value.as_any(), length);
+                state.pending_value = Some(value.into_any().unbind());
+                Ok(())
+            }
+            Token::TextString(value, length) => {
+                Self::track_string(state, value.as_any(), length);
+                state.pending_value = Some(value.into_any().unbind());
+                Ok(())
+            }
+            Token::ByteStringStart => {
+                self.check_indefinite_allowed()?;
+                let frame = Frame {
+                    immutable: state.current_immutable,
+                    typename: DisplayName::String("byte string"),
+                    kind: FrameKind::ByteStringChunks(Vec::new()),
+                };
+                self.push_frame(state, frame, None)
+            }
+            Token::TextStringStart => {
+                self.check_indefinite_allowed()?;
+                let frame = Frame {
+                    immutable: state.current_immutable,
+                    typename: DisplayName::String("text string"),
+                    kind: FrameKind::TextStringChunks(Vec::new()),
+                };
+                self.push_frame(state, frame, None)
+            }
+            Token::ArrayStart(length) => {
+                if length.is_none() {
+                    self.check_indefinite_allowed()?;
+                }
+                self.handle_array_start(py, state, length)
+            }
+            Token::MapStart(length) => {
+                if length.is_none() {
+                    self.check_indefinite_allowed()?;
+                }
+                self.handle_map_start(py, state, length)
+            }
+            Token::Tag(tagnum) => self.handle_tag(py, state, tagnum),
+        }
+    }
+
+    /// Conditionally records a decoded string in the innermost string namespace,
+    /// using the same size heuristic as the encoder.
+    fn track_string(state: &mut AssemblerState, value: &Bound<'_, PyAny>, length: usize) {
+        if let Some(namespace) = state.string_namespaces.last_mut()
+            && match namespace.len() {
+                0..24 => length >= 3,
+                24..256 => length >= 4,
+                256..65536 => length >= 5,
+                65536..=4294967295 => length >= 7,
+                _ => length >= 11,
+            }
+        {
+            namespace.push(value.clone().unbind());
+        }
+    }
+
+    fn feed_byte_chunk<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        token: Token<'py>,
+    ) -> PyResult<()> {
+        match token {
+            Token::ByteString(value, _) => {
+                if let FrameKind::ByteStringChunks(parts) =
+                    &mut state.frames.last_mut().unwrap().kind
+                {
+                    parts.push(value.unbind());
+                }
+                Ok(())
+            }
+            Token::Break => {
+                let FrameKind::ByteStringChunks(parts) = &state.frames.last().unwrap().kind else {
+                    unreachable!()
+                };
+                let total: usize = parts.iter().map(|p| p.bind(py).as_bytes().len()).sum();
+                let joined = PyBytes::new_with_writer(py, total, |writer| {
+                    for part in parts {
+                        writer.write_all(part.bind(py).as_bytes())?;
+                    }
+                    Ok(())
+                })?;
+                state.frames.pop();
+                Self::after_pop(state);
+                state.pending_value = Some(joined.into_any().unbind());
+                Ok(())
+            }
+            other => Err(CBORDecodeError::new_err(format!(
+                "non-byte string (major type {}) found in indefinite length byte string",
+                token_major_type(&other)
+            ))),
+        }
+    }
+
+    fn feed_text_chunk<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        token: Token<'py>,
+    ) -> PyResult<()> {
+        match token {
+            Token::TextString(value, _) => {
+                if let FrameKind::TextStringChunks(parts) =
+                    &mut state.frames.last_mut().unwrap().kind
+                {
+                    parts.push(value.unbind());
+                }
+                Ok(())
+            }
+            Token::Break => {
+                let FrameKind::TextStringChunks(parts) = &state.frames.last().unwrap().kind else {
+                    unreachable!()
+                };
+                let list = PyList::new(py, parts.iter().map(|p| p.bind(py)))?;
+                let joined = PyString::new(py, "").call_method1(intern!(py, "join"), (list,))?;
+                state.frames.pop();
+                Self::after_pop(state);
+                state.pending_value = Some(joined.unbind());
+                Ok(())
+            }
+            other => Err(CBORDecodeError::new_err(format!(
+                "non-text string (major type {}) found in indefinite length text string",
+                token_major_type(&other)
+            ))),
+        }
+    }
+
+    fn handle_break<'py>(&self, py: Python<'py>, state: &mut AssemblerState) -> PyResult<()> {
+        let built = match state.frames.last() {
+            Some(Frame {
+                kind:
+                    FrameKind::Array {
+                        storage,
+                        remaining: None,
+                    },
+                ..
+            }) => Self::build_array(py, storage),
+            Some(Frame {
+                kind:
+                    FrameKind::Map {
+                        storage,
+                        remaining: None,
+                        map_immutable,
+                        ..
+                    },
+                ..
+            }) => self.build_map(py, storage, *map_immutable)?,
+            _ => return Err(CBORDecodeError::new_err("unexpected break code")),
+        };
+        state.frames.pop();
+        Self::after_pop(state);
+        state.pending_value = Some(built.unbind());
+        Ok(())
+    }
+
+    fn build_array<'py>(py: Python<'py>, storage: &ArrayStorage) -> Bound<'py, PyAny> {
+        match storage {
+            ArrayStorage::List(list) => list.bind(py).clone().into_any(),
+            ArrayStorage::Tuple(items) => PyTuple::new(py, items.iter().map(|p| p.bind(py)))
+                .unwrap()
+                .into_any(),
+        }
+    }
+
+    fn build_map<'py>(
+        &self,
+        py: Python<'py>,
+        storage: &MapStorage,
+        map_immutable: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let container = match storage {
+            MapStorage::Dict(dict) => dict.bind(py).clone().into_any(),
+            MapStorage::Items(items) => {
+                let bound: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = items
+                    .iter()
+                    .map(|(k, v)| (k.bind(py).clone(), v.bind(py).clone()))
+                    .collect();
+                create_frozen_dict(py, bound)?
+            }
+        };
+        self.maybe_object_hook(py, container, map_immutable)
+    }
+
+    fn handle_array_start<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        length: Option<usize>,
+    ) -> PyResult<()> {
+        let immutable = state.current_immutable;
+        if length == Some(0) {
+            let value = if immutable {
+                PyTuple::empty(py).into_any()
+            } else {
+                PyList::empty(py).into_any()
+            };
+            state.pending_value = Some(value.unbind());
+            return Ok(());
+        }
+
+        Self::begin_frame(state, false);
+        let (storage, container) = if immutable {
+            (ArrayStorage::Tuple(Vec::new()), None)
+        } else {
+            let list = PyList::empty(py);
+            (
+                ArrayStorage::List(list.clone().unbind()),
+                Some(list.into_any()),
+            )
+        };
+        let frame = Frame {
+            immutable: state.current_immutable,
+            typename: DisplayName::String("array"),
+            kind: FrameKind::Array {
+                storage,
+                remaining: length,
+            },
+        };
+        self.push_frame(state, frame, container)
+    }
+
+    fn handle_map_start<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        length: Option<usize>,
+    ) -> PyResult<()> {
+        let immutable = state.current_immutable;
+        if length == Some(0) {
+            let container = if immutable {
                 create_frozen_dict(py, Vec::new())?
             } else {
                 PyDict::new(py).into_any()
             };
-            let transformed =
-                maybe_call_object_hook(py, container, object_hook.as_ref(), immutable)?;
-            return Ok(Value(transformed));
-        };
+            let value = self
+                .maybe_object_hook(py, container, immutable)
+                .map_err(|e| wrap_decode_error(py, e, &DisplayName::String("map")))?;
+            state.pending_value = Some(value.unbind());
+            return Ok(());
+        }
 
-        let mut key: Option<Bound<'py, PyAny>> = None;
-        if immutable {
-            let seen_keys: Option<Bound<'py, PySet>> = if allow_duplicate_keys {
+        Self::begin_frame(state, true);
+        let (storage, container, seen_keys) = if immutable {
+            let seen = if self.allow_duplicate_keys {
                 None
             } else {
-                Some(PySet::empty(py)?)
+                Some(PySet::empty(py)?.unbind())
             };
-            let check_duplicate = move |key: &Bound<'py, PyAny>| -> PyResult<()> {
-                let seen = seen_keys.as_ref().unwrap();
-                if seen.contains(key)? {
-                    let repr = key.repr()?;
-                    return Err(CBORDecodeError::new_err(format!(
-                        "Duplicate map key: {}",
-                        repr.to_str()?
-                    )));
-                }
-                seen.add(key.clone())
-            };
-
-            let mut items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
-            let callback: Box<DecoderCallback<'py>> = if let Some(length) = length_or_none {
-                Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if let Some(key) = key.take() {
-                        if !allow_duplicate_keys {
-                            check_duplicate(&key)?;
-                        }
-                        items.push((key, item));
-                        if items.len() == length {
-                            let transformed = maybe_call_object_hook(
-                                py,
-                                create_frozen_dict(py, take(&mut items))?,
-                                object_hook.as_ref(),
-                                immutable,
-                            )?;
-                            return Ok(CompleteFrame(transformed));
-                        }
-                        Ok(ContinueFrame(true))
-                    } else {
-                        key = Some(item);
-                        Ok(ContinueFrame(false))
-                    }
-                })
-            } else {
-                let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
-                Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if item.is(break_marker) {
-                        let container = create_frozen_dict(py, take(&mut items))?;
-                        let transformed = maybe_call_object_hook(
-                            py,
-                            container.into_any(),
-                            object_hook.as_ref(),
-                            immutable,
-                        )?;
-                        Ok(CompleteFrame(transformed))
-                    } else if let Some(key) = key.take() {
-                        if !allow_duplicate_keys {
-                            check_duplicate(&key)?;
-                        }
-                        items.push((key, item));
-                        Ok(ContinueFrame(true))
-                    } else {
-                        key = Some(item);
-                        Ok(ContinueFrame(false))
-                    }
-                })
-            };
-            Ok(BeginFrame(callback, true, None, DisplayName::String("map")))
+            (MapStorage::Items(Vec::new()), None, seen)
         } else {
-            fn check_duplicate(key: &Bound<PyAny>, dict: &Bound<PyDict>) -> PyResult<()> {
-                if dict.contains(key)? {
-                    let repr = key.repr()?;
-                    return Err(CBORDecodeError::new_err(format!(
-                        "Duplicate map key: {}",
-                        repr.to_str()?
-                    )));
-                }
-                Ok(())
-            }
-
-            let mut dict = PyDict::new(py);
-            let container = dict.clone().into_any();
-            let callback: Box<DecoderCallback<'py>> = if let Some(length) = length_or_none {
-                let mut count = 0usize;
-                Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if let Some(key) = key.take() {
-                        if !allow_duplicate_keys {
-                            check_duplicate(&key, &dict)?;
-                        }
-                        dict.set_item(&key, item)?;
-                        count += 1;
-                        if count == length {
-                            let dict = replace(&mut dict, PyDict::new(py));
-                            let transformed = maybe_call_object_hook(
-                                py,
-                                dict.into_any(),
-                                object_hook.as_ref(),
-                                immutable,
-                            )?;
-                            return Ok(CompleteFrame(transformed));
-                        }
-                        Ok(ContinueFrame(true))
-                    } else {
-                        key = Some(item);
-                        Ok(ContinueFrame(false))
-                    }
-                })
-            } else {
-                let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
-                Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    if item.is(break_marker) {
-                        let dict = replace(&mut dict, PyDict::new(py));
-                        let transformed = maybe_call_object_hook(
-                            py,
-                            dict.into_any(),
-                            object_hook.as_ref(),
-                            immutable,
-                        )?;
-                        Ok(CompleteFrame(transformed))
-                    } else if let Some(key) = key.take() {
-                        if !allow_duplicate_keys {
-                            check_duplicate(&key, &dict)?;
-                        }
-                        dict.set_item(&key, item)?;
-                        Ok(ContinueFrame(true))
-                    } else {
-                        key = Some(item);
-                        Ok(ContinueFrame(false))
-                    }
-                })
-            };
-            Ok(BeginFrame(
-                callback,
-                true,
-                Some(container),
-                DisplayName::String("map"),
-            ))
-        }
+            let dict = PyDict::new(py);
+            (
+                MapStorage::Dict(dict.clone().unbind()),
+                Some(dict.into_any()),
+                None,
+            )
+        };
+        let frame = Frame {
+            immutable: state.current_immutable,
+            typename: DisplayName::String("map"),
+            kind: FrameKind::Map {
+                storage,
+                pending_key: None,
+                remaining: length,
+                seen_keys,
+                map_immutable: immutable,
+            },
+        };
+        self.push_frame(state, frame, container)
     }
 
-    fn decode_semantic<'py>(
-        &mut self,
+    fn handle_tag<'py>(
+        &self,
         py: Python<'py>,
-        subtype: u8,
-        immutable: bool,
-    ) -> PyResult<DecoderResult<'py>> {
-        let tagnum = self.decode_length_finite(py, subtype)?;
+        state: &mut AssemblerState,
+        tagnum: u64,
+    ) -> PyResult<()> {
         if let Some(semantic_decoders) = &self.semantic_decoders {
             match semantic_decoders.bind(py).get_item(tagnum) {
-                Ok(decoder) => {
-                    let name = decoder.getattr_opt(intern!(py, NAME_ATTR))?;
-
-                    // If these attributes are present, this callable was decorated with
-                    // @shareable_decoder
-                    return if let Some(name) = name {
-                        let require_immutable: bool = decoder
-                            .getattr_opt(intern!(py, IMMUTABLE_ATTR))?
-                            .map(|x| x.is_truthy())
-                            .transpose()?
-                            .unwrap_or(false);
-                        let retval = decoder.call1((immutable,))?;
-                        let tuple: Bound<'_, PyTuple> = retval.cast_into()?;
-                        if tuple.len() != 2 {
-                            return Err(CBORDecodeError::new_err(format!(
-                                "{decoder} returned a tuple of {} items, expected 2",
-                                tuple.len()
-                            )));
-                        }
-                        let container: Bound<'_, PyAny> = tuple.get_item(0)?.cast_into()?;
-                        let callback: Bound<'_, PyAny> = tuple.get_item(1)?.cast_into()?;
-                        Ok(BeginFrame(
-                            Box::new(
-                                move |item, _immutable: bool| -> PyResult<DecoderResult<'py>> {
-                                    callback.call1((item,)).map(CompleteFrame)
-                                },
-                            ),
-                            require_immutable,
-                            if container.is_none() {
-                                None
-                            } else {
-                                Some(container)
-                            },
-                            if name.is_none() {
-                                DisplayName::SemanticTag(tagnum)
-                            } else {
-                                DisplayName::PythonName(name.clone())
-                            },
-                        ))
-                    } else {
-                        let callback =
-                            move |item, new_immutable: bool| -> PyResult<DecoderResult<'py>> {
-                                decoder.call1((item, new_immutable)).map(CompleteFrame)
-                            };
-                        Ok(BeginFrame(
-                            Box::new(callback),
-                            immutable,
-                            None,
-                            DisplayName::SemanticTag(tagnum),
-                        ))
-                    };
-                }
+                Ok(decoder) => return self.dispatch_user_decoder(py, state, tagnum, decoder),
                 Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
                 Err(e) => return Err(e),
             }
-        };
+        }
+        self.dispatch_builtin_tag(py, state, tagnum)
+    }
 
-        // No semantic decoder lookup map – fall back to the hard coded switchboard
-        let (callback, typename): (Box<DecoderCallback<'py>>, &str) = match tagnum {
-            0 => (
-                Box::new(Self::decode_datetime_string),
-                "string-form datetime",
-            ),
-            1 => (Box::new(Self::decode_epoch_datetime), "epoch-form datetime"),
-            2 => (Box::new(Self::decode_positive_bignum), "positive bignum"),
-            3 => (Box::new(Self::decode_negative_bignum), "negative bignum"),
-            4 => (Box::new(Self::decode_fraction), "decimal fraction"),
-            5 => (Box::new(Self::decode_bigfloat), "bigfloat"),
-            25 => (Box::new(Self::decode_stringref), "string reference"),
-            28 => return Ok(Shareable),
-            29 => (Box::new(Self::decode_sharedref), "shared reference"),
-            30 => (Box::new(Self::decode_rational), "rational"),
-            35 => (Box::new(Self::decode_regexp), "regular expression"),
-            36 => (Box::new(Self::decode_mime), "MIME message"),
-            37 => (Box::new(Self::decode_uuid), "UUID"),
-            52 => (Box::new(Self::decode_ipv4), "IPv4 address"),
-            54 => (Box::new(Self::decode_ipv6), "IPv6 address"),
-            100 => (Box::new(Self::decode_epoch_date), "epoch-form date"),
-            256 => return Ok(StringNamespace),
-            258 => return self.decode_set(py, immutable),
-            260 => (Box::new(Self::decode_ipaddress), "IP address"),
-            261 => (Box::new(Self::decode_ipnetwork), "IP network"),
-            1004 => (Box::new(Self::decode_date_string), "string-form date"),
-            43000 => (Box::new(Self::decode_complex), "complex number"),
-            55799 => (
-                Box::new(Self::decode_self_describe_cbor),
-                "self-described CBOR value",
-            ),
+    fn dispatch_user_decoder<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        tagnum: u64,
+        decoder: Bound<'py, PyAny>,
+    ) -> PyResult<()> {
+        let name_attr = decoder.getattr_opt(intern!(py, NAME_ATTR))?;
+        if let Some(name) = name_attr {
+            // Decorated with @shareable_decoder (two-phase decoder).
+            let require_immutable: bool = decoder
+                .getattr_opt(intern!(py, IMMUTABLE_ATTR))?
+                .map(|x| x.is_truthy())
+                .transpose()?
+                .unwrap_or(false);
+            let retval = decoder.call1((state.current_immutable,))?;
+            let tuple: Bound<'py, PyTuple> = retval.cast_into()?;
+            if tuple.len() != 2 {
+                return Err(CBORDecodeError::new_err(format!(
+                    "{decoder} returned a tuple of {} items, expected 2",
+                    tuple.len()
+                )));
+            }
+            let container = tuple.get_item(0)?;
+            let callback = tuple.get_item(1)?;
+            let typename = if name.is_none() {
+                DisplayName::SemanticTag(tagnum)
+            } else {
+                DisplayName::PythonName(name.str()?.to_string())
+            };
+            let container_opt = if container.is_none() {
+                None
+            } else {
+                Some(container)
+            };
+            self.push_single_child(
+                state,
+                FrameKind::ShareablePhase2(callback.unbind()),
+                typename,
+                require_immutable,
+                container_opt,
+            )
+        } else {
+            self.push_single_child(
+                state,
+                FrameKind::UserSemantic(decoder.unbind()),
+                DisplayName::SemanticTag(tagnum),
+                state.current_immutable,
+                None,
+            )
+        }
+    }
+
+    fn dispatch_builtin_tag<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        tagnum: u64,
+    ) -> PyResult<()> {
+        let (transform, typename): (TransformFn, &'static str) = match tagnum {
+            0 => (Self::decode_datetime_string, "string-form datetime"),
+            1 => (Self::decode_epoch_datetime, "epoch-form datetime"),
+            2 => (Self::decode_positive_bignum, "positive bignum"),
+            3 => (Self::decode_negative_bignum, "negative bignum"),
+            4 => (Self::decode_fraction, "decimal fraction"),
+            5 => (Self::decode_bigfloat, "bigfloat"),
+            25 => {
+                return self.push_single_child(
+                    state,
+                    FrameKind::StringRef,
+                    DisplayName::String("string reference"),
+                    true,
+                    None,
+                );
+            }
+            28 => {
+                let index = state.shareables.len();
+                state.shareables.push(None);
+                let frame = Frame {
+                    immutable: state.current_immutable,
+                    typename: DisplayName::String("shareable value"),
+                    kind: FrameKind::Shareable { index },
+                };
+                return self.push_frame(state, frame, None);
+            }
+            29 => {
+                return self.push_single_child(
+                    state,
+                    FrameKind::SharedRef,
+                    DisplayName::String("shared reference"),
+                    true,
+                    None,
+                );
+            }
+            30 => (Self::decode_rational, "rational"),
+            35 => (Self::decode_regexp, "regular expression"),
+            36 => (Self::decode_mime, "MIME message"),
+            37 => (Self::decode_uuid, "UUID"),
+            52 => (Self::decode_ipv4, "IPv4 address"),
+            54 => (Self::decode_ipv6, "IPv6 address"),
+            100 => (Self::decode_epoch_date, "epoch-form date"),
+            256 => {
+                state.string_namespaces.push(Vec::new());
+                let frame = Frame {
+                    immutable: state.current_immutable,
+                    typename: DisplayName::String("string namespace"),
+                    kind: FrameKind::StringNamespace,
+                };
+                return self.push_frame(state, frame, None);
+            }
+            258 => {
+                let set_immutable = state.current_immutable;
+                let set = if set_immutable {
+                    None
+                } else {
+                    Some(PySet::empty(py)?)
+                };
+                let container = set.as_ref().map(|s| s.clone().into_any());
+                return self.push_single_child(
+                    state,
+                    FrameKind::Set {
+                        set: set.map(Bound::unbind),
+                        set_immutable,
+                    },
+                    DisplayName::String("set"),
+                    true,
+                    container,
+                );
+            }
+            260 => (Self::decode_ipaddress, "IP address"),
+            261 => (Self::decode_ipnetwork, "IP network"),
+            1004 => (Self::decode_date_string, "string-form date"),
+            43000 => (Self::decode_complex, "complex number"),
+            55799 => (Self::decode_self_describe_cbor, "self-described CBOR value"),
             _ => {
-                // For a tag with no designated decoder, check if we have a tag hook, and call
-                // that with the tag object, using its return value as the decoded value.
                 let tag = CBORTag::new(tagnum.into_bound_py_any(py)?, py.None().into_bound(py))?;
                 let bound_tag = Bound::new(py, tag)?.into_any();
-                let container = bound_tag.clone();
-                let mut tag_hook = self
-                    .tag_hook
-                    .as_ref()
-                    .map(|hook| hook.clone_ref(py).into_bound(py));
-                let callback = Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
-                    let tag: &Bound<'py, CBORTag> = bound_tag.cast()?;
-                    tag.borrow_mut().value = item.unbind();
-                    if let Some(tag_hook) = tag_hook.take() {
-                        tag_hook.call1((&bound_tag, immutable)).map(CompleteFrame)
-                    } else {
-                        Ok(CompleteFrame(bound_tag.clone()))
-                    }
-                });
-                return Ok(BeginFrame(
-                    callback,
-                    immutable,
-                    Some(container),
+                let tag_immutable = state.current_immutable;
+                return self.push_single_child(
+                    state,
+                    FrameKind::TagHook {
+                        tag: bound_tag.clone().unbind(),
+                        tag_immutable,
+                    },
                     DisplayName::SemanticTag(tagnum),
-                ));
+                    tag_immutable,
+                    Some(bound_tag),
+                );
             }
         };
-        Ok(BeginFrame(
-            callback,
+        self.push_single_child(
+            state,
+            FrameKind::BuiltinTag(transform),
+            DisplayName::String(typename),
             true,
             None,
-            DisplayName::String(typename),
-        ))
+        )
     }
 
-    fn decode_special<'py>(
+    //
+    // Value placement into the innermost frame
+    //
+
+    fn place_value<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        value: Bound<'py, PyAny>,
+    ) -> PyResult<()> {
+        let typename = state.frames.last().unwrap().typename.clone();
+        self.place_value_inner(py, state, value)
+            .map_err(|e| wrap_decode_error(py, e, &typename))
+    }
+
+    fn place_value_inner<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        value: Bound<'py, PyAny>,
+    ) -> PyResult<()> {
+        let action = {
+            let frame = state.frames.last_mut().unwrap();
+            let frame_immutable = frame.immutable;
+            match &mut frame.kind {
+                FrameKind::Array { storage, remaining } => {
+                    match storage {
+                        ArrayStorage::List(list) => list.bind(py).append(&value)?,
+                        ArrayStorage::Tuple(items) => items.push(value.clone().unbind()),
+                    }
+                    match remaining {
+                        Some(count) => {
+                            *count -= 1;
+                            if *count == 0 {
+                                Action::Complete(Self::build_array(py, storage))
+                            } else {
+                                Action::Continue(false)
+                            }
+                        }
+                        None => Action::Continue(false),
+                    }
+                }
+                FrameKind::Map {
+                    storage,
+                    pending_key,
+                    remaining,
+                    seen_keys,
+                    map_immutable,
+                } => {
+                    if pending_key.is_none() {
+                        *pending_key = Some(value.unbind());
+                        Action::Continue(false)
+                    } else {
+                        let key = pending_key.take().unwrap().into_bound(py);
+                        if !self.allow_duplicate_keys {
+                            let duplicate = match storage {
+                                MapStorage::Dict(dict) => dict.bind(py).contains(&key)?,
+                                MapStorage::Items(_) => {
+                                    let seen = seen_keys.as_ref().unwrap().bind(py);
+                                    if seen.contains(&key)? {
+                                        true
+                                    } else {
+                                        seen.add(key.clone())?;
+                                        false
+                                    }
+                                }
+                            };
+                            if duplicate {
+                                return Err(CBORDecodeError::new_err(format!(
+                                    "Duplicate map key: {}",
+                                    key.repr()?.to_str()?
+                                )));
+                            }
+                        }
+                        match storage {
+                            MapStorage::Dict(dict) => dict.bind(py).set_item(&key, &value)?,
+                            MapStorage::Items(items) => items.push((key.unbind(), value.unbind())),
+                        }
+                        let map_immutable = *map_immutable;
+                        let complete = match remaining {
+                            Some(count) => {
+                                *count -= 1;
+                                *count == 0
+                            }
+                            None => false,
+                        };
+                        if complete {
+                            Action::Complete(self.build_map(py, storage, map_immutable)?)
+                        } else {
+                            Action::Continue(true)
+                        }
+                    }
+                }
+                FrameKind::Set { set, set_immutable } => {
+                    let result = if let Some(set) = set {
+                        let bound = set.bind(py);
+                        bound.call_method1(intern!(py, "update"), (value,))?;
+                        bound.clone().into_any()
+                    } else {
+                        let _ = set_immutable;
+                        let tuple = value.cast_into::<PyTuple>()?;
+                        PyFrozenSet::new(py, tuple.iter())?.into_any()
+                    };
+                    Action::Complete(result)
+                }
+                FrameKind::BuiltinTag(transform) => Action::Complete(transform(value)?),
+                FrameKind::UserSemantic(decoder) => {
+                    Action::Complete(decoder.bind(py).call1((value, frame_immutable))?)
+                }
+                FrameKind::ShareablePhase2(callback) => {
+                    Action::Complete(callback.bind(py).call1((value,))?)
+                }
+                FrameKind::TagHook { tag, tag_immutable } => {
+                    let tag_immutable = *tag_immutable;
+                    let bound_tag = tag.bind(py).clone();
+                    {
+                        let cbortag: &Bound<'py, CBORTag> = bound_tag.cast()?;
+                        cbortag.borrow_mut().value = value.unbind();
+                    }
+                    let result = if let Some(tag_hook) = &self.tag_hook {
+                        tag_hook.bind(py).call1((&bound_tag, tag_immutable))?
+                    } else {
+                        bound_tag
+                    };
+                    Action::Complete(result)
+                }
+                FrameKind::StringRef => Action::ResolveStringRef(value),
+                FrameKind::SharedRef => Action::ResolveSharedRef(value),
+                FrameKind::Shareable { index } => Action::CompleteShareable(*index, value),
+                FrameKind::StringNamespace => Action::CompletePopNamespace(value),
+                FrameKind::ByteStringChunks(_) | FrameKind::TextStringChunks(_) => {
+                    unreachable!("string chunk frames are handled in process_token")
+                }
+            }
+        };
+
+        match action {
+            Action::Continue(require_immutable) => {
+                Self::continue_frame(state, require_immutable);
+                Ok(())
+            }
+            Action::Complete(value) => {
+                state.frames.pop();
+                Self::after_pop(state);
+                state.pending_value = Some(value.unbind());
+                Ok(())
+            }
+            Action::CompleteShareable(index, value) => {
+                if state.shareables[index].is_none() {
+                    state.shareables[index] = Some(value.clone().unbind());
+                }
+                state.frames.pop();
+                Self::after_pop(state);
+                state.pending_value = Some(value.unbind());
+                Ok(())
+            }
+            Action::CompletePopNamespace(value) => {
+                state.string_namespaces.pop();
+                state.frames.pop();
+                Self::after_pop(state);
+                state.pending_value = Some(value.unbind());
+                Ok(())
+            }
+            Action::ResolveStringRef(value) => {
+                let index: usize = value.extract()?;
+                let resolved = match state.string_namespaces.last() {
+                    Some(namespace) => match namespace.get(index) {
+                        Some(string) => string.bind(py).clone(),
+                        None => {
+                            return Err(CBORDecodeError::new_err(format!(
+                                "string reference {index} not found"
+                            )));
+                        }
+                    },
+                    None => {
+                        return Err(CBORDecodeError::new_err(
+                            "string reference outside of namespace",
+                        ));
+                    }
+                };
+                state.frames.pop();
+                Self::after_pop(state);
+                state.pending_value = Some(resolved.unbind());
+                Ok(())
+            }
+            Action::ResolveSharedRef(value) => {
+                let index: usize = value.extract()?;
+                let resolved = match state.shareables.get(index) {
+                    Some(Some(value)) => value.bind(py).clone(),
+                    Some(None) => {
+                        return Err(CBORDecodeError::new_err(format!(
+                            "shared value {index} has not been initialized"
+                        )));
+                    }
+                    None => {
+                        return Err(CBORDecodeError::new_err(format!(
+                            "shared reference {index} not found"
+                        )));
+                    }
+                };
+                state.frames.pop();
+                Self::after_pop(state);
+                state.pending_value = Some(resolved.unbind());
+                Ok(())
+            }
+        }
+    }
+
+    /// Runs the assembler until a complete top-level item is produced, pulling
+    /// tokens from the internal stream decoder as needed.
+    fn run_decode<'py>(
         &mut self,
         py: Python<'py>,
-        subtype: u8,
-    ) -> PyResult<DecoderResult<'py>> {
-        // Major tag 7
-        match subtype {
-            0..20 => {
-                let value = subtype.into_pyobject(py)?;
-                CBORSimpleValue::new(value)?.into_bound_py_any(py)
-            }
-            20 => Ok(false.into_bound_py_any(py)?),
-            21 => Ok(true.into_bound_py_any(py)?),
-            22 => Ok(py.None().into_bound_py_any(py)?),
-            23 => Ok(UNDEFINED.get(py).unwrap().into_bound_py_any(py)?),
-            24 => {
-                let value = self.read_exact::<1>(py)?[0];
-                if value < 0x20 {
-                    return Err(CBORDecodeError::new_err(
-                        "invalid two-byte sequence for simple value",
-                    ));
+        state: &mut AssemblerState,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        loop {
+            if let Some(value) = state.pending_value.take() {
+                self.place_value(py, state, value.into_bound(py))?;
+            } else {
+                // The reader is borrowed only to pull the next token; the borrow
+                // is released before `process_token` runs. For the inline reader
+                // this is a zero-cost compile-time borrow.
+                let token = match &mut self.reader {
+                    Some(reader) => reader.next_token(py, false)?,
+                    None => self
+                        .stream
+                        .as_ref()
+                        .unwrap()
+                        .bind(py)
+                        .borrow_mut()
+                        .next_token(py, false)?,
                 }
-                CBORSimpleValue::new(value.into_pyobject(py)?)?.into_bound_py_any(py)
+                .expect("next_token(allow_eof=false) unexpectedly returned None");
+                self.process_token(py, state, token)?;
             }
-            25 => {
-                let bytes = self.read_exact::<2>(py)?;
-                f16::from_be_bytes(bytes).to_f32().into_bound_py_any(py)
+
+            if state.frames.is_empty() {
+                return Ok(state
+                    .pending_value
+                    .take()
+                    .expect("assembler finished without a value")
+                    .into_bound(py));
             }
-            26 => {
-                let bytes = self.read_exact::<4>(py)?;
-                f32::from_be_bytes(bytes).into_bound_py_any(py)
-            }
-            27 => {
-                let bytes = self.read_exact::<8>(py)?;
-                f64::from_be_bytes(bytes).into_bound_py_any(py)
-            }
-            31 => Ok(BREAK_MARKER.get(py).unwrap().into_bound_py_any(py)?),
-            _ => Err(CBORDecodeError::new_err(format!(
-                "undefined reserved major type 7 subtype 0x{subtype:x}"
-            ))),
         }
-        .map(Value)
     }
 
     //
-    // Decoders for semantic tags (major tag 6)
+    // Semantic-tag transforms (major type 6)
     //
 
-    fn decode_datetime_string<'py>(
-        value: Bound<'py, PyAny>,
-        _immutable: bool,
-    ) -> PyResult<DecoderResult<'py>> {
+    fn decode_datetime_string<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 0
         let py = value.py();
         let value_type = value.get_type();
@@ -1024,149 +1216,104 @@ impl CBORDecoder {
         // * It doesn't handle the standard "Z" suffix
         // * It doesn't handle the fractional seconds part having fewer than 6 digits
         if py.version_info() <= (3, 10) {
-            // Convert Z to +00:00
             let mut temp_str = datetime_str.to_string().replacen("Z", "+00:00", 1);
-
-            // Pad any microseconds part with zeros
             if let Some((first, second)) = temp_str.split_once('.')
                 && let Some(index) = second.find(|c: char| !c.is_numeric())
             {
                 let (mut micros, tz_part) = second.split_at(index);
-                // Cut off excess zeroes from the start of the microseconds part
                 if micros.len() >= 6 {
                     micros = &micros[..6];
                 }
-
-                // Reconstitute the datetime string, right-padding the microseconds part
-                // with zeroes
                 temp_str = format!("{first}.{micros:0<6}{tz_part}");
             }
-
             datetime_str = temp_str.into_pyobject(py)?;
         }
 
-        DATETIME_FROMISOFORMAT
-            .get(py)?
-            .call1((&datetime_str,))
-            .map(CompleteFrame)
+        DATETIME_FROMISOFORMAT.get(py)?.call1((&datetime_str,))
     }
 
-    fn decode_epoch_datetime(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_epoch_datetime<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 1
         let py = value.py();
         let utc = UTC.get(py)?;
-        DATETIME_FROMTIMESTAMP
-            .get(py)?
-            .call1((value, utc))
-            .map(CompleteFrame)
+        DATETIME_FROMTIMESTAMP.get(py)?.call1((value, utc))
     }
 
-    fn decode_positive_bignum(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_positive_bignum<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 2
         let py = value.py();
-        INT_FROMBYTES
-            .get(py)?
-            .call1((value, intern!(py, "big")))
-            .map(CompleteFrame)
+        INT_FROMBYTES.get(py)?.call1((value, intern!(py, "big")))
     }
 
-    fn decode_negative_bignum(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_negative_bignum<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 3
         let py = value.py();
         let int = INT_FROMBYTES.get(py)?.call1((value, intern!(py, "big")))?;
-        int.neg()?.add(-1).map(CompleteFrame)
+        int.neg()?.add(-1)
     }
 
-    fn decode_fraction(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_fraction<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 4
         let py = value.py();
         let tuple = require_tuple(value, 2)?;
         let decimal_class = DECIMAL_TYPE.get(py)?;
-        {
-            let exp = tuple.get_item(0)?;
-            let sig_tuple = decimal_class
-                .call1((tuple.get_item(1)?,))?
-                .call_method0(intern!(py, "as_tuple"))?
-                .cast_into::<PyTuple>()?;
-            let sign = sig_tuple.get_item(0)?;
-            let digits = sig_tuple.get_item(1)?;
-            let args_tuple = PyTuple::new(py, [sign, digits, exp])?;
-            decimal_class.call1((args_tuple,)).map(CompleteFrame)
-        }
+        let exp = tuple.get_item(0)?;
+        let sig_tuple = decimal_class
+            .call1((tuple.get_item(1)?,))?
+            .call_method0(intern!(py, "as_tuple"))?
+            .cast_into::<PyTuple>()?;
+        let sign = sig_tuple.get_item(0)?;
+        let digits = sig_tuple.get_item(1)?;
+        let args_tuple = PyTuple::new(py, [sign, digits, exp])?;
+        decimal_class.call1((args_tuple,))
     }
 
-    fn decode_bigfloat(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_bigfloat<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 5
         let py = value.py();
         let tuple = require_tuple(value, 2)?;
         let decimal_class = DECIMAL_TYPE.get(py)?;
-        {
-            let exp = decimal_class.call1((tuple.get_item(0)?,))?;
-            let sig = decimal_class.call1((tuple.get_item(1)?,))?;
-            let exp = PyInt::new(py, 2).pow(exp, py.None())?;
-            sig.mul(exp).map(CompleteFrame)
-        }
+        let exp = decimal_class.call1((tuple.get_item(0)?,))?;
+        let sig = decimal_class.call1((tuple.get_item(1)?,))?;
+        let exp = PyInt::new(py, 2).pow(exp, py.None())?;
+        sig.mul(exp)
     }
 
-    fn decode_stringref(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
-        // Semantic tag 25
-        let index: usize = value.extract()?;
-        Ok(StringReference(index))
-    }
-
-    fn decode_sharedref(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
-        // Semantic tag 29
-        let index: usize = value.extract()?;
-        Ok(SharedReference(index))
-    }
-
-    fn decode_rational(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_rational<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 30
         let py = value.py();
         let tuple = require_tuple(value, 2)?;
-        FRACTION_TYPE.get(py)?.call1(tuple).map(CompleteFrame)
+        FRACTION_TYPE.get(py)?.call1(tuple)
     }
 
-    fn decode_regexp(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_regexp<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 35
-        RE_COMPILE
-            .get(value.py())?
-            .call1((value,))
-            .map(CompleteFrame)
+        RE_COMPILE.get(value.py())?.call1((value,))
     }
 
-    fn decode_mime(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_mime<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 36
         let py = value.py();
         let parser = EMAIL_PARSER.get(py)?.call0()?;
-        parser
-            .call_method1(intern!(py, "parsestr"), (value,))
-            .map(CompleteFrame)
+        parser.call_method1(intern!(py, "parsestr"), (value,))
     }
 
-    fn decode_uuid(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_uuid<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 37
         let py = value.py();
         let kwargs = PyDict::new(py);
         kwargs.set_item(intern!(py, "bytes"), value)?;
-        UUID_TYPE
-            .get(py)?
-            .call((), Some(&kwargs))
-            .map(CompleteFrame)
+        UUID_TYPE.get(py)?.call((), Some(&kwargs))
     }
 
-    fn decode_ipv4(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_ipv4<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 52
         let py = value.py();
         let addr = if let Ok(bytes) = value.cast::<PyBytes>() {
-            // The decoded value was a bytestring, so this is an IPv4 address
             IPV4ADDRESS_TYPE.get(py)?.call1((bytes,))?
         } else if let Ok(tuple) = value.cast_into::<PyTuple>()
             && tuple.len() == 2
         {
-            // The decoded value was a 2-item array. Check the types of the elements:
-            // (int, bytes) -> network
-            // (bytes, int) -> interface
             let first_item = tuple.get_item(0)?;
             let second_item = tuple.get_item(1)?;
             if let Ok(prefix) = first_item.cast::<PyInt>()
@@ -1193,30 +1340,22 @@ impl CBORDecoder {
                 "input value must be a bytestring or an array of 2 elements",
             ));
         };
-        Ok(CompleteFrame(addr))
+        Ok(addr)
     }
 
-    fn decode_ipv6(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_ipv6<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 54
         let py = value.py();
         let ipv6addr_class = IPV6ADDRESS_TYPE.get(py)?;
         let addr = if let Ok(bytes) = value.cast::<PyBytes>() {
-            // The decoded value was a bytestring, so this is an IPv6 address
             ipv6addr_class.call1((bytes,))?
         } else if let Ok(tuple) = value.cast_into::<PyTuple>()
             && (2..=3).contains(&tuple.len())
         {
-            // The decoded value was a 2-item (or 3 with zone ID) array.
-            // Check the types of the elements:
-            // (bytes, null) -> scoped address
-            // (int, bytes)  -> network
-            // (bytes, int)  -> interface
             let first_item = tuple.get_item(0)?;
             let second_item = tuple.get_item(1)?;
             let zone_id = tuple.get_item(2).ok();
 
-            // Format the zone ID suffix if a zone ID was included
-            // (bytes or integer as the last item of a 3-tuple)
             let zone_id_suffix = if let Some(zone_id) = zone_id {
                 if let Ok(zone_id_bytes) = zone_id.cast::<PyBytes>() {
                     let zone_id_str = String::from_utf8(zone_id_bytes.as_bytes().to_vec())?;
@@ -1235,8 +1374,6 @@ impl CBORDecoder {
             if second_item.is_none()
                 && let Ok(address) = first_item.cast::<PyBytes>()
             {
-                // A scoped address is encoded as [address, null, zone id]; with no prefix
-                // length it decodes to a bare IPv6 address rather than a network or interface.
                 let addr_obj = ipv6addr_class.call1((address,))?;
                 ipv6addr_class.call1((format!("{addr_obj}{zone_id_suffix}"),))?
             } else {
@@ -1272,34 +1409,30 @@ impl CBORDecoder {
                 "input value must be a bytestring or an array of 2 elements",
             ));
         };
-        Ok(CompleteFrame(addr))
+        Ok(addr)
     }
 
-    fn decode_epoch_date(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_epoch_date<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 100
         let py = value.py();
         let value = value.extract::<i32>()? + 719163;
-        DATE_FROMORDINAL.get(py)?.call1((value,)).map(CompleteFrame)
+        DATE_FROMORDINAL.get(py)?.call1((value,))
     }
 
-    fn decode_ipaddress(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_ipaddress<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 260 (deprecated)
         let py = value.py();
         let value = value.cast_into::<PyBytes>()?;
-        let addr_obj = match value.len()? {
+        match value.len()? {
             4 | 16 => IPADDRESS_FUNC.get(py)?.call1((value,)),
-            6 => Ok(Bound::new(py, CBORTag::new_internal(260, value.into_any()))?.into_any()), // MAC address
+            6 => Ok(Bound::new(py, CBORTag::new_internal(260, value.into_any()))?.into_any()),
             length => Err(CBORDecodeError::new_err(format!(
                 "invalid IP address length ({length})"
             ))),
-        }?;
-        Ok(CompleteFrame(addr_obj))
+        }
     }
 
-    fn decode_ipnetwork<'py>(
-        value: Bound<'py, PyAny>,
-        _immutable: bool,
-    ) -> PyResult<DecoderResult<'py>> {
+    fn decode_ipnetwork<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 261 (deprecated)
         let py = value.py();
         let value: Bound<'py, PyMapping> = value.cast_into()?;
@@ -1318,72 +1451,73 @@ impl CBORDecoder {
             )));
         }
 
-        let addr_obj = match IPNETWORK_FUNC.get(py)?.call1((&first_item,)) {
+        match IPNETWORK_FUNC.get(py)?.call1((&first_item,)) {
             Ok(ip_network) => Ok(ip_network),
             Err(e) => {
-                // A CompleteFrameError may indicate that the bytestring has host bits set, so try parsing
-                // it as an IP interface instead
                 if e.is_instance_of::<PyValueError>(py) {
                     IPINTERFACE_FUNC.get(py)?.call1((first_item,))
                 } else {
                     Err(e)
                 }
             }
-        }?;
-        Ok(CompleteFrame(addr_obj))
+        }
     }
 
-    fn decode_date_string(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_date_string<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 1004
         let py = value.py();
-        let date = DATE_FROMISOFORMAT.get(py)?.call1((value,))?;
-        Ok(CompleteFrame(date))
+        DATE_FROMISOFORMAT.get(py)?.call1((value,))
     }
 
-    fn decode_complex(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_complex<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 43000
         let py = value.py();
         let tuple = require_tuple(value, 2)?;
         let real: f64 = tuple.get_item(0)?.extract()?;
         let imag: f64 = tuple.get_item(1)?.extract()?;
-        Ok(CompleteFrame(
-            PyComplex::from_doubles(py, real, imag).into_any(),
-        ))
+        Ok(PyComplex::from_doubles(py, real, imag).into_any())
     }
 
-    fn decode_self_describe_cbor(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
+    fn decode_self_describe_cbor<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         // Semantic tag 55799
-        Ok(CompleteFrame(value))
+        Ok(value)
     }
+}
 
-    fn decode_set<'py>(
-        &mut self,
-        py: Python<'py>,
-        immutable: bool,
-    ) -> PyResult<DecoderResult<'py>> {
-        // Semantic tag 258
-        let mut set_or_none = if immutable {
-            None
-        } else {
-            Some(PySet::empty(py)?.into_any())
-        };
-        let container = set_or_none.clone();
-        let callback = move |item: Bound<'py, PyAny>, _immutable: bool| {
-            let container: Bound<'py, PyAny> = if let Some(set) = set_or_none.take() {
-                set.call_method1(intern!(py, "update"), (item,))?;
-                set.into_any()
-            } else {
-                let tuple = item.cast_into::<PyTuple>()?;
-                PyFrozenSet::new(py, tuple)?.into_any()
-            };
-            Ok(CompleteFrame(container))
-        };
-        Ok(BeginFrame(
-            Box::new(callback),
-            true,
-            container,
-            DisplayName::String("set"),
-        ))
+#[cfg(Py_3_15)]
+fn create_frozen_dict<'py>(
+    py: Python<'py>,
+    items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
+) -> PyResult<Bound<'py, PyAny>> {
+    FROZEN_DICT
+        .get(py)?
+        .call1((items,))?
+        .cast_into()
+        .map_err(PyErr::from)
+}
+
+#[cfg(not(Py_3_15))]
+fn create_frozen_dict<'py>(
+    py: Python<'py>,
+    items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
+) -> PyResult<Bound<'py, PyAny>> {
+    FrozenDict::from_items(py, items).map(|dict| dict.into_any())
+}
+
+fn token_major_type(token: &Token<'_>) -> u8 {
+    match token {
+        Token::Integer(_) => 0,
+        Token::ByteString(..) | Token::ByteStringStart => 2,
+        Token::TextString(..) | Token::TextStringStart => 3,
+        Token::ArrayStart(_) => 4,
+        Token::MapStart(_) => 5,
+        Token::Tag(_) => 6,
+        Token::Simple(_)
+        | Token::Float(_)
+        | Token::Boolean(_)
+        | Token::Null
+        | Token::Undefined
+        | Token::Break => 7,
     }
 }
 
@@ -1429,39 +1563,52 @@ impl CBORDecoder {
         )
     }
 
+    /// The underlying low-level :class:`~cbor2.CBORStreamDecoder`.
+    ///
+    /// Accessing this promotes the inline stream decoder to a shared Python
+    /// object (the first access allocates it); subsequent decoding goes through
+    /// that shared object.
     #[getter]
-    fn fp(&self, py: Python<'_>) -> Option<Py<PyAny>> {
-        self.fp.as_ref().map(|fp| fp.clone_ref(py))
-    }
-
-    #[setter]
-    fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
-        let result = fp.call_method0("readable");
-        if let Ok(readable) = &result
-            && readable.is_truthy()?
-        {
-            self.fp_is_seekable = fp.call_method0("seekable")?.is_truthy()?;
-            let fp = fp.clone();
-            self.read_method = Some(fp.getattr("read")?.unbind());
-            self.fp = Some(fp.unbind());
-            self.available_bytes = 0;
-            self.read_position = 0;
-            self.buffer = None;
-            Ok(())
+    fn stream(&mut self, py: Python<'_>) -> PyResult<Py<CBORStreamDecoder>> {
+        if let Some(reader) = self.reader.take() {
+            let stream = Bound::new(py, reader)?.unbind();
+            self.stream = Some(stream.clone_ref(py));
+            Ok(stream)
         } else {
-            raise_exc_from(
-                fp.py(),
-                PyValueError::new_err("fp must be a readable file-like object"),
-                result.err(),
-            )
+            Ok(self.stream.as_ref().unwrap().clone_ref(py))
         }
     }
 
     #[getter]
+    fn fp(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.with_reader(py, |reader| reader.fp(py))
+    }
+
+    #[setter]
+    fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
+        let py = fp.py();
+        self.with_reader_mut(py, |reader| reader.set_fp(fp))
+    }
+
+    #[getter]
+    fn read_size(&self, py: Python<'_>) -> usize {
+        self.with_reader(py, |reader| reader.read_size)
+    }
+
+    #[getter]
+    fn str_errors(&self, py: Python<'_>) -> Py<PyString> {
+        self.with_reader(py, |reader| reader.str_errors(py))
+    }
+
+    #[setter]
+    fn set_str_errors(&mut self, str_errors: &Bound<'_, PyString>) -> PyResult<()> {
+        let py = str_errors.py();
+        self.with_reader_mut(py, |reader| reader.set_str_errors(str_errors))
+    }
+
+    #[getter]
     fn tag_hook(&self, py: Python<'_>) -> Option<Py<PyAny>> {
-        self.tag_hook
-            .as_ref()
-            .map(|tag_hook| tag_hook.clone_ref(py))
+        self.tag_hook.as_ref().map(|hook| hook.clone_ref(py))
     }
 
     #[setter]
@@ -1472,7 +1619,6 @@ impl CBORDecoder {
                     "tag_hook must be callable or None",
                 ));
             }
-
             self.tag_hook = Some(tag_hook.clone().unbind());
         } else {
             self.tag_hook = None;
@@ -1482,9 +1628,7 @@ impl CBORDecoder {
 
     #[getter]
     fn object_hook(&self, py: Python<'_>) -> Option<Py<PyAny>> {
-        self.object_hook
-            .as_ref()
-            .map(|object_hook| object_hook.clone_ref(py))
+        self.object_hook.as_ref().map(|hook| hook.clone_ref(py))
     }
 
     #[setter]
@@ -1495,37 +1639,10 @@ impl CBORDecoder {
                     "object_hook must be callable or None",
                 ));
             }
-
             self.object_hook = Some(object_hook.clone().unbind());
         } else {
             self.object_hook = None;
         }
-        Ok(())
-    }
-
-    #[getter]
-    fn str_errors(&self, py: Python<'_>) -> Py<PyString> {
-        if let Some(str_errors) = self.str_errors.as_ref() {
-            str_errors.clone_ref(py)
-        } else {
-            intern!(py, "strict").clone().unbind()
-        }
-    }
-
-    #[setter]
-    fn set_str_errors(&mut self, str_errors: &Bound<'_, PyString>) -> PyResult<()> {
-        let as_string: &str = str_errors.extract()?;
-        self.str_errors = match as_string {
-            "strict" => None,
-            "ignore" | "replace" | "backslashreplace" | "surrogateescape" => {
-                Some(str_errors.clone().unbind())
-            }
-            _ => {
-                return Err(PyValueError::new_err(format!(
-                    "invalid str_errors value: '{str_errors}'"
-                )));
-            }
-        };
         Ok(())
     }
 
@@ -1534,38 +1651,7 @@ impl CBORDecoder {
     /// :param amount: the number of bytes to read
     #[pyo3(signature = (amount, /))]
     fn read(&mut self, py: Python<'_>, amount: usize) -> PyResult<Vec<u8>> {
-        if amount == 0 {
-            return Ok(Vec::default());
-        }
-
-        if self.available_bytes == 0 {
-            // No buffer
-            let (new_bytes, amount_read) = self.read_from_fp(py, amount)?;
-            self.read_position = amount;
-            self.available_bytes = amount_read - amount;
-            let new_buffer = new_bytes.as_bytes()[..amount].to_vec();
-            self.buffer = Some(new_bytes.unbind());
-            Ok(new_buffer)
-        } else if self.available_bytes < amount {
-            // Combine the remnants of the partial buffer with new data read from the file
-            let needed_bytes = amount - self.available_bytes;
-            let mut concatenated_buffer: Vec<u8> =
-                self.buffer.take().unwrap().as_bytes(py)[self.read_position..].to_vec();
-            let (new_bytes, amount_read) = self.read_from_fp(py, needed_bytes)?;
-            concatenated_buffer.extend_from_slice(&new_bytes[..needed_bytes]);
-            self.buffer = Some(new_bytes.unbind());
-            self.available_bytes = amount_read - needed_bytes;
-            self.read_position = needed_bytes;
-            Ok(concatenated_buffer)
-        } else {
-            // Return a slice from the existing bytes object
-            let vec = self.buffer.as_ref().unwrap().as_bytes(py)
-                [self.read_position..self.read_position + amount]
-                .to_vec();
-            self.available_bytes -= amount;
-            self.read_position += amount;
-            Ok(vec)
-        }
+        self.with_reader_mut(py, |reader| reader.read(py, amount))
     }
 
     /// Decode the next value from the stream.
@@ -1576,254 +1662,63 @@ impl CBORDecoder {
     /// :raises CBORDecodeError: if there is any problem decoding the stream
     #[pyo3(signature = (*, immutable = false))]
     pub fn decode<'py>(&mut self, py: Python<'py>, immutable: bool) -> PyResult<Bound<'py, PyAny>> {
-        let mut frames: Vec<StackFrame> = Vec::new();
+        let mut state = AssemblerState::new(immutable);
+        let value = self.run_decode(py, &mut state)?;
+        self.with_reader_mut(py, |reader| reader.rewind_buffer(py))?;
+        Ok(value)
+    }
 
-        fn add_frame<'a>(
-            frames: &mut Vec<StackFrame<'a>>,
-            max_depth: usize,
-            frame: StackFrame<'a>,
-        ) -> PyResult<()> {
-            if frames.len() == max_depth {
-                return Err(CBORDecodeError::new_err(format!(
-                    "maximum container nesting depth ({max_depth}) exceeded",
-                )));
-            }
+    /// Feed a single low-level token into the decoder.
+    ///
+    /// This drives the high-level assembler incrementally, allowing callers to
+    /// intercept or transform tokens (obtained from :attr:`stream`) before they
+    /// are assembled.
+    ///
+    /// :param token: a token obtained from a :class:`~cbor2.CBORStreamDecoder`
+    /// :param immutable: if :data:`True`, decode the current top-level item as an
+    ///     immutable type (only honored at the start of a new item)
+    /// :return: the assembled object once a complete top-level item has been
+    ///     decoded, otherwise the :data:`~cbor2.tokens.MORE` sentinel
+    #[pyo3(signature = (token, /, *, immutable = false))]
+    fn push<'py>(
+        &mut self,
+        py: Python<'py>,
+        token: &Bound<'py, PyAny>,
+        immutable: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let mut state = self
+            .assembler
+            .take()
+            .unwrap_or_else(|| AssemblerState::new(immutable));
+        let parsed = Token::from_py(token)?;
 
-            frames.push(frame);
-            Ok(())
-        }
-
-        fn wrap_exception(py: Python<'_>, err: PyErr, typename: &DisplayName) -> PyErr {
-            if err.is_instance_of::<CBORDecodeEOF>(py) {
-                err
-            } else if err.is_instance_of::<CBORDecodeError>(py) {
-                CBORDecodeError::new_err(format!(
-                    "error decoding {}: {}",
-                    typename,
-                    err.arguments(py)
-                ))
-            } else {
-                create_exc_from(
-                    py,
-                    CBORDecodeError::new_err(format!("error decoding {}", typename)),
-                    Some(err),
-                )
-            }
-        }
-
-        let mut shareables: Vec<Option<Bound<'py, PyAny>>> = Vec::new();
-        let mut string_namespaces: Vec<Vec<Bound<'py, PyAny>>> = Vec::new();
-        let mut value: Option<Bound<'py, PyAny>> = None;
-        let mut current_immutable: bool = immutable;
-        loop {
-            let result: PyResult<DecoderResult<'py>> = if let Some(previous_value) = value.take() {
-                // Call the decoder callback of the last frame
-                let frame = frames.last_mut().unwrap();
-                if let Some(decoder_callback) = frame.decoder_callback.as_mut() {
-                    decoder_callback(previous_value, frame.immutable)
-                        .map_err(|e| wrap_exception(py, e, &frame.typename))
-                } else if frame.contains_string_namespace {
-                    string_namespaces
-                        .pop()
-                        .expect("no string namespaces to pop from");
-                    Ok(CompleteFrame(previous_value))
-                } else if let Some(shareable_index) = frame.shareable_index {
-                    shareables[shareable_index].get_or_insert_with(|| previous_value.clone());
-                    Ok(CompleteFrame(previous_value))
+        let outcome = (|| -> PyResult<Option<Bound<'py, PyAny>>> {
+            self.process_token(py, &mut state, parsed)?;
+            loop {
+                if state.frames.is_empty() {
+                    return Ok(Some(
+                        state
+                            .pending_value
+                            .take()
+                            .expect("assembler finished without a value")
+                            .into_bound(py),
+                    ));
+                }
+                if let Some(value) = state.pending_value.take() {
+                    self.place_value(py, &mut state, value.into_bound(py))?;
                 } else {
-                    panic!("no decoder callback, shareable index or string namespace");
-                }
-            } else {
-                let (major_type, subtype) = self.read_major_and_subtype(py)?;
-                match major_type {
-                    0 => self.decode_uint(py, subtype),
-                    1 => self.decode_negint(py, subtype),
-                    2 => self.decode_bytestring(py, subtype),
-                    3 => self.decode_string(py, subtype),
-                    4 => self.decode_array(py, subtype, current_immutable),
-                    5 => self.decode_map(py, subtype, current_immutable),
-                    6 => self.decode_semantic(py, subtype, current_immutable),
-                    7 => self.decode_special(py, subtype),
-                    _ => Err(CBORDecodeError::new_err(format!(
-                        "invalid major type: {major_type}"
-                    ))),
-                }
-                .map_err(|e| {
-                    let typename = match major_type {
-                        0 => "unsigned integer",
-                        1 => "negative integer",
-                        2 => "byte string",
-                        3 => "text string",
-                        4 => "array",
-                        5 => "map",
-                        6 => "semantic tag",
-                        7 => "special value",
-                        _ => unreachable!("invalid major types should have been handled earlier"),
-                    };
-                    wrap_exception(py, e, &DisplayName::String(typename))
-                })
-            };
-
-            match result {
-                Ok(BeginFrame(callback, requested_immutable, container, typename)) => {
-                    if let Some(frame) = frames.last_mut()
-                        && let Some(container) = container
-                        && let Some(shareable_index) = frame.shareable_index
-                    {
-                        frames.pop();
-                        shareables[shareable_index] = Some(container.clone());
-                    }
-                    current_immutable = current_immutable || requested_immutable;
-                    add_frame(
-                        &mut frames,
-                        self.max_depth,
-                        StackFrame {
-                            immutable: current_immutable,
-                            decoder_callback: Some(callback),
-                            shareable_index: None,
-                            typename,
-                            contains_string_namespace: false,
-                        },
-                    )?;
-                }
-                Ok(ContinueFrame(require_immutable)) => {
-                    // If require_immutable is true, the next value must be immutable
-                    // Otherwise, restore the immutable flag to the previous value
-                    current_immutable = if frames.len() >= 2 {
-                        frames.get(frames.len() - 2).unwrap().immutable
-                    } else {
-                        immutable
-                    } || require_immutable;
-                    frames.last_mut().unwrap().immutable = current_immutable;
-                }
-                Ok(CompleteFrame(new_value)) => {
-                    frames
-                        .pop()
-                        .expect("received frame completion but there are no frames on the stack");
-                    current_immutable = frames.last().map_or(immutable, |frame| frame.immutable);
-                    value = Some(new_value);
-                }
-                Ok(Value(new_value)) => {
-                    value = Some(new_value);
-                }
-                Ok(StringNamespace) => {
-                    add_frame(
-                        &mut frames,
-                        self.max_depth,
-                        StackFrame {
-                            immutable: current_immutable,
-                            decoder_callback: None,
-                            shareable_index: None,
-                            typename: DisplayName::String("string namespace"),
-                            contains_string_namespace: true,
-                        },
-                    )?;
-                    string_namespaces.push(Vec::new());
-                }
-                Ok(StringValue(string, length)) => {
-                    // Conditionally add the string to the innermost string namespace
-                    if let Some(namespace) = string_namespaces.last_mut()
-                        && match namespace.len() {
-                            0..24 => length >= 3,
-                            24..256 => length >= 4,
-                            256..65536 => length >= 5,
-                            65536..=4294967295 => length >= 7,
-                            _ => length >= 11,
-                        }
-                    {
-                        namespace.push(string.clone());
-                    }
-                    value = Some(string);
-                }
-                Ok(StringReference(index)) => {
-                    frames
-                        .pop()
-                        .expect("  received string reference but there are no frames on the stack");
-                    if let Some(namespace) = string_namespaces.last() {
-                        if let Some(string) = namespace.get(index) {
-                            value = Some(string.clone());
-                        } else {
-                            return Err(CBORDecodeError::new_err(format!(
-                                "string reference {index} not found"
-                            )));
-                        }
-                    } else {
-                        return Err(CBORDecodeError::new_err(
-                            "string reference outside of namespace",
-                        ));
-                    }
-                    current_immutable = frames
-                        .last()
-                        .map_or(current_immutable, |frame| frame.immutable);
-                }
-                Ok(Shareable) => {
-                    add_frame(
-                        &mut frames,
-                        self.max_depth,
-                        StackFrame {
-                            immutable: current_immutable,
-                            decoder_callback: None,
-                            shareable_index: Some(shareables.len()),
-                            typename: DisplayName::String("shareable value"),
-                            contains_string_namespace: false,
-                        },
-                    )?;
-                    shareables.push(None);
-                }
-                Ok(SharedReference(index)) => {
-                    frames
-                        .pop()
-                        .expect("received shared reference but there are no frames on the stack");
-                    value = match shareables.get(index) {
-                        Some(Some(value)) => Some(value.clone()),
-                        Some(None) => {
-                            return Err(CBORDecodeError::new_err(format!(
-                                "shared value {index} has not been initialized"
-                            )));
-                        }
-                        None => {
-                            return Err(CBORDecodeError::new_err(format!(
-                                "shared reference {index} not found"
-                            )));
-                        }
-                    };
-                    current_immutable = frames
-                        .last()
-                        .map_or(current_immutable, |frame| frame.immutable);
-                }
-                Err(err) => {
-                    // If an Exception was raised, wrap it in a CBORDecodeError
-                    // If a ValueError was raised, wrap it in a CBORDecodeError
-                    return if err.is_instance_of::<CBORDecodeError>(py) {
-                        Err(err)
-                    } else if err.is_instance_of::<PyValueError>(py)
-                        || err.is_instance_of::<PyException>(py)
-                    {
-                        Err(create_exc_from(
-                            py,
-                            CBORDecodeError::new_err(err.to_string()),
-                            Some(err),
-                        ))
-                    } else {
-                        Err(err)
-                    };
+                    return Ok(None);
                 }
             }
+        })();
 
-            if frames.is_empty() {
-                // If fp was seekable and excess data has been read, empty the buffer and
-                // rewind the file
-                if self.available_bytes > 0
-                    && let Some(fp) = &self.fp
-                {
-                    let offset = -(self.available_bytes as isize);
-                    fp.call_method1(py, intern!(py, "seek"), (offset, SEEK_CUR))?;
-                    self.buffer = None;
-                    self.available_bytes = 0;
-                    self.read_position = 0;
-                }
-                return Ok(value.expect("stack is empty but final return value is missing"));
+        match outcome {
+            Ok(Some(value)) => Ok(value),
+            Ok(None) => {
+                self.assembler = Some(state);
+                Ok(MORE.get(py).unwrap().bind(py).clone().into_any())
             }
+            Err(err) => Err(err),
         }
     }
 }

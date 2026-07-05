@@ -15,7 +15,27 @@ Decoding
 .. autofunction:: cbor2.loads
 .. autofunction:: cbor2.load
 .. autoclass:: cbor2.CBORDecoder
+    :members:
+.. autoclass:: cbor2.CBORStreamDecoder
+    :members:
 .. autodecorator:: cbor2.shareable_decoder
+
+Tokens
+------
+
+The :mod:`cbor2.tokens` module contains the primitive token types produced by
+:class:`~cbor2.CBORStreamDecoder`. Each token corresponds to the head of a single
+CBOR data item. Containers and indefinite-length strings are represented by
+"start" tokens followed by their contents and a terminating
+:class:`~cbor2.tokens.Break`.
+
+.. automodule:: cbor2.tokens
+    :members:
+
+.. data:: cbor2.tokens.MORE
+
+    A sentinel returned by :meth:`CBORDecoder.push <cbor2.CBORDecoder.push>` when a
+    pushed token does not (yet) complete a top-level item.
 
 Types
 -----

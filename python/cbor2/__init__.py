@@ -11,6 +11,7 @@ from ._cbor2 import CBOREncodeTypeError as CBOREncodeTypeError
 from ._cbor2 import CBOREncodeValueError as CBOREncodeValueError
 from ._cbor2 import CBORError as CBORError
 from ._cbor2 import CBORSimpleValue as CBORSimpleValue
+from ._cbor2 import CBORStreamDecoder as CBORStreamDecoder
 from ._cbor2 import CBORTag as CBORTag
 from ._cbor2 import dump as dump
 from ._cbor2 import dumps as dumps

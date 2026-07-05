@@ -140,6 +140,52 @@ Here's a simplified example that uses this flag to decode the semantic tag 258 a
     value = {frozenset(["aa", "bb"]): "value"}
     assert cbor2.loads(cbor2.dumps(value), semantic_decoders={258: decode_set}) == value
 
+Working with the low-level token stream
++++++++++++++++++++++++++++++++++++++++
+
+The decoder is split into two layers:
+
+#. :class:`CBORStreamDecoder` is a *low-level* decoder that reads bytes and yields a stream of
+   primitive :mod:`tokens <cbor2.tokens>` (integers, strings, array/map starts, tags, and so on)
+   rather than fully assembled objects.
+#. :class:`CBORDecoder` is the *high-level* decoder that consumes those tokens and assembles them
+   into Python objects, applying semantic tags, hooks and references.
+
+A :class:`CBORStreamDecoder` is iterable, yielding one token at a time. This lets you inspect the
+raw structure of a CBOR document without building any objects::
+
+    from io import BytesIO
+
+    import cbor2
+    from cbor2 import tokens
+
+    stream = cbor2.CBORStreamDecoder(BytesIO(cbor2.dumps([1, "foo"])))
+    assert list(stream) == [
+        tokens.ArrayStart(2),
+        tokens.Integer(1),
+        tokens.TextString("foo"),
+    ]
+
+Every :class:`CBORDecoder` exposes its underlying stream as :attr:`~CBORDecoder.stream`, and tokens
+can be fed back into the high-level decoder one at a time with :meth:`~CBORDecoder.push`. This lets
+you **intercept** tokens (transforming them, or handling them yourself) before **passing them
+through** to the assembler. :meth:`~CBORDecoder.push` returns the :data:`~cbor2.tokens.MORE`
+sentinel until a complete top-level item has been assembled, at which point it returns the object::
+
+    import cbor2
+    from cbor2 import tokens
+
+    decoder = cbor2.CBORDecoder(BytesIO(cbor2.dumps([1, 2, 3])))
+    result = tokens.MORE
+    for token in decoder.stream:
+        # Double every integer before it reaches the assembler
+        if isinstance(token, tokens.Integer):
+            token = tokens.Integer(token.value * 2)
+
+        result = decoder.push(token)
+
+    assert result == [2, 4, 6]
+
 Customizing the encoder
 -----------------------
 
