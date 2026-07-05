@@ -10,12 +10,9 @@ from cbor2 import (
     CBORDecodeEOF,
     CBORDecodeError,
     CBORDecoder,
-    CBORSimpleValue,
     CBORStreamDecoder,
-    CBORTag,
     dumps,
     loads,
-    undefined,
 )
 from cbor2 import tokens as t
 
@@ -167,95 +164,96 @@ def test_repr_roundtrip() -> None:
     assert repr(t.MapStart(2)) == "MapStart(2)"
     assert repr(t.Tag(55799)) == "Tag(55799)"
     assert repr(t.Break()) == "Break()"
-    assert repr(t.MORE) == "MORE"
-
-
-def test_more_is_falsey_singleton() -> None:
-    assert bool(t.MORE) is False
-    assert isinstance(t.MORE, t.MoreType)
-
-
-#
-# Push-based assembly
-#
-
-
-@pytest.mark.parametrize(
-    "value",
-    [
-        0,
-        -1,
-        "hello",
-        b"\x01\x02",
-        [1, 2, 3],
-        {"a": 1, "b": [2, 3]},
-        [1, [2, [3, [4]]]],
-        {1: {2: {3: 4}}},
-        3.14,
-        True,
-        None,
-        undefined,
-        CBORSimpleValue(200),
-        CBORTag(1, 1363896240),
-        [1, "a", b"b", {"c": None}],
-    ],
-)
-def test_push_roundtrip_matches_loads(value: Any) -> None:
-    data = dumps(value)
-    decoder = CBORDecoder(BytesIO(data))
-    result: Any = t.MORE
-    for token in decoder.stream:
-        result = decoder.push(token)
-    assert result != t.MORE
-    assert result == loads(data)
-
-
-def test_push_returns_more_until_complete() -> None:
-    decoder = CBORDecoder(BytesIO(dumps([1, 2])))
-    tokens = list(decoder.stream)
-    # Re-feed manually so we can observe intermediate MORE values.
-    decoder2 = CBORDecoder(BytesIO(b""))
-    outcomes = [decoder2.push(tok) for tok in tokens]
-    # tokens: ArrayStart(2), Integer(1), Integer(2)
-    assert outcomes[:-1] == [t.MORE, t.MORE]
-    assert outcomes[-1] == [1, 2]
-
-
-def test_push_multiple_top_level_items() -> None:
-    buf = dumps(1) + dumps("two") + dumps([3])
-    decoder = CBORDecoder(BytesIO(buf))
-    results = []
-    for token in decoder.stream:
-        outcome = decoder.push(token)
-        if outcome is not t.MORE:
-            results.append(outcome)
-    assert results == [1, "two", [3]]
-
-
-def test_push_interception_transforms_tokens() -> None:
-    decoder = CBORDecoder(BytesIO(dumps([1, 2, 3])))
-    result: Any = t.MORE
-    for token in decoder.stream:
-        if isinstance(token, t.Integer):
-            token = t.Integer(token.value * 10)
-        result = decoder.push(token)
-    assert result == [10, 20, 30]
-
-
-def test_push_immutable() -> None:
-    decoder = CBORDecoder(BytesIO(dumps([1, 2])))
-    result: Any = t.MORE
-    for token in decoder.stream:
-        result = decoder.push(token, immutable=True)
-    assert result == (1, 2)
-
-
-def test_push_rejects_non_token() -> None:
-    decoder = CBORDecoder(BytesIO(b""))
-    with pytest.raises(ValueError, match="expected a cbor2 token object"):
-        decoder.push(42)  # type: ignore[arg-type]
 
 
 def test_stream_property_is_shared() -> None:
     decoder = CBORDecoder(BytesIO(dumps(1)))
     assert isinstance(decoder.stream, CBORStreamDecoder)
+
+
+#
+# Token hooks (selective, native-loop customization)
+#
+
+
+def test_token_hook_customizes_single_leaf_type() -> None:
+    data = dumps([1, 2, "foo", {"k": 3}])
+    out = loads(data, token_hooks={t.Integer: lambda tok: tok.value * 2})
+    # only integers are transformed; strings/maps/lists stay native
+    assert out == [2, 4, "foo", {"k": 6}]
+
+
+def test_token_hook_receives_token_object() -> None:
+    seen = []
+
+    def hook(tok: t.TextString) -> str:
+        seen.append((type(tok), tok.value, tok.length))
+        return tok.value.upper()
+
+    assert loads(dumps(["ab", "cde"]), token_hooks={t.TextString: hook}) == ["AB", "CDE"]
+    assert seen == [(t.TextString, "ab", 2), (t.TextString, "cde", 3)]
+
+
+def test_token_hook_multiple_types() -> None:
+    hooks = {
+        t.Integer: lambda tok: tok.value + 100,
+        t.Boolean: lambda tok: "yes" if tok.value else "no",
+        t.Null: lambda tok: "nothing",
+    }
+    assert loads(dumps([1, True, None, "x"]), token_hooks=hooks) == [101, "yes", "nothing", "x"]
+
+
+def test_token_hook_bytestring_with_length() -> None:
+    class Blob:
+        def __init__(self, data: bytes) -> None:
+            self.data = data
+
+        def __eq__(self, other: object) -> bool:
+            return isinstance(other, Blob) and other.data == self.data
+
+    out = loads(dumps(b"hello"), token_hooks={t.ByteString: lambda tok: Blob(tok.value)})
+    assert out == Blob(b"hello")
+
+
+def test_token_hook_on_decoder_instance() -> None:
+    decoder = CBORDecoder(BytesIO(dumps(5)), token_hooks={t.Integer: lambda tok: -tok.value})
+    assert decoder.decode() == -5
+    assert decoder.token_hooks is not None
+    assert set(decoder.token_hooks) == {t.Integer}
+
+
+def test_token_hooks_getter_default_none() -> None:
+    assert CBORDecoder(BytesIO(dumps(1))).token_hooks is None
+
+
+def test_token_hook_rejects_non_token_type() -> None:
+    with pytest.raises(TypeError, match="is not a hookable token type"):
+        loads(dumps(1), token_hooks={int: lambda tok: tok})  # type: ignore[dict-item]
+
+
+def test_token_hook_rejects_structural_token_type() -> None:
+    # container/tag starts are not customizable via token hooks
+    with pytest.raises(TypeError, match="is not a hookable token type"):
+        loads(dumps([1]), token_hooks={t.ArrayStart: lambda tok: tok})
+
+
+def test_token_hook_rejects_non_callable() -> None:
+    with pytest.raises(TypeError, match="token_hooks values must be callable"):
+        loads(dumps(1), token_hooks={t.Integer: "nope"})  # type: ignore[dict-item]
+
+
+def test_token_hook_exception_is_wrapped() -> None:
+    def boom(tok: t.Integer) -> Any:
+        raise RuntimeError("kaboom")
+
+    with pytest.raises(CBORDecodeError) as exc_info:
+        loads(dumps(1), token_hooks={t.Integer: boom})
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+def test_token_hook_does_not_affect_unhooked_types() -> None:
+    # A hook on floats must leave ints untouched (native path)
+    out = loads(dumps([1, 2.7]), token_hooks={t.Float: lambda tok: round(tok.value)})
+    assert out == [1, 3]
+    assert isinstance(out[0], int) and isinstance(out[1], int)

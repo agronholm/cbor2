@@ -73,11 +73,6 @@ class Undefined:
 class Break:
     def __new__(cls) -> Self: ...
 
-@final
-class MoreType: ...
-
-MORE: MoreType
-
 Token: TypeAlias = (
     Integer
     | ByteString

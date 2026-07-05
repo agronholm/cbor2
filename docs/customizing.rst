@@ -140,6 +140,38 @@ Here's a simplified example that uses this flag to decode the semantic tag 258 a
     value = {frozenset(["aa", "bb"]): "value"}
     assert cbor2.loads(cbor2.dumps(value), semantic_decoders={258: decode_set}) == value
 
+Customizing specific token types
+++++++++++++++++++++++++++++++++
+
+The ``token_hooks`` option lets you customize how individual *leaf* tokens (integers, floats,
+booleans, ``null``, ``undefined``, simple values, byte strings and text strings) are decoded, while
+everything else keeps running on the native Rust fast path. It is a mapping of a
+:mod:`token type <cbor2.tokens>` to a callable that receives the decoded token and returns the
+value to use in its place.
+
+Unlike iterating the low-level token stream (see below), a token hook only crosses
+into Python for the token *types* you register — a document made mostly of other types pays no
+overhead for them::
+
+    import cbor2
+    from cbor2 import tokens
+
+    class Blob:
+        def __init__(self, data: bytes):
+            self.data = data
+
+    def decode_blob(token: tokens.ByteString) -> Blob:
+        return Blob(token.value)
+
+    payload = cbor2.dumps([b"abc", "text", 1])
+    # Only byte-string tokens are handed to Python; the string and integer stay native
+    result = cbor2.loads(payload, token_hooks={tokens.ByteString: decode_blob})
+    assert isinstance(result[0], Blob)
+
+.. note:: Token hooks apply to leaf tokens only. To customize maps, unknown tags or specific
+    semantic tags, use ``object_hook``, ``tag_hook`` or ``semantic_decoders`` respectively, which
+    likewise keep the rest of the decoding native.
+
 Working with the low-level token stream
 +++++++++++++++++++++++++++++++++++++++
 
@@ -152,7 +184,7 @@ The decoder is split into two layers:
    into Python objects, applying semantic tags, hooks and references.
 
 A :class:`CBORStreamDecoder` is iterable, yielding one token at a time. This lets you inspect the
-raw structure of a CBOR document without building any objects::
+raw structure of a CBOR document (SAX-style) without building any objects::
 
     from io import BytesIO
 
@@ -166,25 +198,11 @@ raw structure of a CBOR document without building any objects::
         tokens.TextString("foo"),
     ]
 
-Every :class:`CBORDecoder` exposes its underlying stream as :attr:`~CBORDecoder.stream`, and tokens
-can be fed back into the high-level decoder one at a time with :meth:`~CBORDecoder.push`. This lets
-you **intercept** tokens (transforming them, or handling them yourself) before **passing them
-through** to the assembler. :meth:`~CBORDecoder.push` returns the :data:`~cbor2.tokens.MORE`
-sentinel until a complete top-level item has been assembled, at which point it returns the object::
-
-    import cbor2
-    from cbor2 import tokens
-
-    decoder = cbor2.CBORDecoder(BytesIO(cbor2.dumps([1, 2, 3])))
-    result = tokens.MORE
-    for token in decoder.stream:
-        # Double every integer before it reaches the assembler
-        if isinstance(token, tokens.Integer):
-            token = tokens.Integer(token.value * 2)
-
-        result = decoder.push(token)
-
-    assert result == [2, 4, 6]
+Every :class:`CBORDecoder` also exposes its underlying stream as :attr:`~CBORDecoder.stream`, so you
+can inspect the same low-level token source that the high-level decoder consumes. To *customize*
+decoding while keeping the assembly native, prefer ``token_hooks`` (for leaf values) or
+``object_hook``/``tag_hook``/``semantic_decoders`` (for maps and tags) rather than iterating the
+stream yourself.
 
 Customizing the encoder
 -----------------------

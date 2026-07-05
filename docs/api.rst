@@ -32,11 +32,6 @@ CBOR data item. Containers and indefinite-length strings are represented by
 .. automodule:: cbor2.tokens
     :members:
 
-.. data:: cbor2.tokens.MORE
-
-    A sentinel returned by :meth:`CBORDecoder.push <cbor2.CBORDecoder.push>` when a
-    pushed token does not (yet) complete a top-level item.
-
 Types
 -----
 

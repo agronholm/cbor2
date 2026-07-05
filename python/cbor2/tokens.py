@@ -6,7 +6,6 @@ contents and a terminating :class:`Break`, rather than being assembled into
 Python objects.
 """
 
-from ._cbor2 import MORE as MORE
 from ._cbor2 import ArrayStart as ArrayStart
 from ._cbor2 import Boolean as Boolean
 from ._cbor2 import Break as Break
@@ -15,7 +14,6 @@ from ._cbor2 import ByteStringStart as ByteStringStart
 from ._cbor2 import Float as Float
 from ._cbor2 import Integer as Integer
 from ._cbor2 import MapStart as MapStart
-from ._cbor2 import MoreType as MoreType
 from ._cbor2 import Null as Null
 from ._cbor2 import Simple as Simple
 from ._cbor2 import Tag as Tag
@@ -24,7 +22,6 @@ from ._cbor2 import TextStringStart as TextStringStart
 from ._cbor2 import Undefined as Undefined
 
 __all__ = [
-    "MORE",
     "ArrayStart",
     "Boolean",
     "Break",
@@ -33,7 +30,6 @@ __all__ = [
     "Float",
     "Integer",
     "MapStart",
-    "MoreType",
     "Null",
     "Simple",
     "Tag",

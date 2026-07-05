@@ -10,8 +10,9 @@
 //! both the one-shot [`CBORDecoder::decode`] fast path and the incremental
 //! [`CBORDecoder::push`] API.
 
-use crate::_cbor2::{BREAK_MARKER, MORE, UNDEFINED};
+use crate::_cbor2::{BREAK_MARKER, UNDEFINED};
 use crate::stream_decoder::{CBORStreamDecoder, Token};
+use crate::tokens;
 #[cfg(not(Py_3_15))]
 use crate::types::FrozenDict;
 use crate::types::{
@@ -50,6 +51,88 @@ static FROZEN_DICT: PyImportable = PyImportable::new("builtins", "frozendict");
 
 /// A transform applied to the (single) decoded content of a semantic tag.
 type TransformFn = for<'py> fn(Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>;
+
+//
+// Token hooks: per-token-type callbacks invoked from the native decode loop.
+//
+// These let callers customize the decoding of specific *leaf* (value-producing)
+// tokens while everything else keeps running at full Rust speed. The loop only
+// crosses into Python for the token kinds that have a registered hook.
+//
+
+const HOOK_INTEGER: usize = 0;
+const HOOK_FLOAT: usize = 1;
+const HOOK_BOOLEAN: usize = 2;
+const HOOK_NULL: usize = 3;
+const HOOK_UNDEFINED: usize = 4;
+const HOOK_SIMPLE: usize = 5;
+const HOOK_BYTESTRING: usize = 6;
+const HOOK_TEXTSTRING: usize = 7;
+const NUM_TOKEN_HOOKS: usize = 8;
+
+/// Returns the token-hook slot index for a leaf (value-producing) token, or
+/// [`None`] for structural tokens (container/string starts, tags, break) which
+/// cannot be customized via token hooks.
+fn leaf_hook_kind(token: &Token<'_>) -> Option<usize> {
+    Some(match token {
+        Token::Integer(_) => HOOK_INTEGER,
+        Token::Float(_) => HOOK_FLOAT,
+        Token::Boolean(_) => HOOK_BOOLEAN,
+        Token::Null => HOOK_NULL,
+        Token::Undefined => HOOK_UNDEFINED,
+        Token::Simple(_) => HOOK_SIMPLE,
+        Token::ByteString(..) => HOOK_BYTESTRING,
+        Token::TextString(..) => HOOK_TEXTSTRING,
+        _ => return None,
+    })
+}
+
+fn leaf_hook_name(kind: usize) -> &'static str {
+    match kind {
+        HOOK_INTEGER => "integer",
+        HOOK_FLOAT => "float",
+        HOOK_BOOLEAN => "boolean",
+        HOOK_NULL => "null",
+        HOOK_UNDEFINED => "undefined",
+        HOOK_SIMPLE => "simple value",
+        HOOK_BYTESTRING => "byte string",
+        HOOK_TEXTSTRING => "text string",
+        _ => "value",
+    }
+}
+
+/// Maps a token *class* object to its hook slot index.
+fn token_hook_kind_index(ty: &Bound<'_, PyAny>) -> PyResult<usize> {
+    let py = ty.py();
+    let candidates: [(Bound<'_, PyAny>, usize); NUM_TOKEN_HOOKS] = [
+        (py.get_type::<tokens::Integer>().into_any(), HOOK_INTEGER),
+        (py.get_type::<tokens::Float>().into_any(), HOOK_FLOAT),
+        (py.get_type::<tokens::Boolean>().into_any(), HOOK_BOOLEAN),
+        (py.get_type::<tokens::Null>().into_any(), HOOK_NULL),
+        (
+            py.get_type::<tokens::UndefinedToken>().into_any(),
+            HOOK_UNDEFINED,
+        ),
+        (py.get_type::<tokens::Simple>().into_any(), HOOK_SIMPLE),
+        (
+            py.get_type::<tokens::ByteString>().into_any(),
+            HOOK_BYTESTRING,
+        ),
+        (
+            py.get_type::<tokens::TextString>().into_any(),
+            HOOK_TEXTSTRING,
+        ),
+    ];
+    for (candidate, index) in candidates {
+        if ty.is(&candidate) {
+            return Ok(index);
+        }
+    }
+    Err(PyTypeError::new_err(format!(
+        "{ty} is not a hookable token type (expected one of the leaf token \
+         classes from cbor2.tokens, e.g. Integer, TextString, ByteString)"
+    )))
+}
 
 /// A human-readable name for the item currently being assembled, used when
 /// wrapping errors in a [`CBORDecodeError`].
@@ -175,7 +258,7 @@ struct Frame {
     kind: FrameKind,
 }
 
-/// The suspendable state of the assembler.
+/// The working state of the assembler for a single top-level decode.
 struct AssemblerState {
     frames: Vec<Frame>,
     shareables: Vec<Option<Py<PyAny>>>,
@@ -265,6 +348,11 @@ pub struct CBORDecoder {
     tag_hook: Option<Py<PyAny>>,
     object_hook: Option<Py<PyAny>>,
     semantic_decoders: Option<Py<PyMapping>>,
+    // Per-token-type hooks, indexed by leaf-token kind. `any_token_hooks` is a
+    // cheap flag so the hot loop can skip the lookup entirely when none are set.
+    token_hooks: [Option<Py<PyAny>>; NUM_TOKEN_HOOKS],
+    token_hooks_map: Option<Py<PyMapping>>,
+    any_token_hooks: bool,
     #[pyo3(get)]
     max_depth: usize,
     #[pyo3(get)]
@@ -274,10 +362,10 @@ pub struct CBORDecoder {
     // token stream (which always emits the corresponding "start" tokens).
     #[pyo3(get)]
     allow_indefinite: bool,
-    assembler: Option<AssemblerState>,
 }
 
 impl CBORDecoder {
+    #[allow(clippy::too_many_arguments)]
     pub fn new_internal(
         py: Python<'_>,
         fp: Option<&Bound<'_, PyAny>>,
@@ -285,6 +373,7 @@ impl CBORDecoder {
         tag_hook: Option<&Bound<'_, PyAny>>,
         object_hook: Option<&Bound<'_, PyAny>>,
         semantic_decoders: Option<&Bound<'_, PyMapping>>,
+        token_hooks: Option<&Bound<'_, PyMapping>>,
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
@@ -298,13 +387,16 @@ impl CBORDecoder {
             tag_hook: None,
             object_hook: None,
             semantic_decoders: semantic_decoders.map(|d| d.clone().unbind()),
+            token_hooks: std::array::from_fn(|_| None),
+            token_hooks_map: None,
+            any_token_hooks: false,
             max_depth,
             allow_duplicate_keys,
             allow_indefinite,
-            assembler: None,
         };
         this.set_tag_hook(tag_hook)?;
         this.set_object_hook(object_hook)?;
+        this.set_token_hooks(token_hooks)?;
         Ok(this)
     }
 
@@ -398,6 +490,32 @@ impl CBORDecoder {
         self.push_frame(state, frame, container)
     }
 
+    /// Hands a leaf token to its registered Python hook and uses the returned
+    /// value as the decoded result.
+    fn apply_token_hook<'py>(
+        &self,
+        py: Python<'py>,
+        state: &mut AssemblerState,
+        kind: usize,
+        token: Token<'py>,
+    ) -> PyResult<()> {
+        // Preserve string-reference bookkeeping for the (original) string even
+        // when its decoded value is being customized.
+        match &token {
+            Token::ByteString(value, length) => Self::track_string(state, value.as_any(), *length),
+            Token::TextString(value, length) => Self::track_string(state, value.as_any(), *length),
+            _ => {}
+        }
+
+        let hook = self.token_hooks[kind].as_ref().unwrap().bind(py);
+        let token_obj = token.into_py(py)?;
+        let value = hook
+            .call1((token_obj,))
+            .map_err(|e| wrap_decode_error(py, e, &DisplayName::String(leaf_hook_name(kind))))?;
+        state.pending_value = Some(value.unbind());
+        Ok(())
+    }
+
     /// Enforces the ``allow_indefinite`` policy for indefinite-length items.
     fn check_indefinite_allowed(&self) -> PyResult<()> {
         if self.allow_indefinite {
@@ -440,6 +558,16 @@ impl CBORDecoder {
                 FrameKind::TextStringChunks(_) => return self.feed_text_chunk(py, state, token),
                 _ => {}
             }
+        }
+
+        // Per-token-type hooks. The `any_token_hooks` flag keeps this a single
+        // boolean test on the fast path; only leaf tokens whose kind has a
+        // registered hook are handed to Python.
+        if self.any_token_hooks
+            && let Some(kind) = leaf_hook_kind(&token)
+            && self.token_hooks[kind].is_some()
+        {
+            return self.apply_token_hook(py, state, kind, token);
         }
 
         match token {
@@ -1530,18 +1658,21 @@ impl CBORDecoder {
         tag_hook = None,
         object_hook = None,
         semantic_decoders = None,
+        token_hooks = None,
         str_errors = "strict",
         read_size = 4096,
         max_depth = 400,
         allow_indefinite = true,
         allow_duplicate_keys = true,
     ))]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         py: Python<'_>,
         fp: &Bound<'_, PyAny>,
         tag_hook: Option<&Bound<'_, PyAny>>,
         object_hook: Option<&Bound<'_, PyAny>>,
         semantic_decoders: Option<&Bound<'_, PyMapping>>,
+        token_hooks: Option<&Bound<'_, PyMapping>>,
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
@@ -1555,6 +1686,7 @@ impl CBORDecoder {
             tag_hook,
             object_hook,
             semantic_decoders,
+            token_hooks,
             str_errors,
             read_size,
             max_depth,
@@ -1646,6 +1778,37 @@ impl CBORDecoder {
         Ok(())
     }
 
+    #[getter]
+    fn token_hooks(&self, py: Python<'_>) -> Option<Py<PyMapping>> {
+        self.token_hooks_map.as_ref().map(|m| m.clone_ref(py))
+    }
+
+    #[setter]
+    fn set_token_hooks(&mut self, token_hooks: Option<&Bound<'_, PyMapping>>) -> PyResult<()> {
+        let mut hooks: [Option<Py<PyAny>>; NUM_TOKEN_HOOKS] = std::array::from_fn(|_| None);
+        let mut any = false;
+        if let Some(mapping) = token_hooks {
+            let items = mapping.items()?;
+            for item in items.try_iter()? {
+                let item = item?;
+                let token_type = item.get_item(0)?;
+                let callback = item.get_item(1)?;
+                if !callback.is_callable() {
+                    return Err(PyTypeError::new_err("token_hooks values must be callable"));
+                }
+                let index = token_hook_kind_index(&token_type)?;
+                hooks[index] = Some(callback.unbind());
+                any = true;
+            }
+            self.token_hooks_map = Some(mapping.clone().unbind());
+        } else {
+            self.token_hooks_map = None;
+        }
+        self.token_hooks = hooks;
+        self.any_token_hooks = any;
+        Ok(())
+    }
+
     /// Read bytes from the data stream.
     ///
     /// :param amount: the number of bytes to read
@@ -1666,59 +1829,5 @@ impl CBORDecoder {
         let value = self.run_decode(py, &mut state)?;
         self.with_reader_mut(py, |reader| reader.rewind_buffer(py))?;
         Ok(value)
-    }
-
-    /// Feed a single low-level token into the decoder.
-    ///
-    /// This drives the high-level assembler incrementally, allowing callers to
-    /// intercept or transform tokens (obtained from :attr:`stream`) before they
-    /// are assembled.
-    ///
-    /// :param token: a token obtained from a :class:`~cbor2.CBORStreamDecoder`
-    /// :param immutable: if :data:`True`, decode the current top-level item as an
-    ///     immutable type (only honored at the start of a new item)
-    /// :return: the assembled object once a complete top-level item has been
-    ///     decoded, otherwise the :data:`~cbor2.tokens.MORE` sentinel
-    #[pyo3(signature = (token, /, *, immutable = false))]
-    fn push<'py>(
-        &mut self,
-        py: Python<'py>,
-        token: &Bound<'py, PyAny>,
-        immutable: bool,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let mut state = self
-            .assembler
-            .take()
-            .unwrap_or_else(|| AssemblerState::new(immutable));
-        let parsed = Token::from_py(token)?;
-
-        let outcome = (|| -> PyResult<Option<Bound<'py, PyAny>>> {
-            self.process_token(py, &mut state, parsed)?;
-            loop {
-                if state.frames.is_empty() {
-                    return Ok(Some(
-                        state
-                            .pending_value
-                            .take()
-                            .expect("assembler finished without a value")
-                            .into_bound(py),
-                    ));
-                }
-                if let Some(value) = state.pending_value.take() {
-                    self.place_value(py, &mut state, value.into_bound(py))?;
-                } else {
-                    return Ok(None);
-                }
-            }
-        })();
-
-        match outcome {
-            Ok(Some(value)) => Ok(value),
-            Ok(None) => {
-                self.assembler = Some(state);
-                Ok(MORE.get(py).unwrap().bind(py).clone().into_any())
-            }
-            Err(err) => Err(err),
-        }
     }
 }

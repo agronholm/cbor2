@@ -27,6 +27,7 @@ if sys.hexversion < 51314855:
 TagHook: TypeAlias = Callable[[CBORTag, bool], Any]
 SemanticDecoderCallback: TypeAlias = Callable[[Any, bool], Any]
 ObjectHook: TypeAlias = Callable[[Mapping[Any, Any], bool], Any]
+TokenHook: TypeAlias = Callable[[Any], Any]
 EncoderHook: TypeAlias = Callable[[CBOREncoder, Any], Any]
 ShareableDecoderCallback: TypeAlias = Callable[[Any], Any]
 ShareableDecoderInitializer: TypeAlias = Callable[[bool], tuple[Any, ShareableDecoderCallback]]

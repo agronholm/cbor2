@@ -16,7 +16,7 @@ from re import Pattern
 from typing import IO, Any, Generic, TypeAlias, final, overload
 from uuid import UUID
 
-from .tokens import MoreType, Token
+from .tokens import Token
 
 if sys.hexversion < 51314855:
     @final
@@ -50,6 +50,9 @@ _TContainer = TypeVar("_TContainer", default=None)
 TagHook: TypeAlias = Callable[[CBORTag, bool], Any]
 SemanticDecoderCallback: TypeAlias = Callable[[Any, bool], Any]
 ObjectHook: TypeAlias = Callable[[Mapping[Any, Any], bool], Any]
+# A token hook receives the specific token type it is registered for; since that
+# cannot be expressed per mapping key, the argument is left as Any.
+TokenHook: TypeAlias = Callable[[Any], Any]
 EncoderHook: TypeAlias = Callable[[CBOREncoder, Any], Any]
 ShareableDecoderCallback: TypeAlias = Callable[[Any], Any]
 ShareableDecoderInitializer: TypeAlias = Callable[[bool], tuple[Any, ShareableDecoderCallback]]
@@ -119,6 +122,7 @@ class CBORDecoder:
     fp: IO[bytes]
     tag_hook: TagHook | None
     object_hook: ObjectHook | None
+    token_hooks: Mapping[type[Token], TokenHook] | None
     str_errors: str
     def __new__(
         cls,
@@ -128,6 +132,7 @@ class CBORDecoder:
         object_hook: ObjectHook | None = ...,
         semantic_decoders: Mapping[int, SemanticDecoderCallback | ShareableDecoderInitializer]
         | None = ...,
+        token_hooks: Mapping[type[Token], TokenHook] | None = ...,
         str_errors: str = ...,
         read_size: int = ...,
         max_depth: int = ...,
@@ -147,7 +152,6 @@ class CBORDecoder:
     @property
     def stream(self) -> CBORStreamDecoder: ...
     def decode(self, *, immutable: bool = ...) -> Any: ...
-    def push(self, token: Token, /, *, immutable: bool = ...) -> Any | MoreType: ...
     def read(self, amount: int, /) -> bytes: ...
 
 @final
@@ -239,6 +243,7 @@ def load(
     object_hook: ObjectHook | None = ...,
     semantic_decoders: Mapping[int, SemanticDecoderCallback | ShareableDecoderInitializer]
     | None = ...,
+    token_hooks: Mapping[type[Token], TokenHook] | None = ...,
     str_errors: str = ...,
     read_size: int = ...,
     max_depth: int = ...,
@@ -253,6 +258,7 @@ def loads(
     object_hook: ObjectHook | None = ...,
     semantic_decoders: Mapping[int, SemanticDecoderCallback | ShareableDecoderInitializer]
     | None = ...,
+    token_hooks: Mapping[type[Token], TokenHook] | None = ...,
     str_errors: str = ...,
     max_depth: int = ...,
     allow_indefinite: bool = ...,

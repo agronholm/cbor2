@@ -36,8 +36,8 @@ mod _cbor2 {
 
     #[pymodule_export]
     use crate::tokens::{
-        ArrayStart, Boolean, Break, ByteString, ByteStringStart, Float, Integer, MapStart,
-        MoreType, Null, Simple, Tag, TextString, TextStringStart, UndefinedToken,
+        ArrayStart, Boolean, Break, ByteString, ByteStringStart, Float, Integer, MapStart, Null,
+        Simple, Tag, TextString, TextStringStart, UndefinedToken,
     };
 
     #[pymodule_export]
@@ -72,7 +72,6 @@ mod _cbor2 {
 
     pub static UNDEFINED: PyOnceLock<Py<UndefinedType>> = PyOnceLock::new();
     pub static BREAK_MARKER: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-    pub static MORE: PyOnceLock<Py<crate::tokens::MoreType>> = PyOnceLock::new();
 
     ///  Deserialize an object from an open file.
     ///
@@ -90,6 +89,10 @@ mod _cbor2 {
     ///     An optional mapping for overriding the decoding for select semantic tags.
     ///     The value is a mapping of semantic tags (integers) to callables that take
     ///     the decoder instance as the sole argument.
+    /// :param token_hooks:
+    ///     an optional mapping of leaf :mod:`token <cbor2.tokens>` types to callables. Each
+    ///     callable receives the decoded token and returns the value to substitute for it. Only
+    ///     the registered token types are handed to Python; all other decoding stays native.
     /// :param str_errors:
     ///     determines how to handle unicode decoding errors (see the `Error Handlers`_
     ///     section in the standard library documentation for details)
@@ -117,6 +120,7 @@ mod _cbor2 {
         tag_hook = None,
         object_hook = None,
         semantic_decoders = None,
+        token_hooks = None,
         str_errors = "strict",
         read_size = 4096,
         max_depth = 400,
@@ -124,12 +128,14 @@ mod _cbor2 {
         allow_duplicate_keys = true,
         immutable = false,
     ))]
+    #[allow(clippy::too_many_arguments)]
     fn load<'py>(
         py: Python<'py>,
         fp: &Bound<'py, PyAny>,
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
         semantic_decoders: Option<&Bound<'py, PyMapping>>,
+        token_hooks: Option<&Bound<'py, PyMapping>>,
         str_errors: &str,
         read_size: usize,
         max_depth: usize,
@@ -143,6 +149,7 @@ mod _cbor2 {
             tag_hook,
             object_hook,
             semantic_decoders,
+            token_hooks,
             str_errors,
             read_size,
             max_depth,
@@ -172,6 +179,10 @@ mod _cbor2 {
     ///     An optional mapping for overriding the decoding for select semantic tags.
     ///     The value is a mapping of semantic tags (integers) to callables that take
     ///     the decoder instance as the sole argument.
+    /// :param token_hooks:
+    ///     an optional mapping of leaf :mod:`token <cbor2.tokens>` types to callables. Each
+    ///     callable receives the decoded token and returns the value to substitute for it. Only
+    ///     the registered token types are handed to Python; all other decoding stays native.
     /// :param str_errors:
     ///     determines how to handle unicode decoding errors (see the `Error Handlers`_
     ///     section in the standard library documentation for details)
@@ -197,18 +208,21 @@ mod _cbor2 {
         tag_hook = None,
         object_hook = None,
         semantic_decoders = None,
+        token_hooks = None,
         str_errors = "strict",
         max_depth = 400,
         allow_indefinite = true,
         allow_duplicate_keys = true,
         immutable = false,
     ))]
+    #[allow(clippy::too_many_arguments)]
     fn loads<'py>(
         py: Python<'py>,
         data: &Bound<'py, PyAny>,
         tag_hook: Option<&Bound<'py, PyAny>>,
         object_hook: Option<&Bound<'py, PyAny>>,
         semantic_decoders: Option<&Bound<'py, PyMapping>>,
+        token_hooks: Option<&Bound<'py, PyMapping>>,
         str_errors: &str,
         max_depth: usize,
         allow_indefinite: bool,
@@ -235,6 +249,7 @@ mod _cbor2 {
             tag_hook,
             object_hook,
             semantic_decoders,
+            token_hooks,
             str_errors,
             0,
             max_depth,
@@ -421,10 +436,6 @@ mod _cbor2 {
         let undefined = Bound::new(py, UndefinedType)?;
         m.add("undefined", undefined.clone())?;
         UNDEFINED.get_or_init(py, || undefined.unbind());
-
-        let more = Bound::new(py, crate::tokens::MoreType)?;
-        m.add("MORE", more.clone())?;
-        MORE.get_or_init(py, || more.unbind());
 
         BREAK_MARKER.get_or_try_init(py, || {
             py.import("builtins")?

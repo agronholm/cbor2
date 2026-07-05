@@ -79,53 +79,6 @@ impl<'py> Token<'py> {
             Token::Break => Bound::new(py, tokens::Break)?.into_any(),
         })
     }
-
-    /// Converts a Python token object back into an internal [`Token`].
-    pub fn from_py(obj: &Bound<'py, PyAny>) -> PyResult<Token<'py>> {
-        let py = obj.py();
-        if let Ok(token) = obj.cast::<tokens::Integer>() {
-            Ok(Token::Integer(token.get().value.bind(py).clone()))
-        } else if let Ok(token) = obj.cast::<tokens::ByteString>() {
-            let token = token.get();
-            Ok(Token::ByteString(
-                token.value.bind(py).clone(),
-                token.length,
-            ))
-        } else if let Ok(token) = obj.cast::<tokens::TextString>() {
-            let token = token.get();
-            Ok(Token::TextString(
-                token.value.bind(py).clone(),
-                token.length,
-            ))
-        } else if obj.cast::<tokens::ByteStringStart>().is_ok() {
-            Ok(Token::ByteStringStart)
-        } else if obj.cast::<tokens::TextStringStart>().is_ok() {
-            Ok(Token::TextStringStart)
-        } else if let Ok(token) = obj.cast::<tokens::ArrayStart>() {
-            Ok(Token::ArrayStart(token.get().length))
-        } else if let Ok(token) = obj.cast::<tokens::MapStart>() {
-            Ok(Token::MapStart(token.get().length))
-        } else if let Ok(token) = obj.cast::<tokens::Tag>() {
-            Ok(Token::Tag(token.get().number))
-        } else if let Ok(token) = obj.cast::<tokens::Simple>() {
-            Ok(Token::Simple(token.get().value))
-        } else if let Ok(token) = obj.cast::<tokens::Float>() {
-            Ok(Token::Float(token.get().value))
-        } else if let Ok(token) = obj.cast::<tokens::Boolean>() {
-            Ok(Token::Boolean(token.get().value))
-        } else if obj.cast::<tokens::Null>().is_ok() {
-            Ok(Token::Null)
-        } else if obj.cast::<tokens::UndefinedToken>().is_ok() {
-            Ok(Token::Undefined)
-        } else if obj.cast::<tokens::Break>().is_ok() {
-            Ok(Token::Break)
-        } else {
-            Err(PyValueError::new_err(format!(
-                "expected a cbor2 token object, got {}",
-                obj.get_type().qualname()?
-            )))
-        }
-    }
 }
 
 /// The CBORStreamDecoder reads CBOR data and yields a stream of primitive
@@ -451,50 +404,50 @@ impl CBORStreamDecoder {
         };
         let major_type = initial_byte >> 5;
         let subtype = initial_byte & 31;
-        let typename = major_type_name(major_type);
-        self.decode_item(py, major_type, subtype)
+
+        // Decode the item head, wrapping any error with the major type's name
+        // (e.g. "error decoding text string").
+        self.decode_token_body(py, major_type, subtype)
             .map(Some)
-            .map_err(|err| wrap_decode_error(py, err, &typename))
+            .map_err(|err| wrap_decode_error(py, err, &major_type_name(major_type)))
     }
 
-    fn decode_item<'py>(
+    /// Decodes the body of a data item head for the given major type, returning
+    /// the resulting [`Token`]. Errors are wrapped by the caller.
+    fn decode_token_body<'py>(
         &mut self,
         py: Python<'py>,
         major_type: u8,
         subtype: u8,
     ) -> PyResult<Token<'py>> {
-        match major_type {
+        Ok(match major_type {
             0 => {
                 let uint = self.decode_length_finite(py, subtype)?;
-                Ok(Token::Integer(uint.into_bound_py_any(py)?))
+                Token::Integer(uint.into_bound_py_any(py)?)
             }
             1 => {
                 let uint = self.decode_length_finite(py, subtype)?;
                 let signed_int = -(uint as i128) - 1;
-                Ok(Token::Integer(signed_int.into_bound_py_any(py)?))
+                Token::Integer(signed_int.into_bound_py_any(py)?)
             }
             2 => match self.decode_length_as_usize(py, subtype)? {
-                None => Ok(Token::ByteStringStart),
-                Some(length) => {
-                    let bytes = self.read_string_bytes(py, length)?;
-                    Ok(Token::ByteString(bytes, length))
-                }
+                None => Token::ByteStringStart,
+                Some(length) => Token::ByteString(self.read_string_bytes(py, length)?, length),
             },
             3 => match self.decode_length_as_usize(py, subtype)? {
-                None => Ok(Token::TextStringStart),
-                Some(length) => {
-                    let text = self.read_text(py, length)?;
-                    Ok(Token::TextString(text, length))
-                }
+                None => Token::TextStringStart,
+                Some(length) => Token::TextString(self.read_text(py, length)?, length),
             },
-            4 => Ok(Token::ArrayStart(self.decode_length_as_usize(py, subtype)?)),
-            5 => Ok(Token::MapStart(self.decode_length_as_usize(py, subtype)?)),
-            6 => Ok(Token::Tag(self.decode_length_finite(py, subtype)?)),
-            7 => self.decode_special(py, subtype),
-            _ => Err(CBORDecodeError::new_err(format!(
-                "invalid major type: {major_type}"
-            ))),
-        }
+            4 => Token::ArrayStart(self.decode_length_as_usize(py, subtype)?),
+            5 => Token::MapStart(self.decode_length_as_usize(py, subtype)?),
+            6 => Token::Tag(self.decode_length_finite(py, subtype)?),
+            7 => self.decode_special(py, subtype)?,
+            _ => {
+                return Err(CBORDecodeError::new_err(format!(
+                    "invalid major type: {major_type}"
+                )));
+            }
+        })
     }
 
     fn decode_special<'py>(&mut self, py: Python<'py>, subtype: u8) -> PyResult<Token<'py>> {

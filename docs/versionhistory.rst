@@ -11,6 +11,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   current "immutable" status of the decoder stack (i.e. when decoding a map key, immutable would
   be set to ``true``) instead of always decoding as immutable
   (`#295 <https://github.com/agronholm/cbor2/issues/295>`_)
+- Added a low-level streaming decoder (:class:`CBORStreamDecoder`) that reads CBOR and yields a
+  stream of primitive :mod:`tokens <cbor2.tokens>` (available as :attr:`CBORDecoder.stream`) for
+  SAX-style inspection, along with a ``token_hooks`` decoder option for customizing the decoding of
+  specific leaf token types while the rest of the decoding stays on the native fast path
 
 **6.1.3** (2026-07-04)
 

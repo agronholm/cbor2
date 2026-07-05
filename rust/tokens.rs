@@ -376,19 +376,3 @@ impl Break {
         other.cast::<Break>().is_ok()
     }
 }
-
-/// The type of the :data:`MORE` sentinel returned by ``CBORDecoder.push`` when a
-/// pushed token does not yet complete a top-level item.
-#[pyclass(module = "cbor2.tokens", frozen, name = "MoreType")]
-pub struct MoreType;
-
-#[pymethods]
-impl MoreType {
-    fn __repr__(&self) -> &'static str {
-        "MORE"
-    }
-
-    fn __bool__(&self) -> bool {
-        false
-    }
-}
