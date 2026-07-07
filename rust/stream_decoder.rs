@@ -98,6 +98,7 @@ impl<'py> Token<'py> {
 pub struct CBORStreamDecoder {
     fp: Option<Py<PyAny>>,
     str_errors: Option<Py<PyString>>,
+    str_errors_cstr: Option<&'static CStr>,
     #[pyo3(get)]
     pub(crate) read_size: usize,
 
@@ -125,6 +126,7 @@ impl CBORStreamDecoder {
         let mut this = Self {
             fp: None,
             str_errors: None,
+            str_errors_cstr: None,
             read_size,
             read_method: None,
             buffer: buffer.map(Bound::unbind),
@@ -344,24 +346,6 @@ impl CBORStreamDecoder {
         })
     }
 
-    fn str_errors_cstr(&self, py: Python<'_>) -> PyResult<Option<&'static CStr>> {
-        match self.str_errors.as_ref() {
-            None => Ok(None),
-            // set_str_errors only ever stores these values
-            Some(str_errors) => Ok(Some(match str_errors.to_str(py)? {
-                "ignore" => c"ignore",
-                "replace" => c"replace",
-                "backslashreplace" => c"backslashreplace",
-                "surrogateescape" => c"surrogateescape",
-                other => {
-                    return Err(CBORDecodeError::new_err(format!(
-                        "invalid str_errors value: '{other}'"
-                    )));
-                }
-            })),
-        }
-    }
-
     /// Reads and UTF-8 decodes ``length`` bytes into a :class:`str`.
     fn read_text<'py>(&mut self, py: Python<'py>, length: usize) -> PyResult<Bound<'py, PyString>> {
         // Fast path for strings that fit within a single read: decode straight
@@ -385,8 +369,7 @@ impl CBORStreamDecoder {
         // then decoded in one pass (keeping multi-byte characters that straddle
         // a chunk boundary intact).
         let bytes = self.read_string_bytes(py, length)?;
-        let errors = self.str_errors_cstr(py)?;
-        PyString::from_encoded_object(bytes.as_any(), Some(c"utf-8"), errors)
+        PyString::from_encoded_object(bytes.as_any(), Some(c"utf-8"), self.str_errors_cstr)
             .and_then(|s| s.cast_into().map_err(PyErr::from))
     }
 
@@ -555,17 +538,20 @@ impl CBORStreamDecoder {
     #[setter]
     pub fn set_str_errors(&mut self, str_errors: &Bound<'_, PyString>) -> PyResult<()> {
         let as_string: &str = str_errors.extract()?;
-        self.str_errors = match as_string {
+        let cstr: Option<&'static CStr> = match as_string {
             "strict" => None,
-            "ignore" | "replace" | "backslashreplace" | "surrogateescape" => {
-                Some(str_errors.clone().unbind())
-            }
+            "ignore" => Some(c"ignore"),
+            "replace" => Some(c"replace"),
+            "backslashreplace" => Some(c"backslashreplace"),
+            "surrogateescape" => Some(c"surrogateescape"),
             _ => {
                 return Err(PyValueError::new_err(format!(
                     "invalid str_errors value: '{str_errors}'"
                 )));
             }
         };
+        self.str_errors = cstr.map(|_| str_errors.clone().unbind());
+        self.str_errors_cstr = cstr;
         Ok(())
     }
 
