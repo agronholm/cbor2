@@ -5,6 +5,14 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed the encoder rejecting subclasses of the specially handled types (``datetime``,
+  ``Decimal``, ``UUID``, the ``ipaddress`` types, etc.) with ``CBOREncodeError``; the Rust
+  rewrite matched these types by exact identity where cbor2 5.x used ``issubclass()``, so
+  values like ``pandas.Timestamp`` could no longer be encoded
+  (`#329 <https://github.com/agronholm/cbor2/pull/329>`_; PR by @gaoflow)
+
 **6.1.3** (2026-07-04)
 
 - Fixed the decoder registering 6-byte strings in the string reference namespace at indices
