@@ -533,6 +533,22 @@ def test_bad_streaming_strings(payload: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param("bf6161ff", id="mutable"),
+        pytest.param("bf6161016162ff", id="mutable/after-pair"),
+        pytest.param("d9010281bf6161016162ff", id="immutable"),
+    ],
+)
+def test_indefinite_map_missing_value(payload: str) -> None:
+    with pytest.raises(
+        CBORDecodeError,
+        match="missing value for key in indefinite-length map",
+    ):
+        loads(unhexlify(payload))
+
+
+@pytest.mark.parametrize(
     "payload, value",
     [
         ("e0", 0),
