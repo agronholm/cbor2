@@ -5,6 +5,14 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed the encoder not registering :class:`bytearray` values in the string reference namespace,
+  unlike :class:`bytes` and :class:`str`; since the decoder registers every byte string it reads, a
+  single ``bytearray`` desynchronised the namespace and made subsequent string references resolve
+  to the wrong value
+  (`#332 <https://github.com/agronholm/cbor2/pull/332>`_; PR by @sahvx655-wq)
+
 **6.1.3** (2026-07-04)
 
 - Fixed the decoder registering 6-byte strings in the string reference namespace at indices
