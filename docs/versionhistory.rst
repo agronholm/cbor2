@@ -7,6 +7,16 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed :class:`frozendict` deriving its hash from its keys and its values as two independent
+  sets, so that frozendicts holding the same keys and the same values all collided regardless of
+  how the two were paired; since the decoder builds a frozendict for every map in an immutable
+  position, a payload keyed by such maps decoded in quadratic time
+  (`#333 <https://github.com/agronholm/cbor2/pull/333>`_; PR by @sahvx655-wq)
+- Fixed the encoder not registering :class:`bytearray` values in the string reference namespace,
+  unlike :class:`bytes` and :class:`str`; since the decoder registers every byte string it reads, a
+  single ``bytearray`` desynchronised the namespace and made subsequent string references resolve
+  to the wrong value
+  (`#332 <https://github.com/agronholm/cbor2/pull/332>`_; PR by @sahvx655-wq)
 - Fixed the decoder silently accepting an indefinite-length map whose break marker arrives after a
   key with no value, dropping that trailing key and returning a truncated map instead of rejecting
   the ill-formed input
