@@ -17,6 +17,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   single ``bytearray`` desynchronised the namespace and made subsequent string references resolve
   to the wrong value
   (`#332 <https://github.com/agronholm/cbor2/pull/332>`_; PR by @sahvx655-wq)
+- Fixed the decoder silently accepting an indefinite-length map whose break marker arrives after a
+  key with no value, dropping that trailing key and returning a truncated map instead of rejecting
+  the ill-formed input
+  (`#331 <https://github.com/agronholm/cbor2/pull/331>`_; PR by @sahvx655-wq)
 
 **6.1.3** (2026-07-04)
 
