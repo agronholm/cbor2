@@ -337,11 +337,11 @@ impl FrozenDict {
 
     fn __hash__(&mut self, py: Python<'_>) -> PyResult<u64> {
         if (self.hash).is_none() {
-            let keys_hash = PyFrozenSet::new(py, self.dict.bind(py).keys())?.hash()?;
-            let values_hash = PyFrozenSet::new(py, self.dict.bind(py).values())?.hash()?;
+            // Hash the items rather than the keys and values separately, so that the pairing
+            // between them contributes to the hash
+            let items_hash = PyFrozenSet::new(py, self.dict.bind(py).items())?.hash()?;
             let mut hasher = DefaultHasher::new();
-            hasher.write_isize(keys_hash);
-            hasher.write_isize(values_hash);
+            hasher.write_isize(items_hash);
             self.hash = Some(hasher.finish());
         }
         Ok(self.hash.unwrap())
