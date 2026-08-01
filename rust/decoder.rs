@@ -741,6 +741,11 @@ impl CBORDecoder {
                 let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
                     if item.is(break_marker) {
+                        if key.is_some() {
+                            return Err(CBORDecodeError::new_err(
+                                "missing value for key in indefinite-length map",
+                            ));
+                        }
                         let container = create_frozen_dict(py, take(&mut items))?;
                         let transformed = maybe_call_object_hook(
                             py,
@@ -805,6 +810,11 @@ impl CBORDecoder {
                 let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
                 Box::new(move |item: Bound<'py, PyAny>, _immutable: bool| {
                     if item.is(break_marker) {
+                        if key.is_some() {
+                            return Err(CBORDecodeError::new_err(
+                                "missing value for key in indefinite-length map",
+                            ));
+                        }
                         let dict = replace(&mut dict, PyDict::new(py));
                         let transformed = maybe_call_object_hook(
                             py,
