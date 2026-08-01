@@ -5,6 +5,14 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed :class:`frozendict` deriving its hash from its keys and its values as two independent
+  sets, so that frozendicts holding the same keys and the same values all collided regardless of
+  how the two were paired; since the decoder builds a frozendict for every map in an immutable
+  position, a payload keyed by such maps decoded in quadratic time
+  (`#333 <https://github.com/agronholm/cbor2/pull/333>`_; PR by @sahvx655-wq)
+
 **6.1.3** (2026-07-04)
 
 - Fixed the decoder registering 6-byte strings in the string reference namespace at indices
