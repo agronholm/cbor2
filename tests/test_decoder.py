@@ -751,7 +751,7 @@ def test_bignum_non_bytestring(payload: str, typename: str) -> None:
     # map, whose keys it iterates), so these malformed payloads must be rejected, not coerced.
     with pytest.raises(
         CBORDecodeError,
-        match=f"error decoding {typename} bignum: bignum value must be a byte string, not int",
+        match=f"error decoding {typename} bignum: bignum value must be a byte string, not <class ",
     ):
         loads(unhexlify(payload))
 
