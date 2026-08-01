@@ -937,10 +937,17 @@ impl CBORDecoder {
             261 => (Box::new(Self::decode_ipnetwork), "IP network"),
             1004 => (Box::new(Self::decode_date_string), "string-form date"),
             43000 => (Box::new(Self::decode_complex), "complex number"),
-            55799 => (
-                Box::new(Self::decode_self_describe_cbor),
-                "self-described CBOR value",
-            ),
+            55799 => {
+                // The self-describe tag is transparent: its content must decode exactly as it
+                // would without the tag, so it inherits the ambient immutability instead of
+                // forcing the value immutable like the value-consuming tags above.
+                return Ok(BeginFrame(
+                    Box::new(Self::decode_self_describe_cbor),
+                    immutable,
+                    None,
+                    DisplayName::String("self-described CBOR value"),
+                ));
+            }
             _ => {
                 // For a tag with no designated decoder, check if we have a tag hook, and call
                 // that with the tag object, using its return value as the decoded value.

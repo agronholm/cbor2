@@ -1097,6 +1097,16 @@ def test_self_describe_cbor(payload: str, expected: object) -> None:
     assert loads(unhexlify(payload)) == expected
 
 
+def test_self_describe_cbor_container_mutable() -> None:
+    """
+    Test that the self-describe tag (55799) is transparent, so a wrapped map or array decodes
+    to a mutable dict or list, exactly as it would without the tag.
+
+    """
+    assert type(loads(unhexlify("d9d9f7a10102"))) is dict
+    assert type(loads(unhexlify("d9d9f7820102"))) is list
+
+
 def test_unhandled_tag() -> None:
     """
     Test that a tag is simply ignored and its associated value returned if there is no special

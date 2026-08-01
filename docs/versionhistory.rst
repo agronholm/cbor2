@@ -11,6 +11,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   current "immutable" status of the decoder stack (i.e. when decoding a map key, immutable would
   be set to ``true``) instead of always decoding as immutable
   (`#295 <https://github.com/agronholm/cbor2/issues/295>`_)
+- **BACKWARD INCOMPATIBLE** Changed the content of the self-describe tag (55799) to be decoded
+  according to the current "immutable" status of the decoder stack instead of always decoding as
+  immutable, so a wrapped map or array now decodes as a ``dict`` or ``list`` again
+  (`#327 <https://github.com/agronholm/cbor2/pull/327>`_; PR by @sahvx655-wq)
 
 **6.1.4** (2026-08-01)
 
