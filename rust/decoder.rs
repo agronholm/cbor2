@@ -138,6 +138,18 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
     Ok(array)
 }
 
+fn require_bignum_bytes(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyBytes>> {
+    // Tags 2 and 3 enclose a byte string (RFC 8949 section 3.4.3). int.from_bytes() also
+    // accepts any iterable of ints, so without this guard a tag 2/3 wrapping an array (or a map,
+    // whose keys get iterated) would be coerced into an integer instead of rejected as malformed.
+    let value_type = value.get_type();
+    value.cast_into().map_err(|_| {
+        CBORDecodeError::new_err(format!(
+            "bignum value must be a byte string, not {value_type}"
+        ))
+    })
+}
+
 /// The CBORDecoder class implements a fully featured `CBOR`_ decoder with
 /// several extensions for handling shared references, big integers, rational
 /// numbers and so on. Typically, the class is not used directly, but the
@@ -1074,16 +1086,20 @@ impl CBORDecoder {
     fn decode_positive_bignum(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 2
         let py = value.py();
+        let payload = require_bignum_bytes(value)?;
         INT_FROMBYTES
             .get(py)?
-            .call1((value, intern!(py, "big")))
+            .call1((payload, intern!(py, "big")))
             .map(CompleteFrame)
     }
 
     fn decode_negative_bignum(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 3
         let py = value.py();
-        let int = INT_FROMBYTES.get(py)?.call1((value, intern!(py, "big")))?;
+        let payload = require_bignum_bytes(value)?;
+        let int = INT_FROMBYTES
+            .get(py)?
+            .call1((payload, intern!(py, "big")))?;
         int.neg()?.add(-1).map(CompleteFrame)
     }
 

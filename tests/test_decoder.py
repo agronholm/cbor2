@@ -737,6 +737,25 @@ def test_negative_bignum() -> None:
     assert decoded == -18446744073709551617
 
 
+@pytest.mark.parametrize(
+    "payload, typename",
+    [
+        pytest.param("c28105", "positive", id="positive_array"),
+        pytest.param("c2a10509", "positive", id="positive_map"),
+        pytest.param("c38100", "negative", id="negative_array"),
+        pytest.param("c3a10509", "negative", id="negative_map"),
+    ],
+)
+def test_bignum_non_bytestring(payload: str, typename: str) -> None:
+    # Tags 2 and 3 must enclose a byte string; int.from_bytes() also accepts an array (or a
+    # map, whose keys it iterates), so these malformed payloads must be rejected, not coerced.
+    with pytest.raises(
+        CBORDecodeError,
+        match=f"error decoding {typename} bignum: bignum value must be a byte string, not <class ",
+    ):
+        loads(unhexlify(payload))
+
+
 def test_fraction() -> None:
     decoded = loads(unhexlify("c48221196ab3"))
     assert decoded == Decimal("273.15")
