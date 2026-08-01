@@ -131,6 +131,13 @@ class TestFrozendict:
         assert obj[1] == 2
         assert hash(obj) == obj_hash
 
+    def test_hash_depends_on_pairing(self) -> None:
+        obj1 = frozendict[int, int]({1: 1, 2: 2})
+        obj2 = frozendict[int, int]({1: 2, 2: 1})
+        assert obj1 != obj2
+        assert hash(obj1) != hash(obj2)
+        assert hash(obj1) == hash(frozendict[int, int]({2: 2, 1: 1}))
+
     def test_items(self) -> None:
         obj = frozendict[int, int]({1: 2, 3: 4})
         items = obj.items()
