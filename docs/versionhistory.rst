@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
-**UNRELEASED**
+**6.1.4** (2026-08-01)
 
 - Fixed :class:`frozendict` deriving its hash from its keys and its values as two independent
   sets, so that frozendicts holding the same keys and the same values all collided regardless of
