@@ -533,6 +533,22 @@ def test_bad_streaming_strings(payload: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param("bf6161ff", id="mutable"),
+        pytest.param("bf6161016162ff", id="mutable/after-pair"),
+        pytest.param("d9010281bf6161016162ff", id="immutable"),
+    ],
+)
+def test_indefinite_map_missing_value(payload: str) -> None:
+    with pytest.raises(
+        CBORDecodeError,
+        match="missing value for key in indefinite-length map",
+    ):
+        loads(unhexlify(payload))
+
+
+@pytest.mark.parametrize(
     "payload, value",
     [
         ("e0", 0),
@@ -719,6 +735,25 @@ def test_positive_bignum() -> None:
 def test_negative_bignum() -> None:
     decoded = loads(unhexlify("c349010000000000000000"))
     assert decoded == -18446744073709551617
+
+
+@pytest.mark.parametrize(
+    "payload, typename",
+    [
+        pytest.param("c28105", "positive", id="positive_array"),
+        pytest.param("c2a10509", "positive", id="positive_map"),
+        pytest.param("c38100", "negative", id="negative_array"),
+        pytest.param("c3a10509", "negative", id="negative_map"),
+    ],
+)
+def test_bignum_non_bytestring(payload: str, typename: str) -> None:
+    # Tags 2 and 3 must enclose a byte string; int.from_bytes() also accepts an array (or a
+    # map, whose keys it iterates), so these malformed payloads must be rejected, not coerced.
+    with pytest.raises(
+        CBORDecodeError,
+        match=f"error decoding {typename} bignum: bignum value must be a byte string, not <class ",
+    ):
+        loads(unhexlify(payload))
 
 
 def test_fraction() -> None:

@@ -793,9 +793,18 @@ impl CBOREncoder {
 
     fn encode_bytearray(slf: &Bound<'_, Self>, obj: &Bound<'_, PyByteArray>) -> PyResult<()> {
         let py = slf.py();
+        let string_referencing = slf.borrow().string_referencing;
+        let bytes = obj.to_vec();
+
+        // A bytearray is written out as a byte string, so it shares the string reference
+        // namespace with bytes objects
+        if string_referencing && Self::maybe_stringref(slf, PyBytes::new(py, &bytes).as_any())? {
+            return Ok(());
+        }
+
         let mut this = slf.borrow_mut();
-        this.encode_length(py, 2, Some(obj.len() as u64))?;
-        this.write_internal(py, obj.to_vec())
+        this.encode_length(py, 2, Some(bytes.len() as u64))?;
+        this.write_internal(py, bytes)
     }
 
     fn encode_array(slf: &Bound<'_, Self>, obj: &Bound<'_, PySequence>) -> PyResult<()> {
