@@ -108,6 +108,14 @@ class TestCBORSimpleValue:
     def test_repr(self) -> None:
         assert repr(CBORSimpleValue(1)) == "CBORSimpleValue(1)"
 
+    def test_hash_matches_int(self) -> None:
+        # CBORSimpleValue(n) compares equal to the int n, so it must also hash like n,
+        # otherwise the two are not interchangeable as mapping keys or set members
+        assert hash(CBORSimpleValue(5)) == hash(5)
+        assert {5: "x"}[CBORSimpleValue(5)] == "x"
+        assert {CBORSimpleValue(5): "x"}[5] == "x"
+        assert len({5, CBORSimpleValue(5)}) == 1
+
 
 class TestFrozendict:
     def test_from_dict(self) -> None:

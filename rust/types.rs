@@ -197,10 +197,11 @@ impl CBORSimpleValue {
         format!("CBORSimpleValue({})", self.0)
     }
 
-    fn __hash__(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.0.hash(&mut hasher);
-        hasher.finish()
+    fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
+        // __richcmp__ treats CBORSimpleValue(n) as equal to the integer n, so the hash has to
+        // agree with that of the integer, otherwise the two are not interchangeable as mapping
+        // keys or set members.
+        self.0.into_bound_py_any(py)?.hash()
     }
 }
 
