@@ -7,10 +7,7 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
-- Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to, so
-  that ``CBORSimpleValue(n) == n`` held while ``hash(CBORSimpleValue(n)) != hash(n)``. A decoded
-  simple value could not be looked up by its integer in a mapping or set, and an integer key
-  colliding with a simple-value key slipped past the ``allow_duplicate_keys=False`` check
+- Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
 
 **6.1.4** (2026-08-01)
