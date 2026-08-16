@@ -112,8 +112,10 @@ class TestCBORSimpleValue:
         # CBORSimpleValue(n) compares equal to the int n, so it must also hash like n,
         # otherwise the two are not interchangeable as mapping keys or set members
         assert hash(CBORSimpleValue(5)) == hash(5)
-        assert {5: "x"}[CBORSimpleValue(5)] == "x"
-        assert {CBORSimpleValue(5): "x"}[5] == "x"
+        mapping: dict[int | CBORSimpleValue, str] = {5: "x"}
+        assert mapping[CBORSimpleValue(5)] == "x"
+        mapping = {CBORSimpleValue(5): "x"}
+        assert mapping[5] == "x"
         assert len({5, CBORSimpleValue(5)}) == 1
 
 
