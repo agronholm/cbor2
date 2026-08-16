@@ -202,6 +202,13 @@ class TestAllowDuplicateKeys:
         with pytest.raises(CBORDecodeError, match="Duplicate map key: 'a'"):
             loads(unhexlify(payload), allow_duplicate_keys=False, immutable=immutable)
 
+    @pytest.mark.parametrize("immutable", [False, True])
+    def test_raises_on_duplicate_int_and_simple_value(self, immutable: bool) -> None:
+        # {5: 1, simple(5): 2}: the integer 5 and simple value 5 compare equal, so this is a
+        # duplicate key and must be rejected rather than kept as two distinct entries
+        with pytest.raises(CBORDecodeError, match="Duplicate map key"):
+            loads(unhexlify("a20501e502"), allow_duplicate_keys=False, immutable=immutable)
+
 
 def test_readonly_attributes() -> None:
     decoder = CBORDecoder(BytesIO())

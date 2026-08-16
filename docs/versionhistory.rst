@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
+  (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
+
 **6.1.4** (2026-08-01)
 
 - Fixed :class:`frozendict` deriving its hash from its keys and its values as two independent
