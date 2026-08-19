@@ -533,6 +533,22 @@ def test_bad_streaming_strings(payload: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param("bf6161ff", id="mutable"),
+        pytest.param("bf6161016162ff", id="mutable/after-pair"),
+        pytest.param("d9010281bf6161016162ff", id="immutable"),
+    ],
+)
+def test_indefinite_map_missing_value(payload: str) -> None:
+    with pytest.raises(
+        CBORDecodeError,
+        match="missing value for key in indefinite-length map",
+    ):
+        loads(unhexlify(payload))
+
+
+@pytest.mark.parametrize(
     "payload, value",
     [
         ("e0", 0),
@@ -719,6 +735,25 @@ def test_positive_bignum() -> None:
 def test_negative_bignum() -> None:
     decoded = loads(unhexlify("c349010000000000000000"))
     assert decoded == -18446744073709551617
+
+
+@pytest.mark.parametrize(
+    "payload, typename",
+    [
+        pytest.param("c28105", "positive", id="positive_array"),
+        pytest.param("c2a10509", "positive", id="positive_map"),
+        pytest.param("c38100", "negative", id="negative_array"),
+        pytest.param("c3a10509", "negative", id="negative_map"),
+    ],
+)
+def test_bignum_non_bytestring(payload: str, typename: str) -> None:
+    # Tags 2 and 3 must enclose a byte string; int.from_bytes() also accepts an array (or a
+    # map, whose keys it iterates), so these malformed payloads must be rejected, not coerced.
+    with pytest.raises(
+        CBORDecodeError,
+        match=f"error decoding {typename} bignum: bignum value must be a byte string, not <class ",
+    ):
+        loads(unhexlify(payload))
 
 
 def test_fraction() -> None:
@@ -1062,6 +1097,16 @@ def test_self_describe_cbor(payload: str, expected: object) -> None:
     assert loads(unhexlify(payload)) == expected
 
 
+def test_self_describe_cbor_container_mutable() -> None:
+    """
+    Test that the self-describe tag (55799) is transparent, so a wrapped map or array decodes
+    to a mutable dict or list, exactly as it would without the tag.
+
+    """
+    assert type(loads(unhexlify("d9d9f7a10102"))) is dict
+    assert type(loads(unhexlify("d9d9f7820102"))) is list
+
+
 def test_unhandled_tag() -> None:
     """
     Test that a tag is simply ignored and its associated value returned if there is no special
@@ -1090,6 +1135,22 @@ def test_tag_hook() -> None:
 
     decoded = loads(unhexlify("d917706548656c6c6f"), tag_hook=reverse)
     assert decoded == "olleH"
+
+
+def test_unknown_tag_value_respects_immutable() -> None:
+    # The content of a tag with no designated decoder must honour the ``immutable``
+    # flag, like every other container. Previously it was always decoded immutable.
+    payload = dumps(CBORTag(6000, [1, 2, 3]))
+    mutable = loads(payload)
+    assert isinstance(mutable.value, list)
+    immutable = loads(payload, immutable=True)
+    assert isinstance(immutable.value, tuple)
+
+    map_payload = dumps(CBORTag(6000, {"a": 1}))
+    assert isinstance(loads(map_payload).value, dict)
+    immutable_map = loads(map_payload, immutable=True).value
+    assert isinstance(immutable_map, frozendict)
+    assert immutable_map["a"] == 1
 
 
 def test_object_hook() -> None:

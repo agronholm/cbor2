@@ -809,6 +809,24 @@ def test_encode_stringrefs_non_ascii() -> None:
     assert loads(encoded) == value
 
 
+def test_encode_stringrefs_bytearray() -> None:
+    # A bytearray goes on the wire as a plain byte string, so the decoder registers it in
+    # the namespace and the encoder has to occupy the same index (0 here)
+    value = [bytearray(b"abcd"), "efgh", "efgh"]
+    encoded = dumps(value, string_referencing=True)
+    expected = unhexlify("d901008344616263646465666768d81901")
+    assert encoded == expected
+    assert loads(encoded) == [b"abcd", "efgh", "efgh"]
+
+
+def test_encode_stringrefs_repeated_bytearray() -> None:
+    value = [bytearray(b"abcd"), bytearray(b"abcd"), b"abcd"]
+    encoded = dumps(value, string_referencing=True)
+    expected = unhexlify("d90100834461626364d81900d81900")
+    assert encoded == expected
+    assert loads(encoded) == [b"abcd", b"abcd", b"abcd"]
+
+
 @pytest.mark.parametrize(
     "tag",
     [
