@@ -7,10 +7,36 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
+  (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
 - Fixed the decoder leaking the internal break-marker sentinel (or accepting it as a data item)
   when a CBOR break code (``0xff``) appears outside an indefinite-length item, instead of rejecting
   such input as ill-formed
   (`#305 <https://github.com/agronholm/cbor2/issues/305>`_)
+
+**6.1.4** (2026-08-01)
+
+- Fixed :class:`frozendict` deriving its hash from its keys and its values as two independent
+  sets, so that frozendicts holding the same keys and the same values all collided regardless of
+  how the two were paired; since the decoder builds a frozendict for every map in an immutable
+  position, a payload keyed by such maps decoded in quadratic time
+  (`#333 <https://github.com/agronholm/cbor2/pull/333>`_; PR by @sahvx655-wq)
+- Fixed the encoder not registering :class:`bytearray` values in the string reference namespace,
+  unlike :class:`bytes` and :class:`str`; since the decoder registers every byte string it reads, a
+  single ``bytearray`` desynchronised the namespace and made subsequent string references resolve
+  to the wrong value
+  (`#332 <https://github.com/agronholm/cbor2/pull/332>`_; PR by @sahvx655-wq)
+- Fixed the decoder silently accepting an indefinite-length map whose break marker arrives after a
+  key with no value, dropping that trailing key and returning a truncated map instead of rejecting
+  the ill-formed input
+  (`#331 <https://github.com/agronholm/cbor2/pull/331>`_; PR by @sahvx655-wq)
+- Fixed the decoder accepting a non-byte-string payload for a positive or negative bignum (tags 2
+  and 3). ``int.from_bytes()`` also accepts an array (or a map, whose keys it iterates), so a tag
+  wrapping one of those was coerced into an integer instead of being rejected as malformed
+  (`#326 <https://github.com/agronholm/cbor2/pull/326>`_; PR by @sahvx655-wq)
+
+**6.1.3** (2026-07-04)
+
 - Fixed the decoder registering 6-byte strings in the string reference namespace at indices
   65536–4294967295 where the encoder does not, desynchronising the namespace and resolving later
   string references to the wrong value
@@ -18,6 +44,22 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Fixed the IPv4/IPv6 network decoders (tags 52 and 54) silently truncating an address byte string
   that is longer than the address size instead of rejecting it as malformed
   (`#309 <https://github.com/agronholm/cbor2/pull/309>`_; PR by @sahvx655-wq)
+- Fixed quadratic decoding time for indefinite-length and large definite-length byte and text
+  strings, caused by concatenating each chunk onto the accumulated result with ``+`` instead of
+  building the result once
+  (`#316 <https://github.com/agronholm/cbor2/pull/316>`_; PR by @sahvx655-wq)
+- Fixed ``datetime_as_timestamp`` encoding whole-second datetimes before 1970 or after 2106 as
+  floats instead of integers, because the timestamp was narrowed through an unsigned 32-bit integer
+  (`#317 <https://github.com/agronholm/cbor2/pull/317>`_; PR by @sahvx655-wq)
+- Fixed the encoder measuring text strings by code point count instead of UTF-8 byte length when
+  deciding whether to add them to the string reference namespace, desynchronising it from the
+  decoder (which counts bytes) and corrupting later string references for non-ASCII strings
+  (`#314 <https://github.com/agronholm/cbor2/pull/314>`_; PR by @sahvx655-wq)
+- Fixed the decoder rejecting scoped IPv6 addresses (tag 54) with a ``CBORDecodeError`` reading
+  ``invalid types in input array``; the encoder emits them as ``[address, null, zone id]`` but the
+  decoder only handled the network and interface array forms, so a scoped
+  :class:`~ipaddress.IPv6Address` could not be decoded back
+  (`#324 <https://github.com/agronholm/cbor2/pull/324>`_; PR by @sahvx655-wq)
 
 **6.1.2** (2026-06-02)
 

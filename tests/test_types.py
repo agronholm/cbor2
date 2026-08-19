@@ -108,6 +108,16 @@ class TestCBORSimpleValue:
     def test_repr(self) -> None:
         assert repr(CBORSimpleValue(1)) == "CBORSimpleValue(1)"
 
+    def test_hash_matches_int(self) -> None:
+        # CBORSimpleValue(n) compares equal to the int n, so it must also hash like n,
+        # otherwise the two are not interchangeable as mapping keys or set members
+        assert hash(CBORSimpleValue(5)) == hash(5)
+        mapping: dict[int | CBORSimpleValue, str] = {5: "x"}
+        assert mapping[CBORSimpleValue(5)] == "x"
+        mapping = {CBORSimpleValue(5): "x"}
+        assert mapping[5] == "x"
+        assert len({5, CBORSimpleValue(5)}) == 1
+
 
 class TestFrozendict:
     def test_from_dict(self) -> None:
@@ -130,6 +140,13 @@ class TestFrozendict:
         d[1] = 3
         assert obj[1] == 2
         assert hash(obj) == obj_hash
+
+    def test_hash_depends_on_pairing(self) -> None:
+        obj1 = frozendict[int, int]({1: 1, 2: 2})
+        obj2 = frozendict[int, int]({1: 2, 2: 1})
+        assert obj1 != obj2
+        assert hash(obj1) != hash(obj2)
+        assert hash(obj1) == hash(frozendict[int, int]({2: 2, 1: 1}))
 
     def test_items(self) -> None:
         obj = frozendict[int, int]({1: 2, 3: 4})

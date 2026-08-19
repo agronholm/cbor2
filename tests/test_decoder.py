@@ -27,6 +27,7 @@ from ipaddress import (
 )
 from pathlib import Path
 from socket import socketpair
+from time import perf_counter
 from typing import Any, NoReturn
 from uuid import UUID
 
@@ -200,6 +201,13 @@ class TestAllowDuplicateKeys:
     def test_raises_on_duplicate(self, payload: str, immutable: bool) -> None:
         with pytest.raises(CBORDecodeError, match="Duplicate map key: 'a'"):
             loads(unhexlify(payload), allow_duplicate_keys=False, immutable=immutable)
+
+    @pytest.mark.parametrize("immutable", [False, True])
+    def test_raises_on_duplicate_int_and_simple_value(self, immutable: bool) -> None:
+        # {5: 1, simple(5): 2}: the integer 5 and simple value 5 compare equal, so this is a
+        # duplicate key and must be rejected rather than kept as two distinct entries
+        with pytest.raises(CBORDecodeError, match="Duplicate map key"):
+            loads(unhexlify("a20501e502"), allow_duplicate_keys=False, immutable=immutable)
 
 
 def test_readonly_attributes() -> None:
@@ -425,6 +433,29 @@ def test_string_issue_264_multiple_chunks_utf8_boundary() -> None:
     assert len(result) == 131170  # 65535 + 1 + 65533 + 1 + 100 characters
 
 
+def test_indefinite_bytestring_many_chunks() -> None:
+    # An indefinite-length byte string assembled from many single-byte chunks used to be
+    # concatenated with repeated "+", which is quadratic in the number of chunks. The time
+    # bound is generous; only the quadratic behaviour blows past it.
+    count = 400000
+    payload = b"\x5f" + b"\x41\x2a" * count + b"\xff"
+    start = perf_counter()
+    result = loads(payload)
+    assert perf_counter() - start < 2.0
+    assert result == b"\x2a" * count
+
+
+def test_indefinite_string_many_chunks() -> None:
+    # Same quadratic concatenation issue for indefinite-length text strings; the final chunk
+    # carries a multi-byte character to exercise the join path.
+    count = 400000
+    payload = b"\x7f" + b"\x61\x61" * (count - 1) + b"\x62\xc3\xb6" + b"\xff"
+    start = perf_counter()
+    result = loads(payload)
+    assert perf_counter() - start < 2.0
+    assert result == "a" * (count - 1) + "ö"
+
+
 @pytest.mark.parametrize(
     "payload, expected",
     [
@@ -507,6 +538,22 @@ def test_bad_streaming_strings(payload: str) -> None:
     with pytest.raises(
         CBORDecodeError,
         match=r"non-(byte|text) string \(major type \d\) found in indefinite length (byte|text) string",
+    ):
+        loads(unhexlify(payload))
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param("bf6161ff", id="mutable"),
+        pytest.param("bf6161016162ff", id="mutable/after-pair"),
+        pytest.param("d9010281bf6161016162ff", id="immutable"),
+    ],
+)
+def test_indefinite_map_missing_value(payload: str) -> None:
+    with pytest.raises(
+        CBORDecodeError,
+        match="missing value for key in indefinite-length map",
     ):
         loads(unhexlify(payload))
 
@@ -700,6 +747,25 @@ def test_negative_bignum() -> None:
     assert decoded == -18446744073709551617
 
 
+@pytest.mark.parametrize(
+    "payload, typename",
+    [
+        pytest.param("c28105", "positive", id="positive_array"),
+        pytest.param("c2a10509", "positive", id="positive_map"),
+        pytest.param("c38100", "negative", id="negative_array"),
+        pytest.param("c3a10509", "negative", id="negative_map"),
+    ],
+)
+def test_bignum_non_bytestring(payload: str, typename: str) -> None:
+    # Tags 2 and 3 must enclose a byte string; int.from_bytes() also accepts an array (or a
+    # map, whose keys it iterates), so these malformed payloads must be rejected, not coerced.
+    with pytest.raises(
+        CBORDecodeError,
+        match=f"error decoding {typename} bignum: bignum value must be a byte string, not <class ",
+    ):
+        loads(unhexlify(payload))
+
+
 def test_fraction() -> None:
     decoded = loads(unhexlify("c48221196ab3"))
     assert decoded == Decimal("273.15")
@@ -851,6 +917,16 @@ def test_uuid_invalid_type() -> None:
             "d8368350fe8000000000020202fffffffe030303184002",
             IPv6Interface("fe80::202:2ff:ffff:fe03:303%2/64"),
             id="ipv6if_num_zoneid",
+        ),
+        pytest.param(
+            "d8368350fe8000000000020202fffffffe030303f64465746830",
+            IPv6Address("fe80::202:2ff:ffff:fe03:303%eth0"),
+            id="ipv6addr_str_zoneid",
+        ),
+        pytest.param(
+            "d8368350fe8000000000020202fffffffe030303f64132",
+            IPv6Address("fe80::202:2ff:ffff:fe03:303%2"),
+            id="ipv6addr_num_zoneid",
         ),
     ],
 )
