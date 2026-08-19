@@ -1663,6 +1663,7 @@ impl CBORDecoder {
             let result: PyResult<DecoderResult<'py>> = if let Some(previous_value) = value.take() {
                 // Call the decoder callback of the last frame
                 let frame = frames.last_mut().unwrap();
+
                 // A break code is only a valid terminator inside an indefinite-length
                 // array or map. Reaching any other frame means it appeared where a data
                 // item was expected, which is ill-formed (RFC 8949 §3.2.1).
