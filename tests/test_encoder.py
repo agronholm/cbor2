@@ -436,6 +436,116 @@ def test_ipaddress(value: object, expected: str) -> None:
     assert dumps(value) == unhexlify(expected)
 
 
+class _DatetimeSubclass(datetime):
+    pass
+
+
+class _DateSubclass(date):
+    pass
+
+
+class _DecimalSubclass(Decimal):
+    pass
+
+
+class _FractionSubclass(Fraction):
+    pass
+
+
+class _UUIDSubclass(UUID):
+    pass
+
+
+class _IPv4AddressSubclass(IPv4Address):
+    pass
+
+
+class _IPv4NetworkSubclass(IPv4Network):
+    pass
+
+
+class _IPv4InterfaceSubclass(IPv4Interface):
+    pass
+
+
+class _IPv6AddressSubclass(IPv6Address):
+    pass
+
+
+class _IPv6NetworkSubclass(IPv6Network):
+    pass
+
+
+class _IPv6InterfaceSubclass(IPv6Interface):
+    pass
+
+
+class _MIMETextSubclass(MIMEText):
+    pass
+
+
+@pytest.mark.parametrize("canonical", [False, True])
+@pytest.mark.parametrize(
+    "subclass_value, base_value",
+    [
+        pytest.param(
+            _DatetimeSubclass(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc),
+            datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc),
+            id="datetime",
+        ),
+        pytest.param(_DateSubclass(2013, 3, 21), date(2013, 3, 21), id="date"),
+        pytest.param(_DecimalSubclass("14.123"), Decimal("14.123"), id="decimal"),
+        pytest.param(_FractionSubclass(2, 5), Fraction(2, 5), id="fraction"),
+        pytest.param(
+            _UUIDSubclass(hex="5eaffac8b51e480581277fdcc7842faf"),
+            UUID(hex="5eaffac8b51e480581277fdcc7842faf"),
+            id="uuid",
+        ),
+        pytest.param(_IPv4AddressSubclass("192.0.2.1"), IPv4Address("192.0.2.1"), id="ipv4addr"),
+        pytest.param(
+            _IPv4NetworkSubclass("192.0.2.0/24"), IPv4Network("192.0.2.0/24"), id="ipv4net"
+        ),
+        pytest.param(
+            _IPv4InterfaceSubclass("192.0.2.1/24"), IPv4Interface("192.0.2.1/24"), id="ipv4if"
+        ),
+        pytest.param(
+            _IPv6AddressSubclass("2001:db8::1"), IPv6Address("2001:db8::1"), id="ipv6addr"
+        ),
+        pytest.param(
+            _IPv6NetworkSubclass("2001:db8:1234::/48"),
+            IPv6Network("2001:db8:1234::/48"),
+            id="ipv6net",
+        ),
+        pytest.param(
+            _IPv6InterfaceSubclass("2001:db8::5/64"),
+            IPv6Interface("2001:db8::5/64"),
+            id="ipv6if",
+        ),
+    ],
+)
+def test_stdlib_type_subclass(subclass_value: Any, base_value: Any, canonical: bool) -> None:
+    """Subclasses of the supported stdlib types must encode exactly like the base type."""
+    encoded = dumps(subclass_value, canonical=canonical)
+    assert encoded == dumps(base_value, canonical=canonical)
+    assert loads(encoded) == base_value
+
+
+def test_datetime_subclass_as_timestamp() -> None:
+    value = _DatetimeSubclass(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc)
+    assert dumps(value, datetime_as_timestamp=True) == unhexlify("c11a514b67b0")
+
+
+def test_date_subclass_as_datetime() -> None:
+    expected = unhexlify("c074323031332d30332d32315430303a30303a30305a")
+    value = _DateSubclass(2013, 3, 21)
+    assert dumps(value, timezone=timezone.utc, date_as_datetime=True) == expected
+
+
+def test_mime_subclass() -> None:
+    message = _MIMETextSubclass("Hello \u20acuro", "plain", "iso-8859-15")
+    assert dumps(message) == dumps(MIMEText("Hello \u20acuro", "plain", "iso-8859-15"))
+
+
 def test_custom_tag() -> None:
     expected = unhexlify("d917706548656c6c6f")
     assert dumps(CBORTag(6000, "Hello")) == expected

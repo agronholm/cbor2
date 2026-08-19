@@ -583,6 +583,13 @@ impl CBOREncoder {
                         ),
                         (
                             py.import("ipaddress")?
+                                .getattr("IPv4Interface")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_ipv4_interface,
+                        ),
+                        (
+                            py.import("ipaddress")?
                                 .getattr("IPv4Address")?
                                 .cast_into()?
                                 .unbind(),
@@ -597,10 +604,10 @@ impl CBOREncoder {
                         ),
                         (
                             py.import("ipaddress")?
-                                .getattr("IPv4Interface")?
+                                .getattr("IPv6Interface")?
                                 .cast_into()?
                                 .unbind(),
-                            CBOREncoder::encode_ipv4_interface,
+                            CBOREncoder::encode_ipv6_interface,
                         ),
                         (
                             py.import("ipaddress")?
@@ -617,13 +624,6 @@ impl CBOREncoder {
                             CBOREncoder::encode_ipv6_network,
                         ),
                         (
-                            py.import("ipaddress")?
-                                .getattr("IPv6Interface")?
-                                .cast_into()?
-                                .unbind(),
-                            CBOREncoder::encode_ipv6_interface,
-                        ),
-                        (
                             py.import("email.mime.text")?
                                 .getattr("MIMEText")?
                                 .cast_into()?
@@ -632,8 +632,18 @@ impl CBOREncoder {
                         ),
                     ])
                 })?;
+            // Exact type matches first: the common case, using cheap pointer comparisons
             for (pytype, callback) in stdlib_encoders {
                 if obj_type.is(pytype) {
+                    return callback(slf, obj);
+                }
+            }
+
+            // Fall back to isinstance matching so subclasses encode like their base type,
+            // as they did in cbor2 <= 5.x. The list is ordered so that subclasses precede
+            // their bases (datetime before date, IP interfaces before IP addresses).
+            for (pytype, callback) in stdlib_encoders {
+                if obj.is_instance(pytype.bind(py))? {
                     return callback(slf, obj);
                 }
             }
