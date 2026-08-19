@@ -9,6 +9,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
+- Fixed the decoder leaking the internal break-marker sentinel (or accepting it as a data item)
+  when a CBOR break code (``0xff``) appears outside an indefinite-length item, instead of rejecting
+  such input as ill-formed
+  (`#305 <https://github.com/agronholm/cbor2/issues/305>`_)
 
 **6.1.4** (2026-08-01)
 
