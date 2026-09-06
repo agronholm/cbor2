@@ -2,20 +2,18 @@ use crate::utils::PyImportable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::PyAnyMethods;
-use pyo3::types::{PyInt, PyNotImplemented};
+use pyo3::types::{PyInt, PyNotImplemented, PyTuple, PyType};
 use pyo3::{
-    Bound, IntoPyObjectExt, Py, PyAny, PyResult, Python, create_exception, pyclass, pymethods,
+    Bound, IntoPyObjectExt, Py, PyAny, PyErr, PyResult, PyTypeInfo, Python, create_exception,
+    pyclass, pymethods,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 #[cfg(not(Py_3_15))]
 use pyo3::types::{
-    PyDict, PyDictMethods, PyFrozenSet, PyGenericAlias, PyIterator, PyString, PyTuple,
-    PyTupleMethods, PyType,
+    PyDict, PyDictMethods, PyFrozenSet, PyGenericAlias, PyIterator, PyString, PyTupleMethods,
 };
-#[cfg(not(Py_3_15))]
-use pyo3::{PyErr, PyTypeInfo};
 
 pub static DECIMAL_TYPE: PyImportable = PyImportable::new("decimal", "Decimal");
 pub static FRACTION_TYPE: PyImportable = PyImportable::new("fractions", "Fraction");
@@ -26,6 +24,68 @@ pub static IPV6ADDRESS_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6
 pub static IPV6INTERFACE_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Interface");
 pub static IPV6NETWORK_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Network");
 pub static UUID_TYPE: PyImportable = PyImportable::new("uuid", "UUID");
+
+// PyO3's create_exception! macro accepts one base class, while cbor2's public exception
+// hierarchy intentionally combines its domain-specific exceptions with built-in exceptions.
+macro_rules! create_exception_with_bases {
+    ($name:ident, ($($base:ty),+), $doc:expr) => {
+        #[repr(transparent)]
+        pub struct $name(PyAny);
+
+        pyo3::impl_exception_boilerplate!($name);
+        pyo3::pyobject_native_type_named!($name);
+
+        // SAFETY: the type object is initialized once and remains owned by the interpreter.
+        unsafe impl PyTypeInfo for $name {
+            const NAME: &'static str = stringify!($name);
+            const MODULE: Option<&'static str> = Some("cbor2");
+            pyo3::create_exception_type_hint!(cbor2, $name);
+
+            fn type_object_raw(py: Python<'_>) -> *mut pyo3::ffi::PyTypeObject {
+                use pyo3::sync::PyOnceLock;
+
+                static TYPE_OBJECT: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+                TYPE_OBJECT
+                    .get_or_init(py, || {
+                        let bases = PyTuple::new(
+                            py,
+                            [$(py.get_type::<$base>().into_any()),+],
+                        )
+                        .expect("Failed to initialize exception bases.");
+                        // SAFETY: PyErr_NewExceptionWithDoc accepts a tuple of exception bases and
+                        // returns a new owned reference or sets a Python error and returns null.
+                        let type_object = unsafe {
+                            pyo3::ffi::PyErr_NewExceptionWithDoc(
+                                pyo3::ffi::c_str!(concat!("cbor2.", stringify!($name))).as_ptr(),
+                                pyo3::ffi::c_str!($doc).as_ptr(),
+                                bases.as_ptr(),
+                                std::ptr::null_mut(),
+                            )
+                        };
+                        // SAFETY: the pointer follows PyErr_NewExceptionWithDoc's ownership and
+                        // error contract described above.
+                        unsafe { Bound::from_owned_ptr_or_err(py, type_object) }
+                            .expect("Failed to initialize new exception type.")
+                            .cast_into::<PyType>()
+                            .expect("Exception constructor returned a non-type object.")
+                            .unbind()
+                    })
+                    .as_ptr()
+                    .cast()
+            }
+        }
+
+        impl $name {
+            #[doc(hidden)]
+            pub const _PYO3_DEF: pyo3::impl_::pymodule::AddTypeToModule<Self> =
+                pyo3::impl_::pymodule::AddTypeToModule::new();
+
+            #[doc(hidden)]
+            pub const _PYO3_INTROSPECTION_ID: &'static str =
+                concat!("cbor2", stringify!($name));
+        }
+    };
+}
 
 create_exception!(
     cbor2,
@@ -39,28 +99,24 @@ create_exception!(
     CBORError,
     "Raised for exceptions occurring during CBOR encoding."
 );
-create_exception!(
-    cbor2,
+create_exception_with_bases!(
     CBOREncodeTypeError,
-    CBOREncodeError,
+    (CBOREncodeError, PyTypeError),
     "Raised when attempting to encode a type that cannot be serialized."
 );
-create_exception!(
-    cbor2,
+create_exception_with_bases!(
     CBOREncodeValueError,
-    CBOREncodeError,
+    (CBOREncodeError, PyValueError),
     "Raised when the CBOR encoder encounters an invalid value."
 );
-create_exception!(
-    cbor2,
+create_exception_with_bases!(
     CBORDecodeError,
-    CBORError,
+    (CBORError, PyValueError),
     "Raised for exceptions occurring during CBOR decoding."
 );
-create_exception!(
-    cbor2,
+create_exception_with_bases!(
     CBORDecodeEOF,
-    CBORDecodeError,
+    (CBORDecodeError, pyo3::exceptions::PyEOFError),
     "Raised when decoding unexpectedly reaches EOF."
 );
 
