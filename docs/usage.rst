@@ -23,6 +23,44 @@ Serializing and deserializing with cbor2 is pretty straightforward::
 
 Some data types, however, require extra considerations, as detailed below.
 
+Decoding a sequence of objects
+------------------------------
+
+A file can contain several CBOR objects concatenated together, without an enclosing array.
+Call :meth:`CBORDecoder.decode` once for each object. Check for the end of the file *between*
+objects, rather than catching :exc:`CBORDecodeEOF`: that exception can also mean that the
+last object is incomplete.
+
+For a binary file opened with the default buffering, use its :meth:`~io.BufferedReader.peek`
+method to check whether another object starts next:
+
+>>> from cbor2 import CBORDecoder
+>>> def iter_cbor_sequence(fp):
+...     decoder = CBORDecoder(fp)
+...     while fp.peek(1):
+...         yield decoder.decode()
+
+Use it to read the objects one at a time::
+
+    with open("input.cbor", "rb") as fp:
+        for obj in iter_cbor_sequence(fp):
+            print(obj)
+
+The decoder leaves the file positioned after the decoded object, including when it reads ahead
+internally. ``peek(1)`` does not consume the next byte. An empty file therefore produces no
+objects, while an incomplete or invalid object raises a decoding exception instead of silently
+ending iteration. This example requires a buffered binary reader with ``peek()``; a bare
+:class:`~io.BytesIO` does not provide that method. Wrap it in :class:`~io.BufferedReader`:
+
+>>> from io import BufferedReader, BytesIO
+>>> from cbor2 import dumps
+>>> data = dumps([1, 2]) + dumps({"name": "example"})
+>>> with BufferedReader(BytesIO(data)) as fp:
+...     list(iter_cbor_sequence(fp))
+[[1, 2], {'name': 'example'}]
+
+For command-line conversion to JSON, use ``cbor2 --sequence input.cbor``.
+
 Date/time handling
 ------------------
 

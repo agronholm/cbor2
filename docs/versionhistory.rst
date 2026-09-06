@@ -7,6 +7,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Documented how to decode concatenated CBOR objects without hiding truncated input
+  (`#30 <https://github.com/agronholm/cbor2/issues/30>`_; PR by @be-student)
+
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
 
