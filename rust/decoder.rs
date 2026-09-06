@@ -15,11 +15,12 @@ use half::f16;
 use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{
-    PyBytes, PyCFunction, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyListMethods, PyMapping,
-    PySet, PyString, PyTuple,
+    PyByteArray, PyBytes, PyCFunction, PyComplex, PyDict, PyFrozenSet, PyInt, PyList,
+    PyListMethods, PyMapping, PySet, PyString, PyTuple,
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, PyErrArguments, intern, pyclass};
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::mem::{replace, take};
 
 const IMMUTABLE_ATTR: &str = "_cbor2_immutable";
@@ -185,6 +186,8 @@ fn require_bignum_bytes(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyBytes>>
 /// :param allow_duplicate_keys:
 ///     if :data:`False`, raise a :exc:`CBORDecodeError` when a map key that has already been
 ///     decoded in the same map is encountered
+/// :param mutable_bytes:
+///     if :data:`True`, decode byte strings as :class:`bytearray` when a mutable value is allowed
 ///
 /// .. _CBOR: https://cbor.io/
 #[pyclass(module = "cbor2")]
@@ -202,6 +205,8 @@ pub struct CBORDecoder {
     allow_indefinite: bool,
     #[pyo3(get)]
     allow_duplicate_keys: bool,
+    #[pyo3(get)]
+    mutable_bytes: bool,
 
     read_method: Option<Py<PyAny>>,
     buffer: Option<Py<PyBytes>>,
@@ -223,6 +228,7 @@ impl CBORDecoder {
         max_depth: usize,
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
+        mutable_bytes: bool,
     ) -> PyResult<Self> {
         let available_bytes = if let Some(buffer) = buffer.as_ref() {
             buffer.len()?
@@ -239,6 +245,7 @@ impl CBORDecoder {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            mutable_bytes,
             semantic_decoders: semantic_decoders.map(|d| d.clone().unbind()),
             read_method: None,
             buffer: buffer.map(Bound::unbind),
@@ -398,13 +405,15 @@ impl CBORDecoder {
         &mut self,
         py: Python<'py>,
         subtype: u8,
+        immutable: bool,
     ) -> PyResult<DecoderResult<'py>> {
         // Major tag 2
+        let mutable = self.mutable_bytes && !immutable;
         match self.decode_length_as_usize(py, subtype)? {
             None => {
                 // Indefinite length
                 let sys_maxsize = *SYS_MAXSIZE.get(py).unwrap();
-                let bytes = PyBytes::new_with_writer(py, 0, |writer| {
+                let mut read_chunks = |writer: &mut dyn Write| -> PyResult<()> {
                     loop {
                         let (major_type, subtype) = self.read_major_and_subtype(py)?;
                         match (major_type, subtype) {
@@ -415,42 +424,63 @@ impl CBORDecoder {
                                         "chunk too long in an indefinite bytestring chunk: {length}"
                                     )));
                                 }
-                                let length = length as usize;
-                                let chunk = self.read(py, length)?;
+                                let chunk = self.read(py, length as usize)?;
                                 writer.write_all(&chunk)?;
                             }
-                            (7, 31) => break Ok(()), // break marker
+                            (7, 31) => break Ok(()),
                             _ => {
                                 return Err(CBORDecodeError::new_err(format!(
                                     "non-byte string (major type {major_type}) found in indefinite \
-                                    length byte string"
+                                     length byte string"
                                 )));
                             }
                         }
                     }
-                })?;
-                Ok(Value(bytes.into_any()))
+                };
+                if mutable {
+                    let mut bytes = Vec::new();
+                    read_chunks(&mut bytes)?;
+                    Ok(Value(PyByteArray::new(py, &bytes).into_any()))
+                } else {
+                    let bytes = PyBytes::new_with_writer(py, 0, |writer| read_chunks(writer))?;
+                    Ok(Value(bytes.into_any()))
+                }
             }
             Some(length) if length <= 65536 => {
                 let bytes = self.read(py, length)?;
-                Ok(StringValue(PyBytes::new(py, &bytes).into_any(), length))
+                let value = if mutable {
+                    PyByteArray::new(py, &bytes).into_any()
+                } else {
+                    PyBytes::new(py, &bytes).into_any()
+                };
+                Ok(StringValue(value, length))
             }
             Some(length) => {
-                // Incrementally read the bytestring, in chunks of 65536 bytes. The claimed
-                // length is untrusted until the data has actually been read, so no more than
-                // 64 KiB of it is reserved up front; a truncated payload claiming a huge length
-                // can then force at most a 64 KiB allocation.
-                let bytes = PyBytes::new_with_writer(py, length.min(65536), |writer| {
+                // The claimed length is untrusted until all data has been read, so reserve no
+                // more than 64 KiB up front. This avoids allocating the claimed size for a
+                // truncated malicious payload.
+                if mutable {
+                    let mut bytes = Vec::with_capacity(length.min(65536));
                     let mut remaining_length = length;
                     while remaining_length > 0 {
                         let chunk_size = remaining_length.min(65536);
-                        let chunk = self.read(py, chunk_size)?;
+                        bytes.extend_from_slice(&self.read(py, chunk_size)?);
                         remaining_length -= chunk_size;
-                        writer.write_all(&chunk)?;
                     }
-                    Ok(())
-                })?;
-                Ok(StringValue(bytes.into_any(), length))
+                    Ok(StringValue(PyByteArray::new(py, &bytes).into_any(), length))
+                } else {
+                    let bytes = PyBytes::new_with_writer(py, length.min(65536), |writer| {
+                        let mut remaining_length = length;
+                        while remaining_length > 0 {
+                            let chunk_size = remaining_length.min(65536);
+                            let chunk = self.read(py, chunk_size)?;
+                            remaining_length -= chunk_size;
+                            writer.write_all(&chunk)?;
+                        }
+                        Ok(())
+                    })?;
+                    Ok(StringValue(bytes.into_any(), length))
+                }
             }
         }
     }
@@ -1427,6 +1457,7 @@ impl CBORDecoder {
         max_depth = 400,
         allow_indefinite = true,
         allow_duplicate_keys = true,
+        mutable_bytes = false,
     ))]
     pub fn new(
         py: Python<'_>,
@@ -1439,6 +1470,7 @@ impl CBORDecoder {
         max_depth: usize,
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
+        mutable_bytes: bool,
     ) -> PyResult<Self> {
         Self::new_internal(
             py,
@@ -1452,6 +1484,7 @@ impl CBORDecoder {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            mutable_bytes,
         )
     }
 
@@ -1664,7 +1697,7 @@ impl CBORDecoder {
                 match major_type {
                     0 => self.decode_uint(py, subtype),
                     1 => self.decode_negint(py, subtype),
-                    2 => self.decode_bytestring(py, subtype),
+                    2 => self.decode_bytestring(py, subtype, current_immutable),
                     3 => self.decode_string(py, subtype),
                     4 => self.decode_array(py, subtype, current_immutable),
                     5 => self.decode_map(py, subtype, current_immutable),

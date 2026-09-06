@@ -442,6 +442,49 @@ def test_indefinite_bytestring_many_chunks() -> None:
     assert result == b"\x2a" * count
 
 
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        (b"\x44data", b"data"),
+        (b"\x5f\x42da\x42ta\xff", b"data"),
+        (b"\x5a\x00\x01\x00\x01" + b"x" * 65537, b"x" * 65537),
+    ],
+    ids=("short", "indefinite", "large"),
+)
+def test_mutable_bytestrings(payload: bytes, expected: bytes) -> None:
+    result = loads(payload, mutable_bytes=True)
+
+    assert isinstance(result, bytearray)
+    assert result == expected
+    result[0] = ord("X")
+    assert result[0] == ord("X")
+
+
+def test_mutable_bytestrings_default_to_bytes() -> None:
+    assert isinstance(loads(b"\x44data"), bytes)
+    assert isinstance(loads(b"\x44data", mutable_bytes=True, immutable=True), bytes)
+
+
+def test_mutable_bytestring_map_keys_remain_hashable() -> None:
+    result = loads(b"\xa1\x41k\x41v", mutable_bytes=True)
+
+    key = next(iter(result))
+    assert isinstance(key, bytes)
+    assert isinstance(result[key], bytearray)
+
+
+def test_mutable_bytestrings_supported_by_load_and_decoder() -> None:
+    assert load(BytesIO(b"\x44data"), mutable_bytes=True) == bytearray(b"data")
+
+    decoder = CBORDecoder(BytesIO(b"\x44data"), mutable_bytes=True)
+    assert decoder.mutable_bytes is True
+    assert decoder.decode() == bytearray(b"data")
+
+
+def test_mutable_bytestrings_preserve_semantic_decoding() -> None:
+    assert loads(b"\xc2\x42\x01\x00", mutable_bytes=True) == 256
+
+
 def test_indefinite_string_many_chunks() -> None:
     # Same quadratic concatenation issue for indefinite-length text strings; the final chunk
     # carries a multi-byte character to exercise the join path.

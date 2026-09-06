@@ -23,6 +23,19 @@ Serializing and deserializing with cbor2 is pretty straightforward::
 
 Some data types, however, require extra considerations, as detailed below.
 
+Mutable byte strings
+--------------------
+
+By default, CBOR byte strings are decoded as :class:`bytes`. Pass ``mutable_bytes=True`` to
+:func:`load`, :func:`loads` or :class:`CBORDecoder` to decode ordinary byte strings as
+:class:`bytearray` instead::
+
+    mutable_data = loads(b'\x44data', mutable_bytes=True)
+    mutable_data[0] = ord('D')
+
+Byte strings in immutable positions, such as map keys and semantic tag payloads that require
+bytes, remain :class:`bytes`.
+
 Date/time handling
 ------------------
 
