@@ -4,12 +4,14 @@ use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::PyAnyMethods;
 use pyo3::types::{PyInt, PyNotImplemented, PyTuple, PyType};
 use pyo3::{
-    Bound, IntoPyObjectExt, Py, PyAny, PyErr, PyResult, PyTypeInfo, Python, create_exception,
-    pyclass, pymethods,
+    Bound, IntoPyObjectExt, Py, PyAny, PyResult, PyTypeInfo, Python, create_exception, pyclass,
+    pymethods,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+#[cfg(not(Py_3_15))]
+use pyo3::PyErr;
 #[cfg(not(Py_3_15))]
 use pyo3::types::{
     PyDict, PyDictMethods, PyFrozenSet, PyGenericAlias, PyIterator, PyString, PyTupleMethods,
