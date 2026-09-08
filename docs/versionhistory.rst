@@ -9,6 +9,11 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
+- Fixed canonical encoding with value sharing enabled emitting shared references to container
+  keys that were never written to the stream, because the throwaway encoding used to sort the keys
+  registered them as shared values; the output then failed to decode, or decoded with the wrong
+  keys substituted in
+  (`#339 <https://github.com/agronholm/cbor2/pull/339>`_; PR by @sahvx655-wq)
 
 **6.1.4** (2026-08-01)
 
