@@ -95,6 +95,9 @@ mod _cbor2 {
     /// :param immutable:
     ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
     ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
+    /// :param mutable_bytes:
+    ///     if :data:`True`, decode byte strings as :class:`bytearray` when mutable values are
+    ///     allowed
     /// :return:
     ///     the deserialized object
     ///
@@ -112,6 +115,7 @@ mod _cbor2 {
         allow_indefinite = true,
         allow_duplicate_keys = true,
         immutable = false,
+        mutable_bytes = false,
     ))]
     fn load<'py>(
         py: Python<'py>,
@@ -125,6 +129,7 @@ mod _cbor2 {
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
         immutable: bool,
+        mutable_bytes: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let mut decoder = CBORDecoder::new(
             py,
@@ -137,6 +142,7 @@ mod _cbor2 {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            mutable_bytes,
         )?;
         decoder.decode(py, immutable)
     }
@@ -175,6 +181,9 @@ mod _cbor2 {
     /// :param immutable:
     ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
     ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
+    /// :param mutable_bytes:
+    ///     if :data:`True`, decode byte strings as :class:`bytearray` when mutable values are
+    ///     allowed
     /// :return:
     ///     the deserialized object
     ///
@@ -191,6 +200,7 @@ mod _cbor2 {
         allow_indefinite = true,
         allow_duplicate_keys = true,
         immutable = false,
+        mutable_bytes = false,
     ))]
     fn loads<'py>(
         py: Python<'py>,
@@ -203,6 +213,7 @@ mod _cbor2 {
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
         immutable: bool,
+        mutable_bytes: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let bytes = if let Ok(bytes) = data.cast::<PyBytes>() {
             bytes.clone()
@@ -229,6 +240,7 @@ mod _cbor2 {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            mutable_bytes,
         )?;
         decoder.decode(py, immutable)
     }
