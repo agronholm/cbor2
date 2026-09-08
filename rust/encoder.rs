@@ -705,9 +705,6 @@ impl CBOREncoder {
         slf: &Bound<'py, Self>,
         key: &Bound<'py, PyAny>,
     ) -> PyResult<(usize, Bound<'py, PyAny>)> {
-        // The encoding produced here is only used for ordering and never reaches the output
-        // stream, so a container key must not be registered as a shared value here; otherwise
-        // the actual encoding pass emits a reference to a shareable that was never written out
         Self::disable_value_sharing(slf, || {
             Self::disable_string_referencing(slf, || {
                 let encoded = Self::encode_to_bytes(slf, key)?;
