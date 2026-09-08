@@ -638,6 +638,29 @@ def test_canonical_set(frozen: bool) -> None:
 
 
 @pytest.mark.parametrize(
+    "value, expected",
+    [
+        pytest.param(
+            {"y": frozenset({5}), (1, 2): "x"},
+            "d81ca26179d90102d81c8105d81c8201026178",
+            id="map",
+        ),
+        pytest.param(
+            frozenset({(1, 2), (3, 4)}),
+            "d90102d81c82d81c820102d81c820304",
+            id="set",
+        ),
+    ],
+)
+def test_canonical_value_sharing_container_keys(value: object, expected: str) -> None:
+    # The throwaway encoding used to sort the keys must not register them as shared values, or
+    # the actual encoding emits references to shareables that were never written to the stream
+    encoded = dumps(value, canonical=True, value_sharing=True)
+    assert encoded == unhexlify(expected)
+    assert loads(encoded) == value
+
+
+@pytest.mark.parametrize(
     "value",
     [
         pytest.param("", id="empty string"),

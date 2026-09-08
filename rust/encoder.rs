@@ -705,10 +705,12 @@ impl CBOREncoder {
         slf: &Bound<'py, Self>,
         key: &Bound<'py, PyAny>,
     ) -> PyResult<(usize, Bound<'py, PyAny>)> {
-        Self::disable_string_referencing(slf, || {
-            let encoded = Self::encode_to_bytes(slf, key)?;
-            let py_bytes = PyBytes::new(slf.py(), encoded.as_slice());
-            Ok((encoded.len(), py_bytes.into_any()))
+        Self::disable_value_sharing(slf, || {
+            Self::disable_string_referencing(slf, || {
+                let encoded = Self::encode_to_bytes(slf, key)?;
+                let py_bytes = PyBytes::new(slf.py(), encoded.as_slice());
+                Ok((encoded.len(), py_bytes.into_any()))
+            })
         })
     }
 
