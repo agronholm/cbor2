@@ -405,7 +405,7 @@ def test_string_invalid_utf8(payload: str) -> None:
 
 def test_string_oversized() -> None:
     with pytest.raises(CBORDecodeEOF, match="premature end of stream"):
-        loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeaeffc26ca799"))
+        loads(unhexlify("aeaeaeaeaeaeaeaeae0108c29843d90100d8249f0000aeae00c26ca799"))
 
 
 def test_string_issue_264_multiple_chunks_utf8_boundary() -> None:
@@ -553,6 +553,30 @@ def test_indefinite_map_missing_value(payload: str) -> None:
         match="missing value for key in indefinite-length map",
     ):
         loads(unhexlify(payload))
+
+
+@pytest.mark.parametrize(
+    "payload, allow_indefinite",
+    [
+        pytest.param("ff", True, id="top-level"),
+        pytest.param("ff", False, id="top-level/indefinite-disabled"),
+        pytest.param("8301ff02", True, id="definite-array"),
+        pytest.param("a101ff", True, id="definite-map-value"),
+        pytest.param("a1ff01", True, id="definite-map-key"),
+        pytest.param("8281ff01", True, id="nested-definite-array"),
+        pytest.param("da000186a0ff", True, id="tag"),
+        pytest.param("d9010aff", True, id="set"),
+        pytest.param("d90100ff", True, id="string-namespace"),
+    ],
+)
+def test_misplaced_break(payload: str, allow_indefinite: bool) -> None:
+    # RFC 8949 section 3.2.1: a break stop code appearing where a data item is expected makes the
+    # enclosing item ill-formed. It must never surface as the internal break marker sentinel.
+    with pytest.raises(
+        CBORDecodeError,
+        match="break code encountered where a data item was expected",
+    ):
+        loads(unhexlify(payload), allow_indefinite=allow_indefinite)
 
 
 @pytest.mark.parametrize(
