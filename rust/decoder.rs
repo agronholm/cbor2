@@ -48,6 +48,9 @@ enum DecoderResult<'a> {
         bool,
         Option<Bound<'a, PyAny>>,
         DisplayName<'a>,
+        // True only for an indefinite-length array or map, the sole frames a break stop code may
+        // terminate. Every other frame rejects the break marker if it arrives as a data item.
+        bool,
     ),
     ContinueFrame(bool),
     CompleteFrame(Bound<'a, PyAny>),
@@ -84,6 +87,7 @@ struct StackFrame<'py> {
     shareable_index: Option<usize>,
     typename: DisplayName<'py>,
     contains_string_namespace: bool,
+    accepts_break: bool,
 }
 
 /// Decorates a function to be a two-stage decoder.
@@ -595,6 +599,7 @@ impl CBORDecoder {
                 false,
                 None,
                 DisplayName::String("array"),
+                optional_length.is_none(),
             ))
         } else {
             let mut list = PyList::empty(py);
@@ -632,6 +637,7 @@ impl CBORDecoder {
                 false,
                 Some(container),
                 DisplayName::String("array"),
+                optional_length.is_none(),
             ))
         }
     }
@@ -766,7 +772,13 @@ impl CBORDecoder {
                     }
                 })
             };
-            Ok(BeginFrame(callback, true, None, DisplayName::String("map")))
+            Ok(BeginFrame(
+                callback,
+                true,
+                None,
+                DisplayName::String("map"),
+                length_or_none.is_none(),
+            ))
         } else {
             fn check_duplicate(key: &Bound<PyAny>, dict: &Bound<PyDict>) -> PyResult<()> {
                 if dict.contains(key)? {
@@ -840,6 +852,7 @@ impl CBORDecoder {
                 true,
                 Some(container),
                 DisplayName::String("map"),
+                length_or_none.is_none(),
             ))
         }
     }
@@ -891,6 +904,7 @@ impl CBORDecoder {
                             } else {
                                 DisplayName::PythonName(name.clone())
                             },
+                            false,
                         ))
                     } else {
                         let callback =
@@ -902,6 +916,7 @@ impl CBORDecoder {
                             immutable,
                             None,
                             DisplayName::SemanticTag(tagnum),
+                            false,
                         ))
                     };
                 }
@@ -965,6 +980,7 @@ impl CBORDecoder {
                     true,
                     Some(container),
                     DisplayName::SemanticTag(tagnum),
+                    false,
                 ));
             }
         };
@@ -973,6 +989,7 @@ impl CBORDecoder {
             true,
             None,
             DisplayName::String(typename),
+            false,
         ))
     }
 
@@ -1409,6 +1426,7 @@ impl CBORDecoder {
             true,
             container,
             DisplayName::String("set"),
+            false,
         ))
     }
 }
@@ -1641,10 +1659,19 @@ impl CBORDecoder {
         let mut string_namespaces: Vec<Vec<Bound<'py, PyAny>>> = Vec::new();
         let mut value: Option<Bound<'py, PyAny>> = None;
         let mut current_immutable: bool = immutable;
+        let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
         loop {
             let result: PyResult<DecoderResult<'py>> = if let Some(previous_value) = value.take() {
                 // Call the decoder callback of the last frame
                 let frame = frames.last_mut().unwrap();
+                // The break stop code is not a data item; it may only terminate an indefinite-length
+                // array or map (RFC 8949 section 3.2.1). Reject it anywhere else so the internal
+                // break marker never reaches decoded output.
+                if previous_value.is(break_marker) && !frame.accepts_break {
+                    return Err(CBORDecodeError::new_err(
+                        "break code encountered where a data item was expected",
+                    ));
+                }
                 if let Some(decoder_callback) = frame.decoder_callback.as_mut() {
                     decoder_callback(previous_value, frame.immutable)
                         .map_err(|e| wrap_exception(py, e, &frame.typename))
@@ -1691,7 +1718,13 @@ impl CBORDecoder {
             };
 
             match result {
-                Ok(BeginFrame(callback, requested_immutable, container, typename)) => {
+                Ok(BeginFrame(
+                    callback,
+                    requested_immutable,
+                    container,
+                    typename,
+                    accepts_break,
+                )) => {
                     if let Some(frame) = frames.last_mut()
                         && let Some(container) = container
                         && let Some(shareable_index) = frame.shareable_index
@@ -1709,6 +1742,7 @@ impl CBORDecoder {
                             shareable_index: None,
                             typename,
                             contains_string_namespace: false,
+                            accepts_break,
                         },
                     )?;
                 }
@@ -1742,6 +1776,7 @@ impl CBORDecoder {
                             shareable_index: None,
                             typename: DisplayName::String("string namespace"),
                             contains_string_namespace: true,
+                            accepts_break: false,
                         },
                     )?;
                     string_namespaces.push(Vec::new());
@@ -1792,6 +1827,7 @@ impl CBORDecoder {
                             shareable_index: Some(shareables.len()),
                             typename: DisplayName::String("shareable value"),
                             contains_string_namespace: false,
+                            accepts_break: false,
                         },
                     )?;
                     shareables.push(None);
@@ -1837,6 +1873,13 @@ impl CBORDecoder {
             }
 
             if frames.is_empty() {
+                // A break stop code decoded at the top level closes no container, so it is
+                // ill-formed rather than a value to return.
+                if value.as_ref().is_some_and(|v| v.is(break_marker)) {
+                    return Err(CBORDecodeError::new_err(
+                        "break code encountered where a data item was expected",
+                    ));
+                }
                 // If fp was seekable and excess data has been read, empty the buffer and
                 // rewind the file
                 if self.available_bytes > 0
