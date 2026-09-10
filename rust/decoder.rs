@@ -1303,10 +1303,6 @@ impl CBORDecoder {
 
     fn decode_epoch_date(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 100
-        // The payload is an unbounded number of days from the Unix epoch, so add the epoch's
-        // ordinal on the Python object rather than narrowing it to an i32 first: a payload near
-        // i32::MAX otherwise overflows the addition (a panic under overflow-checked builds).
-        // date.fromordinal() rejects genuinely out-of-range ordinals with a clean error.
         let py = value.py();
         let ordinal = value.add(719163)?;
         DATE_FROMORDINAL
