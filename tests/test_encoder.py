@@ -719,21 +719,20 @@ def test_encode_stringrefs_repeated_bytearray() -> None:
 
 # The worked nested example published in the stringref spec
 # (http://cbor.schmorp.de/stringref), with its documented decoding.
+#
+#   d90100 85    256([
+#   63616161         "aaa",
+#   d81900           25(0),
+#   d90100 83        256([
+#   63626262             "bbb",
+#   63616161             "aaa",
+#   d81901               25(1)
+#   d90100 82        256([
+#   63636363             "ccc",
+#   d81900               25(0)
+#   d81900           25(0)
 SPEC_NESTED_EXAMPLE = unhexlify(
-    "d90100"  # 256(
-    "85"  #   [
-    "63616161"  #     "aaa",
-    "d81900"  #     25(0),
-    "d90100"  #     256(
-    "83"  #       [
-    "63626262"  #         "bbb",
-    "63616161"  #         "aaa",
-    "d81901"  #         25(1)
-    "d90100"  #     256(
-    "82"  #       [
-    "63636363"  #         "ccc",
-    "d81900"  #         25(0)
-    "d81900"  #     25(0)
+    "d901008563616161d81900d90100836362626263616161d81901d901008263636363d81900d81900"
 )
 SPEC_NESTED_DECODED = ["aaa", "aaa", ["bbb", "aaa", "aaa"], ["ccc", "ccc"], "aaa"]
 
