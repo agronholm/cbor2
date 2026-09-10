@@ -1304,8 +1304,11 @@ impl CBORDecoder {
     fn decode_epoch_date(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
         // Semantic tag 100
         let py = value.py();
-        let value = value.extract::<i32>()? + 719163;
-        DATE_FROMORDINAL.get(py)?.call1((value,)).map(CompleteFrame)
+        let ordinal = value.add(719163)?;
+        DATE_FROMORDINAL
+            .get(py)?
+            .call1((ordinal,))
+            .map(CompleteFrame)
     }
 
     fn decode_ipaddress(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {

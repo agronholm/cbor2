@@ -607,6 +607,15 @@ def test_date(payload: str, expected: date) -> None:
     assert decoded == expected
 
 
+def test_date_epoch_out_of_range() -> None:
+    # A tag 100 payload of i32::MAX days used to overflow the internal "+ 719163" addition
+    # (panicking under overflow-checked builds); it should raise a clean decode error instead.
+    with pytest.raises(CBORDecodeError, match="error decoding epoch-form date") as excinfo:
+        loads(unhexlify("d8641a7fffffff"))
+
+    assert isinstance(excinfo.value.__cause__, (ValueError, OverflowError))
+
+
 @pytest.mark.parametrize(
     "payload, expected",
     [
