@@ -7,10 +7,6 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
-- Fixed the decoder narrowing an epoch-form date payload (tag 100) to a 32-bit integer before
-  adding the epoch offset, so a payload near ``i32::MAX`` overflowed the addition and panicked
-  under overflow-checked builds instead of raising a clean decode error
-  (`#340 <https://github.com/agronholm/cbor2/pull/340>`_; PR by @sahvx655-wq)
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
 - Fixed canonical encoding with value sharing enabled emitting shared references to container
@@ -18,6 +14,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   registered them as shared values; the output then failed to decode, or decoded with the wrong
   keys substituted in
   (`#339 <https://github.com/agronholm/cbor2/pull/339>`_; PR by @sahvx655-wq)
+- Fixed the decoder narrowing an epoch-form date payload (tag 100) to a 32-bit integer before
+  adding the epoch offset, so a payload near ``i32::MAX`` overflowed the addition and panicked
+  under overflow-checked builds instead of raising a clean decode error
+  (`#340 <https://github.com/agronholm/cbor2/pull/340>`_; PR by @sahvx655-wq)
 
 **6.1.4** (2026-08-01)
 
