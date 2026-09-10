@@ -7,6 +7,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed the encoder not giving a nested stringref namespace (tag 256) its own index space
+  (`#335 <https://github.com/agronholm/cbor2/pull/335>`_; PR by @dylanpulver)
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
 - Fixed canonical encoding with value sharing enabled emitting shared references to container

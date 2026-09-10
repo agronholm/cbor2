@@ -1,0 +1,14 @@
+/Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/deps/pyo3_build_config-208ccd4080ae468a.d: /Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/lib.rs /Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/errors.rs /Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/impl_.rs /Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/build/pyo3-build-config-413bf574d52a922f/out/pyo3-build-config-file.txt /Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/build/pyo3-build-config-413bf574d52a922f/out/pyo3-build-config.txt
+
+/Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/deps/libpyo3_build_config-208ccd4080ae468a.rlib: /Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/lib.rs /Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/errors.rs /Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/impl_.rs /Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/build/pyo3-build-config-413bf574d52a922f/out/pyo3-build-config-file.txt /Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/build/pyo3-build-config-413bf574d52a922f/out/pyo3-build-config.txt
+
+/Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/deps/libpyo3_build_config-208ccd4080ae468a.rmeta: /Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/lib.rs /Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/errors.rs /Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/impl_.rs /Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/build/pyo3-build-config-413bf574d52a922f/out/pyo3-build-config-file.txt /Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/build/pyo3-build-config-413bf574d52a922f/out/pyo3-build-config.txt
+
+/Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/lib.rs:
+/Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/errors.rs:
+/Users/dylanpulver/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.28.2/src/impl_.rs:
+/Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/build/pyo3-build-config-413bf574d52a922f/out/pyo3-build-config-file.txt:
+/Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/build/pyo3-build-config-413bf574d52a922f/out/pyo3-build-config.txt:
+
+# env-dep:CARGO_PKG_VERSION=0.28.2
+# env-dep:OUT_DIR=/Users/dylanpulver/Repos/.ext-contrib/cbor2/rust/target/debug/build/pyo3-build-config-413bf574d52a922f/out
