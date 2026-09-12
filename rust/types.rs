@@ -29,19 +29,27 @@ pub static UUID_TYPE: PyImportable = PyImportable::new("uuid", "UUID");
 
 // PyO3's create_exception! macro accepts one base class, while cbor2's public exception
 // hierarchy intentionally combines its domain-specific exceptions with built-in exceptions.
+// Use the public PyTypeInfo/PyErr interfaces with the CPython exception constructor;
+// module registration is explicit and does not depend on PyO3 internal export helpers.
 macro_rules! create_exception_with_bases {
     ($name:ident, ($($base:ty),+), $doc:expr) => {
         #[repr(transparent)]
         pub struct $name(PyAny);
 
-        pyo3::impl_exception_boilerplate!($name);
-        pyo3::pyobject_native_type_named!($name);
+        impl $name {
+            #[allow(dead_code, reason = "some exported exception types are only raised by Python")]
+            pub fn new_err<A>(args: A) -> pyo3::PyErr
+            where
+                A: pyo3::PyErrArguments + Send + Sync + 'static,
+            {
+                pyo3::PyErr::new::<Self, A>(args)
+            }
+        }
 
         // SAFETY: the type object is initialized once and remains owned by the interpreter.
         unsafe impl PyTypeInfo for $name {
             const NAME: &'static str = stringify!($name);
             const MODULE: Option<&'static str> = Some("cbor2");
-            pyo3::create_exception_type_hint!(cbor2, $name);
 
             fn type_object_raw(py: Python<'_>) -> *mut pyo3::ffi::PyTypeObject {
                 use pyo3::sync::PyOnceLock;
@@ -77,15 +85,7 @@ macro_rules! create_exception_with_bases {
             }
         }
 
-        impl $name {
-            #[doc(hidden)]
-            pub const _PYO3_DEF: pyo3::impl_::pymodule::AddTypeToModule<Self> =
-                pyo3::impl_::pymodule::AddTypeToModule::new();
 
-            #[doc(hidden)]
-            pub const _PYO3_INTROSPECTION_ID: &'static str =
-                concat!("cbor2", stringify!($name));
-        }
     };
 }
 
