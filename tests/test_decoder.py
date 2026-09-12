@@ -297,8 +297,15 @@ def test_integer(payload: str, expected: int) -> None:
 def test_invalid_integer_subtype() -> None:
     with pytest.raises(CBORDecodeError) as exc:
         loads(b"\x1c")
-        assert str(exc.value).endswith("unknown unsigned integer subtype 0x1c")
-        assert isinstance(exc, ValueError)
+
+    assert str(exc.value).endswith("unknown unsigned integer subtype 0x1c")
+
+
+def test_decode_error_is_value_error() -> None:
+    with pytest.raises(ValueError) as exc:
+        loads(b"\xde\xad\xbe\xef")
+
+    assert isinstance(exc.value, CBORDecodeError)
 
 
 @pytest.mark.parametrize(

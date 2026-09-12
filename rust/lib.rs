@@ -47,16 +47,12 @@ mod _cbor2 {
     #[pymodule_export]
     use crate::types::CBOREncodeError;
 
-    #[pymodule_export]
     use crate::types::CBOREncodeTypeError;
 
-    #[pymodule_export]
     use crate::types::CBOREncodeValueError;
 
-    #[pymodule_export]
     use crate::types::CBORDecodeError;
 
-    #[pymodule_export]
     use crate::types::CBORDecodeEOF;
 
     pub static SYS_MAXSIZE: PyOnceLock<u64> = PyOnceLock::new();
@@ -396,6 +392,17 @@ mod _cbor2 {
 
     #[pymodule_init]
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        m.add(
+            "CBOREncodeTypeError",
+            m.py().get_type::<CBOREncodeTypeError>(),
+        )?;
+        m.add(
+            "CBOREncodeValueError",
+            m.py().get_type::<CBOREncodeValueError>(),
+        )?;
+        m.add("CBORDecodeError", m.py().get_type::<CBORDecodeError>())?;
+        m.add("CBORDecodeEOF", m.py().get_type::<CBORDecodeEOF>())?;
+
         // Register cbor2.FrozenDict as a Mapping subclass
         let py = m.py();
 

@@ -3,10 +3,35 @@ import sys
 
 import pytest
 
-from cbor2 import CBORSimpleValue, CBORTag, undefined
+from cbor2 import (
+    CBORDecodeEOF,
+    CBORDecodeError,
+    CBOREncodeError,
+    CBOREncodeTypeError,
+    CBOREncodeValueError,
+    CBORError,
+    CBORSimpleValue,
+    CBORTag,
+    undefined,
+)
 
 if sys.hexversion < 51314855:
     from cbor2 import frozendict
+
+
+@pytest.mark.parametrize(
+    "exception_type, expected_bases",
+    [
+        (CBOREncodeTypeError, (CBOREncodeError, TypeError)),
+        (CBOREncodeValueError, (CBOREncodeError, ValueError)),
+        (CBORDecodeError, (CBORError, ValueError)),
+        (CBORDecodeEOF, (CBORDecodeError, EOFError)),
+    ],
+)
+def test_exception_hierarchy(
+    exception_type: type[Exception], expected_bases: tuple[type[Exception], ...]
+) -> None:
+    assert all(issubclass(exception_type, base) for base in expected_bases)
 
 
 class TestUndefined:
