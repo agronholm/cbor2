@@ -1692,12 +1692,17 @@ impl CBORDecoder {
 
             match result {
                 Ok(BeginFrame(callback, requested_immutable, container, typename)) => {
+                    // A container replaces the shareable marker frame and is registered right
+                    // away so cyclic references can resolve to it
+                    let mut shareable_index = None;
                     if let Some(frame) = frames.last_mut()
+                        && frame.decoder_callback.is_none()
                         && let Some(container) = container
-                        && let Some(shareable_index) = frame.shareable_index
+                        && let Some(index) = frame.shareable_index
                     {
                         frames.pop();
-                        shareables[shareable_index] = Some(container.clone());
+                        shareables[index] = Some(container.clone());
+                        shareable_index = Some(index);
                     }
                     current_immutable = current_immutable || requested_immutable;
                     add_frame(
@@ -1706,7 +1711,7 @@ impl CBORDecoder {
                         StackFrame {
                             immutable: current_immutable,
                             decoder_callback: Some(callback),
-                            shareable_index: None,
+                            shareable_index,
                             typename,
                             contains_string_namespace: false,
                         },
@@ -1723,9 +1728,14 @@ impl CBORDecoder {
                     frames.last_mut().unwrap().immutable = current_immutable;
                 }
                 Ok(CompleteFrame(new_value)) => {
-                    frames
+                    let frame = frames
                         .pop()
                         .expect("received frame completion but there are no frames on the stack");
+                    // The finished value replaces the container registered up front, as
+                    // object_hook or tag_hook may have substituted it
+                    if let Some(index) = frame.shareable_index {
+                        shareables[index] = Some(new_value.clone());
+                    }
                     current_immutable = frames.last().map_or(immutable, |frame| frame.immutable);
                     value = Some(new_value);
                 }
