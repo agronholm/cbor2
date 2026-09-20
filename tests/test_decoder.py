@@ -1040,7 +1040,7 @@ class TestSharedReference:
         assert decoded == [["a", "b"], ["a", "b"]]
         assert decoded[0] is decoded[1]
 
-    @pytest.mark.parametrize("immutable", [False, True], ids=["mutable", "immutable"])
+    @pytest.mark.parametrize("immutable", [pytest.param(False, id="mutable"), pytest.param(True, id="immutable")]
     def test_object_hook(self, immutable: bool) -> None:
         class DummyType:
             def __init__(self, state: Mapping[Any, Any], immutable: bool) -> None:
@@ -1052,7 +1052,7 @@ class TestSharedReference:
         assert isinstance(decoded[0], DummyType)
         assert decoded[1] is decoded[0]
 
-    @pytest.mark.parametrize("immutable", [False, True], ids=["mutable", "immutable"])
+    @pytest.mark.parametrize("immutable", [pytest.param(False, id="mutable"), pytest.param(True, id="immutable")]
     def test_tag_hook(self, immutable: bool) -> None:
         def tag_hook(tag: CBORTag, immutable: bool) -> Any:
             return [tag.tag, tag.value]
