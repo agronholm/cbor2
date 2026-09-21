@@ -1064,6 +1064,33 @@ class TestSharedReference:
         assert decoded == [["a", "b"], ["a", "b"]]
         assert decoded[0] is decoded[1]
 
+    @pytest.mark.parametrize(
+        "immutable", [pytest.param(False, id="mutable"), pytest.param(True, id="immutable")]
+    )
+    def test_object_hook(self, immutable: bool) -> None:
+        class DummyType:
+            def __init__(self, state: Mapping[Any, Any], immutable: bool) -> None:
+                self.state = state
+
+        # [shareable({"a": 1}), sharedref(0)]
+        payload = unhexlify("82d81ca1616101d81d00")
+        decoded = loads(payload, object_hook=DummyType, immutable=immutable)
+        assert isinstance(decoded[0], DummyType)
+        assert decoded[1] is decoded[0]
+
+    @pytest.mark.parametrize(
+        "immutable", [pytest.param(False, id="mutable"), pytest.param(True, id="immutable")]
+    )
+    def test_tag_hook(self, immutable: bool) -> None:
+        def tag_hook(tag: CBORTag, immutable: bool) -> Any:
+            return [tag.tag, tag.value]
+
+        # [shareable(6000("Hello")), sharedref(0)]
+        payload = unhexlify("82d81cd917706548656c6c6fd81d00")
+        decoded = loads(payload, tag_hook=tag_hook, immutable=immutable)
+        assert decoded[0] == [6000, "Hello"]
+        assert decoded[1] is decoded[0]
+
 
 class TestStringReference:
     def test_string_ref(self) -> None:
