@@ -14,7 +14,7 @@ use pyo3::types::{
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
 use std::collections::HashMap;
-use std::mem::swap;
+use std::mem::{swap, take};
 
 type EncoderFn = fn(&Bound<CBOREncoder>, &Bound<PyAny>) -> PyResult<()>;
 type EncoderLookupVec = Vec<(Py<PyType>, EncoderFn)>;
@@ -916,18 +916,29 @@ impl CBOREncoder {
     /// :param value: the object to be encoded
     fn encode_semantic(slf: &Bound<'_, Self>, tag: u64, value: &Bound<'_, PyAny>) -> PyResult<()> {
         let old_string_referencing = slf.borrow().string_referencing;
+        // Tag 256 opens a fresh string reference namespace, so any references inside it start
+        // from index 0 and cannot resolve to entries of an enclosing namespace. The decoder
+        // nests namespaces this way, so the reference maps have to be swapped out for empty ones
+        // while the tagged value is encoded and restored afterwards.
+        let mut old_references: Option<(HashMap<String, usize>, HashMap<Vec<u8>, usize>)> = None;
         if tag == 256 {
             let mut this = slf.borrow_mut();
             this.string_referencing = true;
-
-            // TODO: move the string/bytestring references here temporarily
+            old_references = Some((
+                take(&mut this.string_references),
+                take(&mut this.bytes_references),
+            ));
         }
         let mut result = slf.borrow_mut().encode_length(slf.py(), 6, Some(tag));
         if result.is_ok() {
             result = Self::encode(slf, value);
         }
-        slf.borrow_mut().string_referencing = old_string_referencing;
-        // TODO: restore the string/bytestring references to the instance
+        let mut this = slf.borrow_mut();
+        this.string_referencing = old_string_referencing;
+        if let Some((string_references, bytes_references)) = old_references {
+            this.string_references = string_references;
+            this.bytes_references = bytes_references;
+        }
         result
     }
 

@@ -7,6 +7,11 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed the encoder sharing a single string reference namespace across separate tag 256 domains
+  instead of giving each its own; a value containing more than one ``CBORTag(256, ...)`` was
+  encoded with references leaking between the domains, so the output decoded with the wrong
+  strings substituted in or failed to decode altogether
+  (`#345 <https://github.com/agronholm/cbor2/pull/345>`_; PR by @sahvx655-wq)
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
 - Fixed canonical encoding with value sharing enabled emitting shared references to container

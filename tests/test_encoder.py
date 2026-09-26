@@ -740,6 +740,28 @@ def test_encode_stringrefs_repeated_bytearray() -> None:
     assert loads(encoded) == [b"abcd", b"abcd", b"abcd"]
 
 
+def test_encode_stringrefs_nested_namespaces() -> None:
+    # Each tag 256 opens its own string reference namespace, so the second domain must
+    # register "aaaa" at index 0 again rather than referencing the first domain's entry.
+    # Sharing a single namespace across the two domains corrupts the output: the decoder
+    # gives each domain a fresh namespace, so a leaked reference resolves to the wrong value.
+    value = [CBORTag(256, ["aaaa", "aaaa"]), CBORTag(256, ["aaaa", "aaaa"])]
+    encoded = dumps(value)
+    expected = unhexlify("82d90100826461616161d81900d90100826461616161d81900")
+    assert encoded == expected
+    assert loads(encoded) == [["aaaa", "aaaa"], ["aaaa", "aaaa"]]
+
+
+def test_encode_stringrefs_namespace_no_cross_reference() -> None:
+    # A string registered in the first domain is not visible from the second, so the
+    # repeated "bbbb" in the second domain references that domain's own index 0.
+    value = [CBORTag(256, ["aaaa", "bbbb"]), CBORTag(256, ["bbbb", "bbbb"])]
+    encoded = dumps(value)
+    expected = unhexlify("82d901008264616161616462626262d90100826462626262d81900")
+    assert encoded == expected
+    assert loads(encoded) == [["aaaa", "bbbb"], ["bbbb", "bbbb"]]
+
+
 @pytest.mark.parametrize(
     "tag",
     [
