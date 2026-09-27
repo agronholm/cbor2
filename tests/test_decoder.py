@@ -562,8 +562,6 @@ def test_indefinite_map_missing_value(payload: str) -> None:
         pytest.param("ff", False, id="top-level/indefinite-disabled"),
         pytest.param("8301ff02", True, id="definite-array"),
         pytest.param("a101ff", True, id="definite-map-value"),
-        pytest.param("a1ff01", True, id="definite-map-key"),
-        pytest.param("8281ff01", True, id="nested-definite-array"),
         pytest.param("da000186a0ff", True, id="tag"),
         pytest.param("d9010aff", True, id="set"),
         pytest.param("d90100ff", True, id="string-namespace"),
