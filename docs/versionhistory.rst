@@ -18,6 +18,11 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   :class:`dict` or :class:`CBORTag` instead of the value returned by ``object_hook`` or
   ``tag_hook``, a regression from 5.x
   (`#343 <https://github.com/agronholm/cbor2/pull/343>`_; PR by @sahvx655-wq)
+- Fixed the encoder not giving a nested stringref namespace (tag 256) its own index space
+  (`#335 <https://github.com/agronholm/cbor2/pull/335>`_; PR by @dylanpulver)
+- Fixed the decoder returning its internal break marker as a value when a break stop code
+  appeared where a data item was expected
+  (`#305 <https://github.com/agronholm/cbor2/issues/305>`_; PR by @sahvx655-wq)
 - Fixed the decoder narrowing an epoch-form date payload (tag 100) to a 32-bit integer before
   adding the epoch offset, so a payload near ``i32::MAX`` overflowed the addition and panicked
   under overflow-checked builds instead of raising a clean decode error
