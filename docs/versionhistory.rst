@@ -7,11 +7,6 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
-- Fixed the decoder returning its internal break marker as a value when a break stop code (major
-  type 7, additional information 31) appeared where a data item was expected, such as at the top
-  level, inside a definite-length array or map, or as a tagged value. Such input is ill-formed per
-  RFC 8949 section 3.2.1 and is now rejected with a :exc:`CBORDecodeError`
-  (`#305 <https://github.com/agronholm/cbor2/issues/305>`_; PR by @sahvx655-wq)
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
 - Fixed canonical encoding with value sharing enabled emitting shared references to container
@@ -25,6 +20,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   (`#343 <https://github.com/agronholm/cbor2/pull/343>`_; PR by @sahvx655-wq)
 - Fixed the encoder not giving a nested stringref namespace (tag 256) its own index space
   (`#335 <https://github.com/agronholm/cbor2/pull/335>`_; PR by @dylanpulver)
+- Fixed the decoder returning its internal break marker as a value when a break stop code
+  appeared where a data item was expected
+  (`#305 <https://github.com/agronholm/cbor2/issues/305>`_; PR by @sahvx655-wq)
 
 **6.1.4** (2026-08-01)
 
