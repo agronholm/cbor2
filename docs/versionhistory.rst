@@ -23,6 +23,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   :class:`dict` or :class:`CBORTag` instead of the value returned by ``object_hook`` or
   ``tag_hook``, a regression from 5.x
   (`#343 <https://github.com/agronholm/cbor2/pull/343>`_; PR by @sahvx655-wq)
+- Fixed the encoder not giving a nested stringref namespace (tag 256) its own index space
+  (`#335 <https://github.com/agronholm/cbor2/pull/335>`_; PR by @dylanpulver)
 
 **6.1.4** (2026-08-01)
 
