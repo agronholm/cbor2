@@ -1664,6 +1664,7 @@ impl CBORDecoder {
             let result: PyResult<DecoderResult<'py>> = if let Some(previous_value) = value.take() {
                 // Call the decoder callback of the last frame
                 let frame = frames.last_mut().unwrap();
+
                 // The break stop code is not a data item; it may only terminate an indefinite-length
                 // array or map (RFC 8949 section 3.2.1). Reject it anywhere else so the internal
                 // break marker never reaches decoded output.
@@ -1672,6 +1673,7 @@ impl CBORDecoder {
                         "break code encountered where a data item was expected",
                     ));
                 }
+
                 if let Some(decoder_callback) = frame.decoder_callback.as_mut() {
                     decoder_callback(previous_value, frame.immutable)
                         .map_err(|e| wrap_exception(py, e, &frame.typename))
