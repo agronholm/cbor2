@@ -20,6 +20,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   (`#343 <https://github.com/agronholm/cbor2/pull/343>`_; PR by @sahvx655-wq)
 - Fixed the encoder not giving a nested stringref namespace (tag 256) its own index space
   (`#335 <https://github.com/agronholm/cbor2/pull/335>`_; PR by @dylanpulver)
+- Fixed the decoder returning its internal break marker as a value when a break stop code
+  appeared where a data item was expected
+  (`#305 <https://github.com/agronholm/cbor2/issues/305>`_; PR by @sahvx655-wq)
 
 **6.1.4** (2026-08-01)
 
