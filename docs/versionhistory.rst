@@ -23,6 +23,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Fixed the decoder returning its internal break marker as a value when a break stop code
   appeared where a data item was expected
   (`#305 <https://github.com/agronholm/cbor2/issues/305>`_; PR by @sahvx655-wq)
+- Fixed a ``PanicException`` when trying to decode an epoch-form date (tag 100) with a payload near
+  ``i32::MAX`` which then overflowed the addition instead of raising a clean decode error
+  (`#340 <https://github.com/agronholm/cbor2/pull/340>`_; PR by @sahvx655-wq)
 
 **6.1.4** (2026-08-01)
 
