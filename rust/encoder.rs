@@ -632,6 +632,7 @@ impl CBOREncoder {
                         ),
                     ])
                 })?;
+
             // Exact type matches first: the common case, using cheap pointer comparisons
             for (pytype, callback) in stdlib_encoders {
                 if obj_type.is(pytype) {
