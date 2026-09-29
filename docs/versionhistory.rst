@@ -7,6 +7,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- **BACKWARD INCOMPATIBLE** Changed the encoder to handle subclasses of the specially handled
+  types (``datetime``, ``Decimal``, ``UUID``, the ``ipaddress`` types, etc.)
+  (`#329 <https://github.com/agronholm/cbor2/pull/329>`_; PR by @gaoflow)
 - **BACKWARD INCOMPATIBLE** Changed the content of a semantic tag to be decoded to adhere to the
   current "immutable" status of the decoder stack (i.e. when decoding a map key, immutable would
   be set to ``true``) instead of always decoding as immutable

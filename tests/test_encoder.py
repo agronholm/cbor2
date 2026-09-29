@@ -436,6 +436,33 @@ def test_ipaddress(value: object, expected: str) -> None:
     assert dumps(value) == unhexlify(expected)
 
 
+class _DatetimeSubclass(datetime):
+    pass
+
+
+class _IPv4InterfaceSubclass(IPv4Interface):
+    pass
+
+
+@pytest.mark.parametrize(
+    "subclass_value, base_value",
+    [
+        pytest.param(
+            _DatetimeSubclass(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc),
+            datetime(2013, 3, 21, 20, 4, 0, tzinfo=timezone.utc),
+            id="datetime",
+        ),
+        pytest.param(
+            _IPv4InterfaceSubclass("192.0.2.1/24"), IPv4Interface("192.0.2.1/24"), id="ipv4if"
+        ),
+    ],
+)
+def test_stdlib_type_subclass(subclass_value: Any, base_value: Any) -> None:
+    encoded = dumps(subclass_value)
+    assert encoded == dumps(base_value)
+    assert loads(encoded) == base_value
+
+
 def test_custom_tag() -> None:
     expected = unhexlify("d917706548656c6c6f")
     assert dumps(CBORTag(6000, "Hello")) == expected
