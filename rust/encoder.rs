@@ -656,17 +656,23 @@ impl CBOREncoder {
     pub fn encode(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         slf.borrow_mut().encode_depth += 1;
 
-        Self::encode_value(slf, obj)?;
+        let result = Self::encode_value(slf, obj);
 
         let mut this = slf.borrow_mut();
         this.encode_depth -= 1;
         if this.encode_depth == 0 {
-            this.flush(slf.py())?;
             this.shared_containers.clear();
             this.string_references.clear();
             this.bytes_references.clear();
+            if result.is_ok() {
+                this.flush(slf.py())?;
+            } else {
+                // Drop the partial output of the failed item so it does not end up in front of
+                // the next item written to the stream
+                this.buffer.clear();
+            }
         }
-        Ok(())
+        result
     }
 
     /// Encode the given object to a byte buffer and return its value as bytes.

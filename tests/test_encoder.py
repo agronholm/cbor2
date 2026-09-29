@@ -853,6 +853,20 @@ class TestEncoderReuse:
         result = loads(second_output)
         assert result == ["hello"]
 
+    def test_encoder_reuse_after_failed_encode(self) -> None:
+        """
+        A failed encode must not leave the encoder mid-operation: the next encode should
+        flush its output and start with clean shared container tracking.
+        """
+        fp = BytesIO()
+        encoder = CBOREncoder(fp, value_sharing=True)
+        shared_obj = ["hello"]
+        with pytest.raises(CBOREncodeError):
+            encoder.encode([shared_obj, object()])
+
+        encoder.encode(shared_obj)
+        assert fp.getvalue() == dumps(shared_obj, value_sharing=True)
+
     def test_encode_to_bytes_resets_shared_containers(self) -> None:
         """
         encode_to_bytes should also reset shared container tracking between calls.
