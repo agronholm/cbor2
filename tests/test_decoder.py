@@ -725,6 +725,20 @@ def test_datetime_invalid_string() -> None:
     assert str(excinfo.value.__cause__) == "Invalid isoformat string: '0000-123-01'"
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(b"\xc0\x732020-01-01T00:00:00", id="no-offset"),
+        pytest.param(b"\xc0\x6a2020-01-01", id="date-only"),
+    ],
+)
+def test_datetime_string_without_offset(payload: bytes) -> None:
+    # RFC 3339 makes the UTC offset mandatory, so a tag 0 string that omits it must be
+    # rejected rather than decoded as a naive datetime
+    with pytest.raises(CBORDecodeError, match="missing UTC offset"):
+        loads(payload)
+
+
 def test_datetime_overflow() -> None:
     with pytest.raises(CBORDecodeError) as excinfo:
         loads(unhexlify("c11b9b9b9b0000000000"))

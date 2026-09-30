@@ -1084,10 +1084,14 @@ impl CBORDecoder {
             datetime_str = temp_str.into_pyobject(py)?;
         }
 
-        DATETIME_FROMISOFORMAT
-            .get(py)?
-            .call1((&datetime_str,))
-            .map(CompleteFrame)
+        let parsed = DATETIME_FROMISOFORMAT.get(py)?.call1((&datetime_str,))?;
+        if parsed.getattr(intern!(py, "tzinfo"))?.is_none() {
+            return Err(CBORDecodeError::new_err(
+                "invalid datetime string (missing UTC offset)",
+            ));
+        }
+
+        Ok(CompleteFrame(parsed))
     }
 
     fn decode_epoch_datetime(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {
