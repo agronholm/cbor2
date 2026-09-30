@@ -1085,12 +1085,6 @@ impl CBORDecoder {
         }
 
         let parsed = DATETIME_FROMISOFORMAT.get(py)?.call1((&datetime_str,))?;
-
-        // RFC 8949 section 3.4.1 defines tag 0 as an RFC 3339 date/time string, and RFC 3339
-        // makes the UTC offset mandatory, so a well-formed value always parses to a
-        // timezone-aware datetime. datetime.fromisoformat() also accepts offset-less (and
-        // date-only) ISO 8601 strings, which would otherwise decode to a naive datetime and
-        // break the guarantee that a tag 0 value denotes an unambiguous point in time.
         if parsed.getattr(intern!(py, "tzinfo"))?.is_none() {
             return Err(CBORDecodeError::new_err(
                 "invalid datetime string (missing UTC offset)",

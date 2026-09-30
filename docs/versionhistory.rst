@@ -7,11 +7,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
-- Fixed the decoder accepting a string-form datetime (tag 0) with no UTC offset and returning a
-  naive :class:`~datetime.datetime`, rather than rejecting it. RFC 3339 makes the offset mandatory,
-  so a tag 0 value always denotes an unambiguous point in time; ``datetime.fromisoformat()`` also
-  accepts offset-less (and date-only) ISO 8601 strings, which previously slipped through
-  (PR by @sahvx655-wq)
+- Fixed the decoder accepting a string-form datetime (tag 0) without a UTC offset and returning
+  a naive :class:`~datetime.datetime` instead of rejecting it
+  (`#347 <https://github.com/agronholm/cbor2/pull/347>`_; PR by @sahvx655-wq)
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
 - Fixed canonical encoding with value sharing enabled emitting shared references to container
