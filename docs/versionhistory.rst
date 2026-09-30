@@ -7,9 +7,6 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
-- Fixed the decoder accepting a string-form datetime (tag 0) without a UTC offset and returning
-  a naive :class:`~datetime.datetime` instead of rejecting it
-  (`#347 <https://github.com/agronholm/cbor2/pull/347>`_; PR by @sahvx655-wq)
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
 - Fixed canonical encoding with value sharing enabled emitting shared references to container
@@ -29,6 +26,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Fixed a ``PanicException`` when trying to decode an epoch-form date (tag 100) with a payload near
   ``i32::MAX`` which then overflowed the addition instead of raising a clean decode error
   (`#340 <https://github.com/agronholm/cbor2/pull/340>`_; PR by @sahvx655-wq)
+- Fixed the decoder accepting a string-form datetime (tag 0) without a UTC offset and returning
+  a naive :class:`~datetime.datetime` instead of rejecting it
+  (`#347 <https://github.com/agronholm/cbor2/pull/347>`_; PR by @sahvx655-wq)
 
 **6.1.4** (2026-08-01)
 
