@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
-**UNRELEASED**
+**6.1.5** (2026-10-01)
 
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
   (`#334 <https://github.com/agronholm/cbor2/pull/334>`_; PR by @sahvx655-wq)
