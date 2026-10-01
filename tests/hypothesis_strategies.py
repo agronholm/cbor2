@@ -1,5 +1,6 @@
 import sys
 from collections import OrderedDict, defaultdict
+from datetime import timezone
 
 from hypothesis import strategies
 from hypothesis.internal.filtering import Ex
@@ -21,7 +22,11 @@ basic_immutable_strategy = strategies.one_of(
     # nan != nan, so we can't test invariance with it
     strategies.floats(allow_nan=False),
     strategies.decimals(allow_nan=False),
-    strategies.datetimes(timezones=strategies.timezones()),
+    # CBOR only preserves the UTC offset, and ambiguous/imaginary times in IANA zones
+    # never compare equal to fixed-offset ones (PEP 495), so pin the offset up front
+    strategies.datetimes(timezones=strategies.timezones()).map(
+        lambda d: d.replace(tzinfo=timezone(d.utcoffset()))  # type: ignore[arg-type]
+    ),
     # strategies.just(undefined),
     strategies.fractions(),
     strategies.uuids(),
