@@ -824,6 +824,42 @@ def test_bigfloat() -> None:
 
 
 @pytest.mark.parametrize(
+    "payload, typename, field",
+    [
+        pytest.param("c4820063312e35", "decimal fraction", "mantissa", id="fraction_mantissa_str"),
+        pytest.param(
+            "c48200fb3ff8000000000000",
+            "decimal fraction",
+            "mantissa",
+            id="fraction_mantissa_float",
+        ),
+        pytest.param(
+            "c482fb3ff800000000000001",
+            "decimal fraction",
+            "exponent",
+            id="fraction_exponent_float",
+        ),
+        pytest.param("c5820063312e35", "bigfloat", "mantissa", id="bigfloat_mantissa_str"),
+        pytest.param(
+            "c58200fb3ff8000000000000", "bigfloat", "mantissa", id="bigfloat_mantissa_float"
+        ),
+        pytest.param(
+            "c582fb3ff800000000000001", "bigfloat", "exponent", id="bigfloat_exponent_float"
+        ),
+    ],
+)
+def test_decimal_payload_non_integer(payload: str, typename: str, field: str) -> None:
+    # Tags 4 and 5 enclose two integers; Decimal() also accepts floats and numeric strings, and
+    # the decimal fraction decoder keeps only the sign and the digits of the Decimal it builds
+    # from the mantissa, so [0, "1.5"] used to decode to Decimal("15").
+    with pytest.raises(
+        CBORDecodeError,
+        match=f"error decoding {typename}: {field} must be an integer, not <class ",
+    ):
+        loads(unhexlify(payload))
+
+
+@pytest.mark.parametrize(
     "payload, expected",
     [
         ("d9a7f882f90000f90000", 0.0j),
