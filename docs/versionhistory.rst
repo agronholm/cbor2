@@ -29,6 +29,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Fixed the decoder accepting a string-form datetime (tag 0) without a UTC offset and returning
   a naive :class:`~datetime.datetime` instead of rejecting it
   (`#347 <https://github.com/agronholm/cbor2/pull/347>`_; PR by @sahvx655-wq)
+- Fixed a reused :class:`CBOREncoder` no longer flushing its output or resetting its shared
+  container and string reference tracking after an ``encode()`` call had raised an exception
+  (`#348 <https://github.com/agronholm/cbor2/pull/348>`_; PR by @sahvx655-wq)
 
 **6.1.4** (2026-08-01)
 
