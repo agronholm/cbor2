@@ -5,6 +5,12 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed the decoder accepting a set (tag 258) whose payload is not an array, folding a text
+  string, byte string or map into a set of its characters, bytes or keys instead of rejecting it
+  (`#352 <https://github.com/agronholm/cbor2/pull/352>`_; PR by @sahvx655-wq)
+
 **6.1.5** (2026-10-01)
 
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
