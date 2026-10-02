@@ -1645,9 +1645,9 @@ impl CBORDecoder {
         }
 
         fn wrap_exception(py: Python<'_>, err: PyErr, typename: &DisplayName) -> PyErr {
-            if err.is_instance_of::<CBORDecodeEOF>(py) {
+            if CBORDecodeEOF::is_instance(&err, py) {
                 err
-            } else if err.is_instance_of::<CBORDecodeError>(py) {
+            } else if CBORDecodeError::is_instance(&err, py) {
                 CBORDecodeError::new_err(format!(
                     "error decoding {}: {}",
                     typename,
@@ -1875,7 +1875,7 @@ impl CBORDecoder {
                 Err(err) => {
                     // If an Exception was raised, wrap it in a CBORDecodeError
                     // If a ValueError was raised, wrap it in a CBORDecodeError
-                    return if err.is_instance_of::<CBORDecodeError>(py) {
+                    return if CBORDecodeError::is_instance(&err, py) {
                         Err(err)
                     } else if err.is_instance_of::<PyValueError>(py)
                         || err.is_instance_of::<PyException>(py)

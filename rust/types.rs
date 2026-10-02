@@ -2,20 +2,22 @@ use crate::utils::PyImportable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::PyAnyMethods;
-use pyo3::types::{PyInt, PyNotImplemented};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyInt, PyNotImplemented, PyTuple, PyType};
 use pyo3::{
-    Bound, IntoPyObjectExt, Py, PyAny, PyResult, Python, create_exception, pyclass, pymethods,
+    Bound, IntoPyObjectExt, Py, PyAny, PyErrArguments, PyResult, PyTypeInfo, Python,
+    create_exception, pyclass, pymethods,
 };
 use std::collections::hash_map::DefaultHasher;
+use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 
 #[cfg(not(Py_3_15))]
-use pyo3::types::{
-    PyDict, PyDictMethods, PyFrozenSet, PyGenericAlias, PyIterator, PyString, PyTuple,
-    PyTupleMethods, PyType,
-};
+use pyo3::PyErr;
 #[cfg(not(Py_3_15))]
-use pyo3::{PyErr, PyTypeInfo};
+use pyo3::types::{
+    PyDict, PyDictMethods, PyFrozenSet, PyGenericAlias, PyIterator, PyString, PyTupleMethods,
+};
 
 pub static DECIMAL_TYPE: PyImportable = PyImportable::new("decimal", "Decimal");
 pub static FRACTION_TYPE: PyImportable = PyImportable::new("fractions", "Fraction");
@@ -26,6 +28,78 @@ pub static IPV6ADDRESS_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6
 pub static IPV6INTERFACE_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Interface");
 pub static IPV6NETWORK_TYPE: PyImportable = PyImportable::new("ipaddress", "IPv6Network");
 pub static UUID_TYPE: PyImportable = PyImportable::new("uuid", "UUID");
+
+fn create_exception_type(
+    py: Python<'_>,
+    name: &CStr,
+    doc: &CStr,
+    bases: Vec<Bound<'_, PyType>>,
+) -> PyResult<Py<PyType>> {
+    let bases = PyTuple::new(py, bases)?;
+    // SAFETY: all pointers are borrowed from live Python objects or static C strings. The
+    // returned pointer is an owned reference, or null with a Python exception set.
+    let type_object = unsafe {
+        pyo3::ffi::PyErr_NewExceptionWithDoc(
+            name.as_ptr(),
+            doc.as_ptr(),
+            bases.as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    // SAFETY: PyErr_NewExceptionWithDoc returns a new owned reference on success.
+    Ok(unsafe { Bound::from_owned_ptr_or_err(py, type_object) }?
+        .cast_into::<PyType>()
+        .map(Bound::unbind)?)
+}
+
+// PyO3's create_exception! macro accepts one base class, while cbor2's public exception
+// hierarchy intentionally combines its domain-specific exceptions with built-in exceptions.
+// Keep these exceptions as Python type objects: PyO3's ffi re-export creates them, and its
+// public dynamic exception APIs construct and inspect their instances without custom PyTypeInfo
+// implementations.
+macro_rules! create_exception_with_bases {
+    ($name:ident, $type_object:ident, $py:ident, [$($base:expr),+], $doc:expr) => {
+        pub struct $name;
+
+        static $type_object: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+
+        impl $name {
+            pub fn type_object<'py>($py: Python<'py>) -> PyResult<Bound<'py, PyType>> {
+                $type_object
+                    .get_or_try_init($py, || {
+                        let bases = [$($base),+]
+                            .into_iter()
+                            .collect::<PyResult<Vec<_>>>()?;
+                        create_exception_type(
+                            $py,
+                            pyo3::ffi::c_str!(concat!("cbor2.", stringify!($name))),
+                            pyo3::ffi::c_str!($doc),
+                            bases,
+                        )
+                    })
+                    .map(|ty| ty.clone_ref($py).into_bound($py))
+            }
+
+            #[allow(dead_code, reason = "some exported exception types are only raised by Python")]
+            pub fn new_err<A>(args: A) -> pyo3::PyErr
+            where
+                A: PyErrArguments + Send + Sync + 'static,
+            {
+                Python::attach(|py| match Self::type_object(py) {
+                    Ok(ty) => pyo3::PyErr::from_type(ty, args),
+                    Err(err) => err,
+                })
+            }
+
+            #[allow(dead_code, reason = "only decoder exceptions need Rust-side matching")]
+            pub fn is_instance(err: &pyo3::PyErr, py: Python<'_>) -> bool {
+                $type_object
+                    .get(py)
+                    .is_some_and(|ty| err.is_instance(py, ty.bind(py).as_any()))
+            }
+        }
+    };
+}
 
 create_exception!(
     cbor2,
@@ -39,28 +113,44 @@ create_exception!(
     CBORError,
     "Raised for exceptions occurring during CBOR encoding."
 );
-create_exception!(
-    cbor2,
+create_exception_with_bases!(
     CBOREncodeTypeError,
-    CBOREncodeError,
+    CBORENCODE_TYPE_ERROR,
+    py,
+    [
+        Ok(CBOREncodeError::type_object(py)),
+        Ok(PyTypeError::type_object(py))
+    ],
     "Raised when attempting to encode a type that cannot be serialized."
 );
-create_exception!(
-    cbor2,
+create_exception_with_bases!(
     CBOREncodeValueError,
-    CBOREncodeError,
+    CBORENCODE_VALUE_ERROR,
+    py,
+    [
+        Ok(CBOREncodeError::type_object(py)),
+        Ok(PyValueError::type_object(py))
+    ],
     "Raised when the CBOR encoder encounters an invalid value."
 );
-create_exception!(
-    cbor2,
+create_exception_with_bases!(
     CBORDecodeError,
-    CBORError,
+    CBORDECODE_ERROR,
+    py,
+    [
+        Ok(CBORError::type_object(py)),
+        Ok(PyValueError::type_object(py))
+    ],
     "Raised for exceptions occurring during CBOR decoding."
 );
-create_exception!(
-    cbor2,
+create_exception_with_bases!(
     CBORDecodeEOF,
-    CBORDecodeError,
+    CBORDECODE_EOF,
+    py,
+    [
+        CBORDecodeError::type_object(py),
+        Ok(pyo3::exceptions::PyEOFError::type_object(py))
+    ],
     "Raised when decoding unexpectedly reaches EOF."
 );
 
