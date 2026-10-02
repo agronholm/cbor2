@@ -39,7 +39,7 @@ fn create_exception_type(
     // SAFETY: all pointers are borrowed from live Python objects or static C strings. The
     // returned pointer is an owned reference, or null with a Python exception set.
     let type_object = unsafe {
-        pyo3_ffi::PyErr_NewExceptionWithDoc(
+        pyo3::ffi::PyErr_NewExceptionWithDoc(
             name.as_ptr(),
             doc.as_ptr(),
             bases.as_ptr(),
@@ -54,8 +54,9 @@ fn create_exception_type(
 
 // PyO3's create_exception! macro accepts one base class, while cbor2's public exception
 // hierarchy intentionally combines its domain-specific exceptions with built-in exceptions.
-// Keep these exceptions as Python type objects: pyo3-ffi creates them, and PyO3's public dynamic
-// exception APIs construct and inspect their instances without custom PyTypeInfo implementations.
+// Keep these exceptions as Python type objects: PyO3's ffi re-export creates them, and its
+// public dynamic exception APIs construct and inspect their instances without custom PyTypeInfo
+// implementations.
 macro_rules! create_exception_with_bases {
     ($name:ident, $type_object:ident, $py:ident, [$($base:expr),+], $doc:expr) => {
         pub struct $name;
@@ -71,8 +72,8 @@ macro_rules! create_exception_with_bases {
                             .collect::<PyResult<Vec<_>>>()?;
                         create_exception_type(
                             $py,
-                            pyo3_ffi::c_str!(concat!("cbor2.", stringify!($name))),
-                            pyo3_ffi::c_str!($doc),
+                            pyo3::ffi::c_str!(concat!("cbor2.", stringify!($name))),
+                            pyo3::ffi::c_str!($doc),
                             bases,
                         )
                     })
