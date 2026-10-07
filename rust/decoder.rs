@@ -1066,9 +1066,11 @@ impl CBORDecoder {
             // Convert Z to +00:00
             let mut temp_str = datetime_str.to_string().replacen("Z", "+00:00", 1);
 
-            // Pad any microseconds part with zeros
+            // Pad any microseconds part with zeros. Only ASCII digits may make up the fractional
+            // seconds; char::is_numeric() also matches multi-byte Unicode numerics, which would
+            // let the truncation below cut the part at a byte index inside a character.
             if let Some((first, second)) = temp_str.split_once('.')
-                && let Some(index) = second.find(|c: char| !c.is_numeric())
+                && let Some(index) = second.find(|c: char| !c.is_ascii_digit())
             {
                 let (mut micros, tz_part) = second.split_at(index);
                 // Cut off excess zeroes from the start of the microseconds part
