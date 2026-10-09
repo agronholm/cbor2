@@ -1073,7 +1073,7 @@ impl CBOREncoder {
     fn encode_regexp(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         // Semantic tag 35
         let pattern = obj.getattr("pattern")?;
-        Self::encode_semantic(slf, 35, pattern.str()?.as_any())
+        Self::encode_semantic(slf, 35, &pattern)
     }
 
     fn encode_mime(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {

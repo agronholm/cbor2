@@ -7,6 +7,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed the encoder writing the ``repr()`` of a :class:`bytes` regular expression pattern
+  (tag 35) instead of the pattern itself, so the regular expression decoded back as the text
+  pattern ``b'...'`` and no longer matched the same input
+  (`#355 <https://github.com/agronholm/cbor2/pull/355>`_; PR by @sahvx655-wq)
 - Fixed the decoder accepting a set (tag 258) whose payload is not an array, folding a text
   string, byte string or map into a set of its characters, bytes or keys instead of rejecting it
   (`#352 <https://github.com/agronholm/cbor2/pull/352>`_; PR by @sahvx655-wq)
