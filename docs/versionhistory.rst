@@ -5,6 +5,13 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed the encoder writing the ``repr()`` of a :class:`bytes` regular expression pattern
+  (tag 35) instead of the pattern itself, so the regular expression decoded back as the text
+  pattern ``b'...'`` and no longer matched the same input
+  (`#355 <https://github.com/agronholm/cbor2/pull/355>`_; PR by @sahvx655-wq)
+
 **6.1.5** (2026-10-01)
 
 - Fixed :class:`CBORSimpleValue` hashing inconsistently with the integer it compares equal to
