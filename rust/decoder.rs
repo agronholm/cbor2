@@ -142,6 +142,16 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
     Ok(array)
 }
 
+fn require_array(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyTuple>> {
+    // Tag 258 encloses an array of the set's members. set.update() accepts any iterable, so
+    // without this guard a tag 258 wrapping a text string, a byte string or a map would be
+    // folded into a set of its characters, bytes or keys instead of rejected as malformed.
+    let value_type = value.get_type();
+    value.cast_into().map_err(|_| {
+        CBORDecodeError::new_err(format!("set value must be an array, not {value_type}"))
+    })
+}
+
 fn require_bignum_bytes(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyBytes>> {
     // Tags 2 and 3 enclose a byte string (RFC 8949 section 3.4.3). int.from_bytes() also
     // accepts any iterable of ints, so without this guard a tag 2/3 wrapping an array (or a map,
@@ -1419,12 +1429,12 @@ impl CBORDecoder {
         };
         let container = set_or_none.clone();
         let callback = move |item: Bound<'py, PyAny>, _immutable: bool| {
+            let members = require_array(item)?;
             let container: Bound<'py, PyAny> = if let Some(set) = set_or_none.take() {
-                set.call_method1(intern!(py, "update"), (item,))?;
+                set.call_method1(intern!(py, "update"), (&members,))?;
                 set.into_any()
             } else {
-                let tuple = item.cast_into::<PyTuple>()?;
-                PyFrozenSet::new(py, tuple)?.into_any()
+                PyFrozenSet::new(py, members)?.into_any()
             };
             Ok(CompleteFrame(container))
         };

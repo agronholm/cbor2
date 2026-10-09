@@ -1337,6 +1337,25 @@ def test_set() -> None:
     assert value == {"a", "b", "c"}
 
 
+@pytest.mark.parametrize("immutable", [False, True], ids=["mutable", "immutable"])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param("d9010263616263", id="text"),
+        pytest.param("d901024461626364", id="bytes"),
+        pytest.param("d90102a2616101616202", id="map"),
+        pytest.param("d9010205", id="integer"),
+    ],
+)
+def test_set_non_array(payload: str, immutable: bool) -> None:
+    # Tag 258 must enclose an array; set.update() accepts any iterable, so these malformed
+    # payloads must be rejected rather than folded into a set of characters, bytes or keys.
+    with pytest.raises(
+        CBORDecodeError, match="error decoding set: set value must be an array, not <class "
+    ):
+        loads(unhexlify(payload), immutable=immutable)
+
+
 @pytest.mark.parametrize(
     "payload, expected",
     [
