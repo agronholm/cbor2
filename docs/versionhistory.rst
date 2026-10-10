@@ -7,6 +7,12 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed the encoder crashing the process with a segmentation fault when encoding a
+  sufficiently deeply nested structure, instead of raising an exception like the C
+  implementation did; the encoder now raises :exc:`CBOREncodeError` for structures nested
+  deeper than the decoder's default ``max_depth`` (400), and calls
+  ``Py_EnterRecursiveCall()`` per level like the C implementation did
+  (`#357 <https://github.com/agronholm/cbor2/pull/357>`_; PR by @17krishna8)
 - Fixed the encoder writing the ``repr()`` of a :class:`bytes` regular expression pattern
   (tag 35) instead of the pattern itself, so the regular expression decoded back as the text
   pattern ``b'...'`` and no longer matched the same input
