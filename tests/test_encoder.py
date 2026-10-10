@@ -537,6 +537,64 @@ def test_default_cyclic() -> None:
     assert serialized == expected
 
 
+def test_encode_to_bytes_string_referencing() -> None:
+    """
+    Strings encoded via encode_to_bytes() from a default hook must not be added to
+    the outer string reference namespace: a reference to such a string would then
+    fail to resolve, resolve to a wrong value, or shift the indices of the outer
+    namespace.
+    """
+
+    class DummyType:
+        def __init__(self, value: object = None):
+            self.value = value
+
+    def default_encoder(encoder: CBOREncoder, value: Any) -> None:
+        if isinstance(value, DummyType):
+            state = encoder.encode_to_bytes(value.value)
+            encoder.encode(CBORTag(3000, state))
+
+    obj = {"x": DummyType(["aaaa"]), "y": "aaaa"}
+    serialized = dumps(obj, string_referencing=True, default=default_encoder)
+    result = loads(serialized)
+    assert result["y"] == "aaaa"
+    assert result["x"] == CBORTag(3000, dumps(["aaaa"], string_referencing=True))
+
+
+def test_encode_to_bytes_standalone_string_references() -> None:
+    """
+    The bytes returned by encode_to_bytes() must form a standalone CBOR item, so
+    any string references within them must resolve against a namespace contained
+    in those bytes, not the outer one.
+    """
+
+    class DummyType:
+        def __init__(self, value: object = None):
+            self.value = value
+
+    def default_encoder(encoder: CBOREncoder, value: Any) -> None:
+        if isinstance(value, DummyType):
+            state = encoder.encode_to_bytes(value.value)
+            encoder.encode(CBORTag(3000, state))
+
+    obj = [DummyType(["aaaa"]), DummyType(["aaaa"])]
+    serialized = dumps(obj, string_referencing=True, default=default_encoder)
+    result = loads(serialized)
+    assert result[0] == result[1]
+    assert loads(result[1].value) == ["aaaa"]
+
+
+def test_encode_to_bytes_top_level_string_referencing() -> None:
+    """
+    A top-level call to encode_to_bytes() with string referencing enabled keeps
+    producing a self-contained string reference namespace.
+    """
+    encoder = CBOREncoder(BytesIO(), string_referencing=True)
+    state = encoder.encode_to_bytes(["aaaa", "aaaa"])
+    assert state == dumps(["aaaa", "aaaa"], string_referencing=True)
+    assert loads(state) == ["aaaa", "aaaa"]
+
+
 def test_dump_to_file(tmp_path: Path) -> None:
     path = tmp_path / "testdata.cbor"
     with path.open("wb") as fp:
