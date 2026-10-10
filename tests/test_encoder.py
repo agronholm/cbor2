@@ -558,7 +558,7 @@ def test_encode_nested_within_depth_limit() -> None:
     as before.
     """
     obj: list[Any] = []
-    for _ in range(200):
+    for _ in range(390):
         obj = [obj]
 
     data = dumps(obj)

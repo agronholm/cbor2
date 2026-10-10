@@ -141,10 +141,12 @@ const MAX_BUFFER_SIZE: usize = 4096;
 
 /// The maximum nesting depth the encoder will recurse to, matching the decoder's default
 /// `max_depth` (a deeper structure could not be decoded back with the default settings).
-/// This also acts as a hard limit on native recursion, preventing a sufficiently deeply
-/// nested structure from exhausting the native stack before `Py_EnterRecursiveCall()` gets
-/// a chance to raise `RecursionError`, which the C implementation could rely on having
-/// slimmer stack frames per level.
+/// This is a hard limit on the native recursion, preventing a sufficiently deeply nested
+/// structure from exhausting the native stack and crashing the process with a segfault.
+/// `Py_EnterRecursiveCall()` cannot be used for this purpose instead: its threshold does
+/// not track the actual stack usage of this recursion (on CPython 3.12 it is only reached
+/// after ~8000 levels, past the point of stack exhaustion, while on PyPy it is reached
+/// after fewer than 200 levels, rejecting structures well within the limit).
 const MAX_NESTING_DEPTH: usize = 400;
 
 impl CBOREncoder {
@@ -510,21 +512,8 @@ impl CBOREncoder {
             }
         }
 
-        // Tie the native recursion to Python's recursion limit, like the C implementation
-        // did with Py_EnterRecursiveCall(), so that a lowered recursion limit is
-        // respected here as well.
-        // SAFETY: this gives the interpreter a chance to raise RecursionError before each
-        // level of native recursion. The matching Py_LeaveRecursiveCall() is called on
-        // every path that gets past the check below.
-        if unsafe { pyo3::ffi::Py_EnterRecursiveCall(c" in CBOREncoder.encode".as_ptr()) } != 0 {
-            slf.borrow_mut().encode_depth -= 1;
-            return Err(PyErr::fetch(py));
-        }
-
         let result = Self::encode_value_inner(slf, obj, py);
 
-        // SAFETY: mirrors the Py_EnterRecursiveCall() above.
-        unsafe { pyo3::ffi::Py_LeaveRecursiveCall() };
         slf.borrow_mut().encode_depth -= 1;
         result
     }
