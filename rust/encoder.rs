@@ -139,6 +139,14 @@ pub struct CBOREncoder {
 
 const MAX_BUFFER_SIZE: usize = 4096;
 
+/// The maximum nesting depth the encoder will recurse to, matching the decoder's default
+/// `max_depth` (a deeper structure could not be decoded back with the default settings).
+/// This also acts as a hard limit on native recursion, preventing a sufficiently deeply
+/// nested structure from exhausting the native stack before `Py_EnterRecursiveCall()` gets
+/// a chance to raise `RecursionError`, which the C implementation could rely on having
+/// slimmer stack frames per level.
+const MAX_NESTING_DEPTH: usize = 400;
+
 impl CBOREncoder {
     pub fn new_internal(
         fp: Option<&Bound<'_, PyAny>>,
@@ -490,8 +498,43 @@ impl CBOREncoder {
     }
 
     fn encode_value(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
-        // Look up the Python type object of the object to be encoded
         let py = slf.py();
+        {
+            let mut this = slf.borrow_mut();
+            this.encode_depth += 1;
+            if this.encode_depth > MAX_NESTING_DEPTH {
+                this.encode_depth -= 1;
+                return Err(CBOREncodeError::new_err(format!(
+                    "maximum nesting depth ({MAX_NESTING_DEPTH}) exceeded"
+                )));
+            }
+        }
+
+        // Tie the native recursion to Python's recursion limit, like the C implementation
+        // did with Py_EnterRecursiveCall(), so that a lowered recursion limit is
+        // respected here as well.
+        // SAFETY: this gives the interpreter a chance to raise RecursionError before each
+        // level of native recursion. The matching Py_LeaveRecursiveCall() is called on
+        // every path that gets past the check below.
+        if unsafe { pyo3::ffi::Py_EnterRecursiveCall(c" in CBOREncoder.encode".as_ptr()) } != 0 {
+            slf.borrow_mut().encode_depth -= 1;
+            return Err(PyErr::fetch(py));
+        }
+
+        let result = Self::encode_value_inner(slf, obj, py);
+
+        // SAFETY: mirrors the Py_EnterRecursiveCall() above.
+        unsafe { pyo3::ffi::Py_LeaveRecursiveCall() };
+        slf.borrow_mut().encode_depth -= 1;
+        result
+    }
+
+    fn encode_value_inner(
+        slf: &Bound<'_, Self>,
+        obj: &Bound<'_, PyAny>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
+        // Look up the Python type object of the object to be encoded
         let this = slf.borrow();
 
         if let Some(encoders) = &this.encoders {
