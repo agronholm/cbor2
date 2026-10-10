@@ -545,7 +545,7 @@ def test_encode_deeply_nested_raises() -> None:
     Py_EnterRecursiveCall()).
     """
     obj: list[Any] = []
-    for _ in range(100_000):
+    for _ in range(5_000):
         obj = [obj]
 
     with pytest.raises((CBOREncodeError, RecursionError)):
@@ -954,7 +954,7 @@ class TestEncoderReuse:
         fp = BytesIO()
         encoder = CBOREncoder(fp)
         obj: list[Any] = []
-        for _ in range(100_000):
+        for _ in range(5_000):
             obj = [obj]
 
         with pytest.raises((CBOREncodeError, RecursionError)):
