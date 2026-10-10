@@ -139,6 +139,16 @@ pub struct CBOREncoder {
 
 const MAX_BUFFER_SIZE: usize = 4096;
 
+/// The maximum nesting depth the encoder will recurse to, matching the decoder's default
+/// `max_depth` (a deeper structure could not be decoded back with the default settings).
+/// This is a hard limit on the native recursion, preventing a sufficiently deeply nested
+/// structure from exhausting the native stack and crashing the process with a segfault.
+/// `Py_EnterRecursiveCall()` cannot be used for this purpose instead: its threshold does
+/// not track the actual stack usage of this recursion (on CPython 3.12 it is only reached
+/// after ~8000 levels, past the point of stack exhaustion, while on PyPy it is reached
+/// after fewer than 200 levels, rejecting structures well within the limit).
+const MAX_NESTING_DEPTH: usize = 400;
+
 impl CBOREncoder {
     pub fn new_internal(
         fp: Option<&Bound<'_, PyAny>>,
@@ -490,8 +500,30 @@ impl CBOREncoder {
     }
 
     fn encode_value(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
-        // Look up the Python type object of the object to be encoded
         let py = slf.py();
+        {
+            let mut this = slf.borrow_mut();
+            this.encode_depth += 1;
+            if this.encode_depth > MAX_NESTING_DEPTH {
+                this.encode_depth -= 1;
+                return Err(CBOREncodeError::new_err(format!(
+                    "maximum nesting depth ({MAX_NESTING_DEPTH}) exceeded"
+                )));
+            }
+        }
+
+        let result = Self::encode_value_inner(slf, obj, py);
+
+        slf.borrow_mut().encode_depth -= 1;
+        result
+    }
+
+    fn encode_value_inner(
+        slf: &Bound<'_, Self>,
+        obj: &Bound<'_, PyAny>,
+        py: Python<'_>,
+    ) -> PyResult<()> {
+        // Look up the Python type object of the object to be encoded
         let this = slf.borrow();
 
         if let Some(encoders) = &this.encoders {

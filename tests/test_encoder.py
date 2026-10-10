@@ -537,6 +537,35 @@ def test_default_cyclic() -> None:
     assert serialized == expected
 
 
+def test_encode_deeply_nested_raises() -> None:
+    """
+    A sufficiently deeply nested structure must raise an exception instead of
+    exhausting the native stack and crashing the process with a segfault (a
+    regression from the C extension, which raised RecursionError via
+    Py_EnterRecursiveCall()).
+    """
+    obj: list[Any] = []
+    for _ in range(5_000):
+        obj = [obj]
+
+    with pytest.raises((CBOREncodeError, RecursionError)):
+        dumps(obj)
+
+
+def test_encode_nested_within_depth_limit() -> None:
+    """
+    Structures nested within the depth limit keep encoding (and decoding back)
+    as before.
+    """
+    obj: list[Any] = []
+    for _ in range(390):
+        obj = [obj]
+
+    data = dumps(obj)
+    assert isinstance(data, bytes)
+    assert loads(data) == obj
+
+
 def test_dump_to_file(tmp_path: Path) -> None:
     path = tmp_path / "testdata.cbor"
     with path.open("wb") as fp:
@@ -916,3 +945,20 @@ class TestEncoderReuse:
         data2 = dumps(Custom(Custom(["x"])), default=custom_encoder)
         result2 = loads(data2)
         assert result2 == ["x"]
+
+    def test_encoder_reuse_after_depth_error(self) -> None:
+        """
+        A structure rejected for exceeding the nesting depth limit must not leave
+        the encoder in a state where subsequent encodes fail.
+        """
+        fp = BytesIO()
+        encoder = CBOREncoder(fp)
+        obj: list[Any] = []
+        for _ in range(5_000):
+            obj = [obj]
+
+        with pytest.raises((CBOREncodeError, RecursionError)):
+            encoder.encode(obj)
+
+        encoder.encode([1, 2, 3])
+        assert fp.getvalue() == dumps([1, 2, 3])
