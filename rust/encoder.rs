@@ -693,12 +693,32 @@ impl CBOREncoder {
         let mut buffer: Vec<u8> = Vec::new();
         swap(&mut this.write_method, &mut write_method);
         swap(&mut this.buffer, &mut buffer);
+        // The nested encoding must not resolve string references against, or add
+        // strings to, the outer string reference namespace: the returned bytes
+        // have to form a standalone CBOR item, and strings encoded within must
+        // not shift the indices of the outer namespace. Give the nested encoding
+        // a namespace of its own instead (and restore the outer one afterwards).
+        let old_string_namespacing = this.string_namespacing;
+        let outer_references = if this.string_referencing {
+            this.string_namespacing = true;
+            Some((
+                take(&mut this.string_references),
+                take(&mut this.bytes_references),
+            ))
+        } else {
+            None
+        };
         drop(this);
 
         let result = Self::encode(slf, obj);
 
         this = slf.borrow_mut();
         this.flush(py)?;
+        this.string_namespacing = old_string_namespacing;
+        if let Some((strings, bytes)) = outer_references {
+            this.string_references = strings;
+            this.bytes_references = bytes;
+        }
         swap(&mut this.write_method, &mut write_method);
         swap(&mut this.buffer, &mut buffer);
         result.map(|_| buffer)
