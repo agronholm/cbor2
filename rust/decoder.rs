@@ -143,12 +143,9 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
 }
 
 fn require_array(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyTuple>> {
-    // Tag 258 encloses an array of the set's members. set.update() accepts any iterable, so
-    // without this guard a tag 258 wrapping a text string, a byte string or a map would be
-    // folded into a set of its characters, bytes or keys instead of rejected as malformed.
     let value_type = value.get_type();
     value.cast_into().map_err(|_| {
-        CBORDecodeError::new_err(format!("set value must be an array, not {value_type}"))
+        CBORDecodeError::new_err(format!("input value must be an array, not {value_type}"))
     })
 }
 
