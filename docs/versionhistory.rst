@@ -9,6 +9,7 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 - Fixed the command-line diagnostic tool failing to convert date values (tags 100 and
   1004) to JSON instead of displaying them as ISO formatted strings
+  (`#358 <https://github.com/agronholm/cbor2/pull/358>`_; PR by @jadenfix)
 
 - Fixed the encoder writing the ``repr()`` of a :class:`bytes` regular expression pattern
   (tag 35) instead of the pattern itself, so the regular expression decoded back as the text
