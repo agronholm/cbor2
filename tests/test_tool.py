@@ -1,5 +1,6 @@
 import binascii
 import json
+from datetime import date, datetime, timezone
 from io import BytesIO, TextIOWrapper
 from pathlib import Path
 
@@ -137,3 +138,24 @@ def test_ignore_tag(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
         m.setattr("sys.stdin", inbuf)
         cbor2.tool.main()
         assert out_path.read_text() == expected
+
+
+@pytest.mark.parametrize("as_timestamp", [False, True], ids=["tag1004", "tag100"])
+@pytest.mark.parametrize("nested", [False, True], ids=["scalar", "nested"])
+def test_date(monkeypatch: MonkeyPatch, tmp_path: Path, as_timestamp: bool, nested: bool) -> None:
+    value = date(2026, 10, 18)
+    obj = {"dates": [value]} if nested else value
+    in_path = tmp_path / "date.cbor"
+    in_path.write_bytes(cbor2.dumps(obj, datetime_as_timestamp=as_timestamp))
+    out_path = tmp_path / "date.json"
+    monkeypatch.setattr("sys.argv", ["", "-o", str(out_path), str(in_path)])
+
+    cbor2.tool.main()
+
+    expected = {"dates": ["2026-10-18"]} if nested else "2026-10-18"
+    assert json.loads(out_path.read_text()) == expected
+
+
+def test_datetime() -> None:
+    value = datetime(2026, 10, 18, 12, 30, tzinfo=timezone.utc)
+    assert json.dumps(value, cls=cbor2.tool.DefaultEncoder) == '"2026-10-18T12:30:00+00:00"'
