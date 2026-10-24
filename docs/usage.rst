@@ -23,6 +23,53 @@ Serializing and deserializing with cbor2 is pretty straightforward::
 
 Some data types, however, require extra considerations, as detailed below.
 
+Decoding concatenated objects
+-----------------------------
+
+A CBOR sequence consists of encoded objects concatenated without separators. To decode
+one object at a time, use a :class:`CBORDecoder` and check for EOF **between** objects:
+
+.. code-block:: python
+    :name: sequence-reader
+
+    from cbor2 import CBORDecoder
+
+    def decode_sequence(fp):
+        decoder = CBORDecoder(fp)
+        while fp.peek(1):
+            yield decoder.decode()
+
+For a file containing a CBOR sequence:
+
+.. code-block:: python
+    :name: sequence-file
+
+    with open("sequence.cbor", "rb") as fp:
+        for value in decode_sequence(fp):
+            print(value)
+
+For bytes already in memory, wrap :class:`io.BytesIO` to provide ``peek()``:
+
+.. code-block:: python
+    :name: sequence-memory
+
+    from io import BufferedReader, BytesIO
+    from cbor2 import dumps
+
+    data = dumps(1) + dumps("hello") + dumps(None)
+    with BufferedReader(BytesIO(data)) as fp:
+        print(list(decode_sequence(fp)))  # [1, 'hello', None]
+
+This recipe expects a blocking binary :class:`io.BufferedReader`, such as the file returned
+by ``open(path, "rb")``. Check and decode through the same buffered stream, not its underlying
+raw stream. On seekable streams, the decoder may read ahead and then seek back after each
+object; on non-seekable streams, it reads only the bytes needed for that object.
+
+An empty stream yields no objects. Do not catch :exc:`CBORDecodeEOF` to end the loop:
+EOF during an object means truncated data and must remain an error. Malformed objects likewise
+raise :exc:`CBORDecodeError`. This is not a recipe for non-blocking input: a temporary lack of
+bytes is not the end of the sequence.
+
 Date/time handling
 ------------------
 
