@@ -7,8 +7,6 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
-- Added conversion of date values (tags 100 and 1004) to JSON as ISO formatted strings
-  (`#358 <https://github.com/agronholm/cbor2/pull/358>`_; PR by @jadenfix)
 - Documented decoding concatenated CBOR objects with EOF checks between objects
   (`#30 <https://github.com/agronholm/cbor2/issues/30>`_; PR by @arindamsikder)
 - Fixed the encoder writing the ``repr()`` of a :class:`bytes` regular expression pattern
@@ -19,6 +17,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   than ``max_depth``, which could crash the interpreter with a segmentation fault when such an
   object was hashed (as a map key or set member)
   (`GHSA-55vx-2phh-7grr <https://github.com/agronholm/cbor2/security/advisories/GHSA-55vx-2phh-7grr>`_)
+- Fixed mission conversion of date values (tags 100 and 1004) to JSON as ISO formatted strings
+  (`#358 <https://github.com/agronholm/cbor2/pull/358>`_; PR by @jadenfix)
 
 **6.1.5** (2026-10-01)
 
