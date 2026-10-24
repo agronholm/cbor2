@@ -254,6 +254,36 @@ class TestMaximumDepth:
         ):
             loads(b"\x81" * 10 + b"\x80", max_depth=9)
 
+    @staticmethod
+    def chained_shareables(count: int) -> bytes:
+        # [28([0]), 28([29(0)]), 28([29(1)]), ...] where each shareable wraps the previous one,
+        # creating an object graph as deep as the number of items with only a few frames
+        payload = b"\x9f\xd8\x1c\x81\x00"
+        for i in range(count - 1):
+            payload += b"\xd8\x1c\x81\xd8\x1d" + dumps(i)
+
+        return payload + b"\xff"
+
+    def test_shared_references_within_limit(self) -> None:
+        decoded = loads(self.chained_shareables(9), max_depth=10)
+        assert decoded[1][0] is decoded[0]
+        assert decoded[8][0] is decoded[7]
+
+    def test_shared_references_exceed_limit(self) -> None:
+        with pytest.raises(
+            CBORDecodeError, match=r"maximum container nesting depth \(10\) exceeded"
+        ):
+            loads(self.chained_shareables(10), max_depth=10)
+
+    def test_shared_references_in_map_key(self) -> None:
+        # Hashing a deep enough tuple used as a map key would overflow the C stack
+        payload = b"\xa1" + self.chained_shareables(DECODER_MAX_DEPTH) + b"\x00"
+        with pytest.raises(
+            CBORDecodeError,
+            match=f"maximum container nesting depth \\({DECODER_MAX_DEPTH}\\) exceeded",
+        ):
+            loads(payload)
+
 
 def test_stream_position_after_decode() -> None:
     """Test that the stream position is exactly at the end of the decoded CBOR value."""

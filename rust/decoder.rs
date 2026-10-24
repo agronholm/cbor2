@@ -88,6 +88,8 @@ struct StackFrame<'py> {
     typename: DisplayName<'py>,
     contains_string_namespace: bool,
     accepts_break: bool,
+    // Depth of the deepest value delivered to this frame so far
+    max_child_depth: usize,
 }
 
 /// Decorates a function to be a two-stage decoder.
@@ -1662,15 +1664,20 @@ impl CBORDecoder {
             }
         }
 
-        let mut shareables: Vec<Option<Bound<'py, PyAny>>> = Vec::new();
+        // Each shareable is stored along with its depth (see value_depth below)
+        let mut shareables: Vec<Option<(Bound<'py, PyAny>, usize)>> = Vec::new();
         let mut string_namespaces: Vec<Vec<Bound<'py, PyAny>>> = Vec::new();
         let mut value: Option<Bound<'py, PyAny>> = None;
+        // The number of nested frames it took to build the current value. Tracked so that shared
+        // references cannot be used to build an object graph deeper than max_depth.
+        let mut value_depth: usize = 0;
         let mut current_immutable: bool = immutable;
         let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
         loop {
             let result: PyResult<DecoderResult<'py>> = if let Some(previous_value) = value.take() {
                 // Call the decoder callback of the last frame
                 let frame = frames.last_mut().unwrap();
+                frame.max_child_depth = frame.max_child_depth.max(value_depth);
 
                 // The break stop code is not a data item; it may only terminate an indefinite-length
                 // array or map (RFC 8949 section 3.2.1). Reject it anywhere else so the internal
@@ -1690,7 +1697,7 @@ impl CBORDecoder {
                         .expect("no string namespaces to pop from");
                     Ok(CompleteFrame(previous_value))
                 } else if let Some(shareable_index) = frame.shareable_index {
-                    shareables[shareable_index].get_or_insert_with(|| previous_value.clone());
+                    shareables[shareable_index].get_or_insert_with(|| (previous_value.clone(), 0));
                     Ok(CompleteFrame(previous_value))
                 } else {
                     panic!("no decoder callback, shareable index or string namespace");
@@ -1743,7 +1750,9 @@ impl CBORDecoder {
                         && let Some(index) = frame.shareable_index
                     {
                         frames.pop();
-                        shareables[index] = Some(container.clone());
+                        // The depth is not known until the container is complete, but any
+                        // reference to it before that can only create a cycle back to it
+                        shareables[index] = Some((container.clone(), 0));
                         shareable_index = Some(index);
                     }
                     current_immutable = current_immutable || requested_immutable;
@@ -1757,6 +1766,7 @@ impl CBORDecoder {
                             typename,
                             contains_string_namespace: false,
                             accepts_break,
+                            max_child_depth: 0,
                         },
                     )?;
                 }
@@ -1774,15 +1784,17 @@ impl CBORDecoder {
                     let frame = frames
                         .pop()
                         .expect("received frame completion but there are no frames on the stack");
+                    value_depth = frame.max_child_depth + 1;
                     // The finished value replaces the container registered up front, as
                     // object_hook or tag_hook may have substituted it
                     if let Some(index) = frame.shareable_index {
-                        shareables[index] = Some(new_value.clone());
+                        shareables[index] = Some((new_value.clone(), value_depth));
                     }
                     current_immutable = frames.last().map_or(immutable, |frame| frame.immutable);
                     value = Some(new_value);
                 }
                 Ok(Value(new_value)) => {
+                    value_depth = 0;
                     value = Some(new_value);
                 }
                 Ok(StringNamespace) => {
@@ -1796,6 +1808,7 @@ impl CBORDecoder {
                             typename: DisplayName::String("string namespace"),
                             contains_string_namespace: true,
                             accepts_break: false,
+                            max_child_depth: 0,
                         },
                     )?;
                     string_namespaces.push(Vec::new());
@@ -1813,6 +1826,7 @@ impl CBORDecoder {
                     {
                         namespace.push(string.clone());
                     }
+                    value_depth = 0;
                     value = Some(string);
                 }
                 Ok(StringReference(index)) => {
@@ -1821,6 +1835,7 @@ impl CBORDecoder {
                         .expect("  received string reference but there are no frames on the stack");
                     if let Some(namespace) = string_namespaces.last() {
                         if let Some(string) = namespace.get(index) {
+                            value_depth = 0;
                             value = Some(string.clone());
                         } else {
                             return Err(CBORDecodeError::new_err(format!(
@@ -1847,6 +1862,7 @@ impl CBORDecoder {
                             typename: DisplayName::String("shareable value"),
                             contains_string_namespace: false,
                             accepts_break: false,
+                            max_child_depth: 0,
                         },
                     )?;
                     shareables.push(None);
@@ -1856,7 +1872,19 @@ impl CBORDecoder {
                         .pop()
                         .expect("received shared reference but there are no frames on the stack");
                     value = match shareables.get(index) {
-                        Some(Some(value)) => Some(value.clone()),
+                        Some(Some((value, depth))) => {
+                            // Without this check, chained shared references could be used to
+                            // build an arbitrarily deep object graph without ever exceeding
+                            // max_depth frames
+                            if frames.len() + depth > self.max_depth {
+                                return Err(CBORDecodeError::new_err(format!(
+                                    "maximum container nesting depth ({}) exceeded",
+                                    self.max_depth
+                                )));
+                            }
+                            value_depth = *depth;
+                            Some(value.clone())
+                        }
                         Some(None) => {
                             return Err(CBORDecodeError::new_err(format!(
                                 "shared value {index} has not been initialized"

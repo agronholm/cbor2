@@ -11,6 +11,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   (tag 35) instead of the pattern itself, so the regular expression decoded back as the text
   pattern ``b'...'`` and no longer matched the same input
   (`#355 <https://github.com/agronholm/cbor2/pull/355>`_; PR by @sahvx655-wq)
+- Fixed shared references (tag 29) allowing the decoder to construct object graphs nested deeper
+  than ``max_depth``, which could crash the interpreter with a segmentation fault when such an
+  object was hashed (as a map key or set member)
+  (`GHSA-55vx-2phh-7grr <https://github.com/agronholm/cbor2/security/advisories/GHSA-55vx-2phh-7grr>`_)
 
 **6.1.5** (2026-10-01)
 
