@@ -20,6 +20,7 @@ use pyo3::types::{
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, PyErrArguments, intern, pyclass};
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::mem::{replace, take};
 
 const IMMUTABLE_ATTR: &str = "_cbor2_immutable";

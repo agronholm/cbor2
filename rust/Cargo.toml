@@ -12,8 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 bigdecimal = "0.4.10"
 half = "2.7.1"
-num-bigint = "*"
-pyo3 = { version = "0.29.0", features = ["extension-module", "num-bigint", "bigdecimal"] }
+pyo3 = { version = "0.30.1", features = ["extension-module", "num-bigint", "bigdecimal"] }
 
 [build-dependencies]
-pyo3-build-config = { version = "0.28.2", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.30.1", features = ["resolve-config"] }
