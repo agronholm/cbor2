@@ -16,9 +16,9 @@ from re import Pattern
 from typing import IO, Any, Generic, TypeAlias, final, overload
 from uuid import UUID
 
-if sys.hexversion < 51314855:
+if sys.version_info < (3, 15):
     @final
-    class frozendict(Generic[_KT, _VT_co], Mapping[_KT, _VT_co]):
+    class frozendict(Mapping[_KT, _VT_co], Generic[_KT, _VT_co]):
         def __new__(cls, *args: Any, **kwargs: Any) -> Self: ...
         def __getitem__(self, key: _KT, /) -> _VT_co: ...
         def __len__(self) -> int: ...
@@ -43,7 +43,6 @@ _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)
 _KT = TypeVar("_KT")
 _VT_co = TypeVar("_VT_co", covariant=True)
-_TContainer = TypeVar("_TContainer", default=None)
 
 TagHook: TypeAlias = Callable[[CBORTag, bool], Any]
 SemanticDecoderCallback: TypeAlias = Callable[[Any, bool], Any]

@@ -687,7 +687,7 @@ def test_canonical_value_sharing_container_keys(value: object, expected: str) ->
 )
 def test_encode_stringrefs_unchanged(value: object) -> None:
     expected = dumps(value)
-    if isinstance(value, list) or isinstance(value, dict):
+    if isinstance(value, (list, dict)):
         expected = b"\xd9\x01\x00" + expected
 
     assert dumps(value, string_referencing=True) == expected

@@ -1096,8 +1096,8 @@ class TestSharedReference:
         # b = ((a, a), a)
         # data = dumps(set(b))
         decoded = loads(unhexlify("d90102d81c82d81c82d81c83010203d81d02d81d02"))
-        a = [item for item in decoded if len(item) == 3][0]
-        b = [item for item in decoded if len(item) == 2][0]
+        a = next(item for item in decoded if len(item) == 3)
+        b = next(item for item in decoded if len(item) == 2)
         assert decoded == {(a, a), a}
         assert b[0] is a
         assert b[1] is a
