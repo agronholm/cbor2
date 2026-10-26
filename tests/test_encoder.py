@@ -394,6 +394,13 @@ def test_regex() -> None:
     assert dumps(re.compile("hello (world)")) == expected
 
 
+def test_regex_bytes_pattern() -> None:
+    expected = unhexlify("d8234d68656c6c6f2028776f726c6429")
+    encoded = dumps(re.compile(rb"hello (world)"))
+    assert encoded == expected
+    assert loads(encoded) == re.compile(rb"hello (world)")
+
+
 def test_mime() -> None:
     expected = unhexlify(
         "d824787b436f6e74656e742d547970653a20746578742f706c61696e3b20636861727365743d2269736f2d38"
@@ -680,7 +687,7 @@ def test_canonical_value_sharing_container_keys(value: object, expected: str) ->
 )
 def test_encode_stringrefs_unchanged(value: object) -> None:
     expected = dumps(value)
-    if isinstance(value, list) or isinstance(value, dict):
+    if isinstance(value, (list, dict)):
         expected = b"\xd9\x01\x00" + expected
 
     assert dumps(value, string_referencing=True) == expected

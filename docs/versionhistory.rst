@@ -7,6 +7,20 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Added the ``strict_hashable_types`` parameter to :class:`CBORDecoder`, :func:`load` and
+  :func:`loads` which, when enabled, restricts map keys and set elements to text strings and byte
+  strings in order to prevent denial-of-service attacks via hash collisions
+  (`GHSA-p6xp-9h6j-r278 <https://github.com/agronholm/cbor2/security/advisories/GHSA-p6xp-9h6j-r278>`_)
+- Documented decoding concatenated CBOR objects with EOF checks between objects
+  (`#30 <https://github.com/agronholm/cbor2/issues/30>`_; PR by @arindamsikder)
+- Fixed the encoder writing the ``repr()`` of a :class:`bytes` regular expression pattern
+  (tag 35) instead of the pattern itself, so the regular expression decoded back as the text
+  pattern ``b'...'`` and no longer matched the same input
+  (`#355 <https://github.com/agronholm/cbor2/pull/355>`_; PR by @sahvx655-wq)
+- Fixed shared references (tag 29) allowing the decoder to construct object graphs nested deeper
+  than ``max_depth``, which could crash the interpreter with a segmentation fault when such an
+  object was hashed (as a map key or set member)
+  (`GHSA-55vx-2phh-7grr <https://github.com/agronholm/cbor2/security/advisories/GHSA-55vx-2phh-7grr>`_)
 - Fixed a ``PanicException`` on Python 3.10 when decoding a string-form datetime (tag 0) whose
   fractional seconds part contains a multi-byte Unicode numeric character, as the microsecond
   padding treated those as digits and then truncated the part on a byte index inside one of them

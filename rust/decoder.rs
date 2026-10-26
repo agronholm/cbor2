@@ -14,12 +14,15 @@ use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
 use half::f16;
 use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+#[cfg(Py_3_15)]
+use pyo3::types::PyFrozenDict;
 use pyo3::types::{
     PyBytes, PyCFunction, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyListMethods, PyMapping,
     PySet, PyString, PyTuple,
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, PyErrArguments, intern, pyclass};
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::mem::{replace, take};
 
 const IMMUTABLE_ATTR: &str = "_cbor2_immutable";
@@ -39,8 +42,6 @@ static IPNETWORK_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_network
 static IPINTERFACE_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_interface");
 static RE_COMPILE: PyImportable = PyImportable::new("re", "compile");
 static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
-#[cfg(Py_3_15)]
-static FROZEN_DICT: PyImportable = PyImportable::new("builtins", "frozendict");
 
 enum DecoderResult<'a> {
     BeginFrame(
@@ -88,6 +89,8 @@ struct StackFrame<'py> {
     typename: DisplayName<'py>,
     contains_string_namespace: bool,
     accepts_break: bool,
+    // Depth of the deepest value delivered to this frame so far
+    max_child_depth: usize,
 }
 
 /// Decorates a function to be a two-stage decoder.
@@ -142,6 +145,19 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
     Ok(array)
 }
 
+fn check_hashable_type(value: &Bound<'_, PyAny>, description: &str) -> PyResult<()> {
+    // Only str and bytes have randomized hashes, so any other type (including subclasses with a
+    // custom __hash__) could be used to force hash collisions
+    if value.is_exact_instance_of::<PyString>() || value.is_exact_instance_of::<PyBytes>() {
+        Ok(())
+    } else {
+        Err(CBORDecodeError::new_err(format!(
+            "{description} must be a text string or byte string, not {}",
+            value.get_type().name()?
+        )))
+    }
+}
+
 fn require_bignum_bytes(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyBytes>> {
     // Tags 2 and 3 enclose a byte string (RFC 8949 section 3.4.3). int.from_bytes() also
     // accepts any iterable of ints, so without this guard a tag 2/3 wrapping an array (or a map,
@@ -189,6 +205,10 @@ fn require_bignum_bytes(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyBytes>>
 /// :param allow_duplicate_keys:
 ///     if :data:`False`, raise a :exc:`CBORDecodeError` when a map key that has already been
 ///     decoded in the same map is encountered
+/// :param strict_hashable_types:
+///     if :data:`True`, raise a :exc:`CBORDecodeError` when a map key or a set element is
+///     anything other than a text string or a byte string (this prevents attackers from crafting
+///     maps or sets with colliding hashes as a denial-of-service attack)
 ///
 /// .. _CBOR: https://cbor.io/
 #[pyclass(module = "cbor2")]
@@ -206,6 +226,8 @@ pub struct CBORDecoder {
     allow_indefinite: bool,
     #[pyo3(get)]
     allow_duplicate_keys: bool,
+    #[pyo3(get)]
+    strict_hashable_types: bool,
 
     read_method: Option<Py<PyAny>>,
     buffer: Option<Py<PyBytes>>,
@@ -227,6 +249,7 @@ impl CBORDecoder {
         max_depth: usize,
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
+        strict_hashable_types: bool,
     ) -> PyResult<Self> {
         let available_bytes = if let Some(buffer) = buffer.as_ref() {
             buffer.len()?
@@ -243,6 +266,7 @@ impl CBORDecoder {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            strict_hashable_types,
             semantic_decoders: semantic_decoders.map(|d| d.clone().unbind()),
             read_method: None,
             buffer: buffer.map(Bound::unbind),
@@ -655,11 +679,7 @@ impl CBORDecoder {
             py: Python<'py>,
             items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
         ) -> PyResult<Bound<'py, PyAny>> {
-            FROZEN_DICT
-                .get(py)?
-                .call1((items,))?
-                .cast_into()
-                .map_err(|e| PyErr::from(e))
+            PyFrozenDict::new(py, items).map(|dict| dict.into_any())
         }
         #[cfg(not(Py_3_15))]
         fn create_frozen_dict<'py>(
@@ -685,6 +705,7 @@ impl CBORDecoder {
 
         let object_hook = self.object_hook.as_ref().map(|hook| hook.clone_ref(py));
         let allow_duplicate_keys = self.allow_duplicate_keys;
+        let strict_hashable_types = self.strict_hashable_types;
         let length_or_none = self.decode_length_as_usize(py, subtype)?;
 
         // Return immediately if this is an empty dict
@@ -739,6 +760,9 @@ impl CBORDecoder {
                         }
                         Ok(ContinueFrame(true))
                     } else {
+                        if strict_hashable_types {
+                            check_hashable_type(&item, "map key")?;
+                        }
                         key = Some(item);
                         Ok(ContinueFrame(false))
                     }
@@ -767,6 +791,9 @@ impl CBORDecoder {
                         items.push((key, item));
                         Ok(ContinueFrame(true))
                     } else {
+                        if strict_hashable_types {
+                            check_hashable_type(&item, "map key")?;
+                        }
                         key = Some(item);
                         Ok(ContinueFrame(false))
                     }
@@ -814,6 +841,9 @@ impl CBORDecoder {
                         }
                         Ok(ContinueFrame(true))
                     } else {
+                        if strict_hashable_types {
+                            check_hashable_type(&item, "map key")?;
+                        }
                         key = Some(item);
                         Ok(ContinueFrame(false))
                     }
@@ -842,6 +872,9 @@ impl CBORDecoder {
                         dict.set_item(&key, item)?;
                         Ok(ContinueFrame(true))
                     } else {
+                        if strict_hashable_types {
+                            check_hashable_type(&item, "map key")?;
+                        }
                         key = Some(item);
                         Ok(ContinueFrame(false))
                     }
@@ -1420,7 +1453,18 @@ impl CBORDecoder {
             Some(PySet::empty(py)?.into_any())
         };
         let container = set_or_none.clone();
+        let strict_hashable_types = self.strict_hashable_types;
         let callback = move |item: Bound<'py, PyAny>, _immutable: bool| {
+            if strict_hashable_types {
+                // Require an array here, as set.update() would otherwise iterate over whatever
+                // it's given (like the keys of a map), bypassing the element type check
+                let elements = item
+                    .cast::<PyTuple>()
+                    .map_err(|_| CBORDecodeError::new_err("set contents must be an array"))?;
+                for element in elements.iter() {
+                    check_hashable_type(&element, "set element")?;
+                }
+            }
             let container: Bound<'py, PyAny> = if let Some(set) = set_or_none.take() {
                 set.call_method1(intern!(py, "update"), (item,))?;
                 set.into_any()
@@ -1454,6 +1498,7 @@ impl CBORDecoder {
         max_depth = 400,
         allow_indefinite = true,
         allow_duplicate_keys = true,
+        strict_hashable_types = false,
     ))]
     pub fn new(
         py: Python<'_>,
@@ -1466,6 +1511,7 @@ impl CBORDecoder {
         max_depth: usize,
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
+        strict_hashable_types: bool,
     ) -> PyResult<Self> {
         Self::new_internal(
             py,
@@ -1479,6 +1525,7 @@ impl CBORDecoder {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            strict_hashable_types,
         )
     }
 
@@ -1664,15 +1711,20 @@ impl CBORDecoder {
             }
         }
 
-        let mut shareables: Vec<Option<Bound<'py, PyAny>>> = Vec::new();
+        // Each shareable is stored along with its depth (see value_depth below)
+        let mut shareables: Vec<Option<(Bound<'py, PyAny>, usize)>> = Vec::new();
         let mut string_namespaces: Vec<Vec<Bound<'py, PyAny>>> = Vec::new();
         let mut value: Option<Bound<'py, PyAny>> = None;
+        // The number of nested frames it took to build the current value. Tracked so that shared
+        // references cannot be used to build an object graph deeper than max_depth.
+        let mut value_depth: usize = 0;
         let mut current_immutable: bool = immutable;
         let break_marker = BREAK_MARKER.get(py).unwrap().bind(py);
         loop {
             let result: PyResult<DecoderResult<'py>> = if let Some(previous_value) = value.take() {
                 // Call the decoder callback of the last frame
                 let frame = frames.last_mut().unwrap();
+                frame.max_child_depth = frame.max_child_depth.max(value_depth);
 
                 // The break stop code is not a data item; it may only terminate an indefinite-length
                 // array or map (RFC 8949 section 3.2.1). Reject it anywhere else so the internal
@@ -1692,7 +1744,7 @@ impl CBORDecoder {
                         .expect("no string namespaces to pop from");
                     Ok(CompleteFrame(previous_value))
                 } else if let Some(shareable_index) = frame.shareable_index {
-                    shareables[shareable_index].get_or_insert_with(|| previous_value.clone());
+                    shareables[shareable_index].get_or_insert_with(|| (previous_value.clone(), 0));
                     Ok(CompleteFrame(previous_value))
                 } else {
                     panic!("no decoder callback, shareable index or string namespace");
@@ -1745,7 +1797,9 @@ impl CBORDecoder {
                         && let Some(index) = frame.shareable_index
                     {
                         frames.pop();
-                        shareables[index] = Some(container.clone());
+                        // The depth is not known until the container is complete, but any
+                        // reference to it before that can only create a cycle back to it
+                        shareables[index] = Some((container.clone(), 0));
                         shareable_index = Some(index);
                     }
                     current_immutable = current_immutable || requested_immutable;
@@ -1759,6 +1813,7 @@ impl CBORDecoder {
                             typename,
                             contains_string_namespace: false,
                             accepts_break,
+                            max_child_depth: 0,
                         },
                     )?;
                 }
@@ -1776,15 +1831,17 @@ impl CBORDecoder {
                     let frame = frames
                         .pop()
                         .expect("received frame completion but there are no frames on the stack");
+                    value_depth = frame.max_child_depth + 1;
                     // The finished value replaces the container registered up front, as
                     // object_hook or tag_hook may have substituted it
                     if let Some(index) = frame.shareable_index {
-                        shareables[index] = Some(new_value.clone());
+                        shareables[index] = Some((new_value.clone(), value_depth));
                     }
                     current_immutable = frames.last().map_or(immutable, |frame| frame.immutable);
                     value = Some(new_value);
                 }
                 Ok(Value(new_value)) => {
+                    value_depth = 0;
                     value = Some(new_value);
                 }
                 Ok(StringNamespace) => {
@@ -1798,6 +1855,7 @@ impl CBORDecoder {
                             typename: DisplayName::String("string namespace"),
                             contains_string_namespace: true,
                             accepts_break: false,
+                            max_child_depth: 0,
                         },
                     )?;
                     string_namespaces.push(Vec::new());
@@ -1815,6 +1873,7 @@ impl CBORDecoder {
                     {
                         namespace.push(string.clone());
                     }
+                    value_depth = 0;
                     value = Some(string);
                 }
                 Ok(StringReference(index)) => {
@@ -1823,6 +1882,7 @@ impl CBORDecoder {
                         .expect("  received string reference but there are no frames on the stack");
                     if let Some(namespace) = string_namespaces.last() {
                         if let Some(string) = namespace.get(index) {
+                            value_depth = 0;
                             value = Some(string.clone());
                         } else {
                             return Err(CBORDecodeError::new_err(format!(
@@ -1849,6 +1909,7 @@ impl CBORDecoder {
                             typename: DisplayName::String("shareable value"),
                             contains_string_namespace: false,
                             accepts_break: false,
+                            max_child_depth: 0,
                         },
                     )?;
                     shareables.push(None);
@@ -1858,7 +1919,19 @@ impl CBORDecoder {
                         .pop()
                         .expect("received shared reference but there are no frames on the stack");
                     value = match shareables.get(index) {
-                        Some(Some(value)) => Some(value.clone()),
+                        Some(Some((value, depth))) => {
+                            // Without this check, chained shared references could be used to
+                            // build an arbitrarily deep object graph without ever exceeding
+                            // max_depth frames
+                            if frames.len() + depth > self.max_depth {
+                                return Err(CBORDecodeError::new_err(format!(
+                                    "maximum container nesting depth ({}) exceeded",
+                                    self.max_depth
+                                )));
+                            }
+                            value_depth = *depth;
+                            Some(value.clone())
+                        }
                         Some(None) => {
                             return Err(CBORDecodeError::new_err(format!(
                                 "shared value {index} has not been initialized"

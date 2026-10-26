@@ -40,7 +40,7 @@ def pytest_configure(config):
 def pytest_benchmark_group_stats(config, benchmarks, group_by):
     result = {}
     for bench in benchmarks:
-        engine, data_kind = bench["param"].split("-")
+        _engine, data_kind = bench["param"].split("-")
         group = result.setdefault("{}: {}".format(data_kind, bench["group"]), [])
         group.append(bench)
     return sorted(result.items())

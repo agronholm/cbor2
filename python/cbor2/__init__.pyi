@@ -16,9 +16,9 @@ from re import Pattern
 from typing import IO, Any, Generic, TypeAlias, final, overload
 from uuid import UUID
 
-if sys.hexversion < 51314855:
+if sys.version_info < (3, 15):
     @final
-    class frozendict(Generic[_KT, _VT_co], Mapping[_KT, _VT_co]):
+    class frozendict(Mapping[_KT, _VT_co], Generic[_KT, _VT_co]):
         def __new__(cls, *args: Any, **kwargs: Any) -> Self: ...
         def __getitem__(self, key: _KT, /) -> _VT_co: ...
         def __len__(self) -> int: ...
@@ -43,7 +43,6 @@ _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)
 _KT = TypeVar("_KT")
 _VT_co = TypeVar("_VT_co", covariant=True)
-_TContainer = TypeVar("_TContainer", default=None)
 
 TagHook: TypeAlias = Callable[[CBORTag, bool], Any]
 SemanticDecoderCallback: TypeAlias = Callable[[Any, bool], Any]
@@ -131,6 +130,7 @@ class CBORDecoder:
         max_depth: int = ...,
         allow_indefinite: bool = ...,
         allow_duplicate_keys: bool = ...,
+        strict_hashable_types: bool = ...,
     ) -> Self: ...
 
     # Properties
@@ -142,6 +142,8 @@ class CBORDecoder:
     def allow_indefinite(self) -> bool: ...
     @property
     def allow_duplicate_keys(self) -> bool: ...
+    @property
+    def strict_hashable_types(self) -> bool: ...
     def decode(self, *, immutable: bool = ...) -> Any: ...
     def read(self, amount: int, /) -> bytes: ...
 
@@ -221,6 +223,7 @@ def load(
     max_depth: int = ...,
     allow_indefinite: bool = ...,
     allow_duplicate_keys: bool = ...,
+    strict_hashable_types: bool = ...,
     immutable: bool = ...,
 ) -> Any: ...
 def loads(
@@ -234,6 +237,7 @@ def loads(
     max_depth: int = ...,
     allow_indefinite: bool = ...,
     allow_duplicate_keys: bool = ...,
+    strict_hashable_types: bool = ...,
     immutable: bool = ...,
 ) -> Any: ...
 def shareable_encoder(
