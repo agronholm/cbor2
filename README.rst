@@ -81,7 +81,7 @@ Command-line Usage
 The provided command line tool (``cbor2``) converts CBOR data in raw binary or base64
 encoding into a representation that allows printing as JSON. This is a lossy
 transformation as each datatype is converted into something that can be represented as a
-JSON value. Date and datetime values are displayed as ISO formatted strings.
+JSON value.
 
 The tool can alternatively be invoked with ``python -m cbor2.tool``.
 
