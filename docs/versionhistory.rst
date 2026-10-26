@@ -7,6 +7,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Added the ``strict_hashable_types`` parameter to :class:`CBORDecoder`, :func:`load` and
+  :func:`loads` which, when enabled, restricts map keys and set elements to text strings and byte
+  strings in order to prevent denial-of-service attacks via hash collisions
+  (`GHSA-p6xp-9h6j-r278 <https://github.com/agronholm/cbor2/security/advisories/GHSA-p6xp-9h6j-r278>`_)
 - Documented decoding concatenated CBOR objects with EOF checks between objects
   (`#30 <https://github.com/agronholm/cbor2/issues/30>`_; PR by @arindamsikder)
 - Fixed the encoder writing the ``repr()`` of a :class:`bytes` regular expression pattern

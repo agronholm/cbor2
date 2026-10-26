@@ -92,6 +92,10 @@ mod _cbor2 {
     /// :param allow_duplicate_keys:
     ///     if :data:`False`, raise a :exc:`CBORDecodeError` when a map key that has already been
     ///     decoded in the same map is encountered
+    /// :param strict_hashable_types:
+    ///     if :data:`True`, raise a :exc:`CBORDecodeError` when a map key or a set element is
+    ///     anything other than a text string or a byte string (this prevents attackers from
+    ///     crafting maps or sets with colliding hashes as a denial-of-service attack)
     /// :param immutable:
     ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
     ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
@@ -111,6 +115,7 @@ mod _cbor2 {
         max_depth = 400,
         allow_indefinite = true,
         allow_duplicate_keys = true,
+        strict_hashable_types = false,
         immutable = false,
     ))]
     fn load<'py>(
@@ -124,6 +129,7 @@ mod _cbor2 {
         max_depth: usize,
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
+        strict_hashable_types: bool,
         immutable: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let mut decoder = CBORDecoder::new(
@@ -137,6 +143,7 @@ mod _cbor2 {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            strict_hashable_types,
         )?;
         decoder.decode(py, immutable)
     }
@@ -172,6 +179,10 @@ mod _cbor2 {
     /// :param allow_duplicate_keys:
     ///     if :data:`False`, raise a :exc:`CBORDecodeError` when a map key that has already been
     ///     decoded in the same map is encountered
+    /// :param strict_hashable_types:
+    ///     if :data:`True`, raise a :exc:`CBORDecodeError` when a map key or a set element is
+    ///     anything other than a text string or a byte string (this prevents attackers from
+    ///     crafting maps or sets with colliding hashes as a denial-of-service attack)
     /// :param immutable:
     ///     if :data:`True`, return immutable objects (e.g. :class:`frozenset` and :class:`tuple`)
     ///     instead of mutable objects (e.g. :class:`list` and :class:`dict`)
@@ -190,6 +201,7 @@ mod _cbor2 {
         max_depth = 400,
         allow_indefinite = true,
         allow_duplicate_keys = true,
+        strict_hashable_types = false,
         immutable = false,
     ))]
     fn loads<'py>(
@@ -202,6 +214,7 @@ mod _cbor2 {
         max_depth: usize,
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
+        strict_hashable_types: bool,
         immutable: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let bytes = if let Ok(bytes) = data.cast::<PyBytes>() {
@@ -229,6 +242,7 @@ mod _cbor2 {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            strict_hashable_types,
         )?;
         decoder.decode(py, immutable)
     }
