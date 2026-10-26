@@ -14,6 +14,8 @@ use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
 use half::f16;
 use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+#[cfg(Py_3_15)]
+use pyo3::types::PyFrozenDict;
 use pyo3::types::{
     PyBytes, PyCFunction, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyListMethods, PyMapping,
     PySet, PyString, PyTuple,
@@ -40,8 +42,6 @@ static IPNETWORK_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_network
 static IPINTERFACE_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_interface");
 static RE_COMPILE: PyImportable = PyImportable::new("re", "compile");
 static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
-#[cfg(Py_3_15)]
-static FROZEN_DICT: PyImportable = PyImportable::new("builtins", "frozendict");
 
 enum DecoderResult<'a> {
     BeginFrame(
@@ -658,11 +658,7 @@ impl CBORDecoder {
             py: Python<'py>,
             items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
         ) -> PyResult<Bound<'py, PyAny>> {
-            FROZEN_DICT
-                .get(py)?
-                .call1((items,))?
-                .cast_into()
-                .map_err(|e| PyErr::from(e))
+            PyFrozenDict::new(py, items).map(|dict| dict.into_any())
         }
         #[cfg(not(Py_3_15))]
         fn create_frozen_dict<'py>(
