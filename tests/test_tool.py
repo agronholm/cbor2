@@ -1,5 +1,6 @@
 import binascii
 import json
+from datetime import date, datetime, timezone
 from io import BytesIO, TextIOWrapper
 from pathlib import Path
 
@@ -137,3 +138,13 @@ def test_ignore_tag(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
         m.setattr("sys.stdin", inbuf)
         cbor2.tool.main()
         assert out_path.read_text() == expected
+
+
+def test_date() -> None:
+    value = date(2026, 10, 18)
+    assert json.dumps(value, cls=cbor2.tool.DefaultEncoder) == '"2026-10-18"'
+
+
+def test_datetime() -> None:
+    value = datetime(2026, 10, 18, 12, 30, tzinfo=timezone.utc)
+    assert json.dumps(value, cls=cbor2.tool.DefaultEncoder) == '"2026-10-18T12:30:00+00:00"'
