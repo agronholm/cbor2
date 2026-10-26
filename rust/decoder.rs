@@ -14,12 +14,15 @@ use crate::utils::{PyImportable, create_exc_from, raise_exc_from};
 use half::f16;
 use pyo3::exceptions::{PyException, PyLookupError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+#[cfg(Py_3_15)]
+use pyo3::types::PyFrozenDict;
 use pyo3::types::{
     PyBytes, PyCFunction, PyComplex, PyDict, PyFrozenSet, PyInt, PyList, PyListMethods, PyMapping,
     PySet, PyString, PyTuple,
 };
 use pyo3::{IntoPyObjectExt, Py, PyAny, PyErrArguments, intern, pyclass};
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::mem::{replace, take};
 
 const IMMUTABLE_ATTR: &str = "_cbor2_immutable";
@@ -39,8 +42,6 @@ static IPNETWORK_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_network
 static IPINTERFACE_FUNC: PyImportable = PyImportable::new("ipaddress", "ip_interface");
 static RE_COMPILE: PyImportable = PyImportable::new("re", "compile");
 static UTC: PyImportable = PyImportable::new("datetime", "timezone.utc");
-#[cfg(Py_3_15)]
-static FROZEN_DICT: PyImportable = PyImportable::new("builtins", "frozendict");
 
 enum DecoderResult<'a> {
     BeginFrame(
@@ -144,6 +145,19 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
     Ok(array)
 }
 
+fn check_hashable_type(value: &Bound<'_, PyAny>, description: &str) -> PyResult<()> {
+    // Only str and bytes have randomized hashes, so any other type (including subclasses with a
+    // custom __hash__) could be used to force hash collisions
+    if value.is_exact_instance_of::<PyString>() || value.is_exact_instance_of::<PyBytes>() {
+        Ok(())
+    } else {
+        Err(CBORDecodeError::new_err(format!(
+            "{description} must be a text string or byte string, not {}",
+            value.get_type().name()?
+        )))
+    }
+}
+
 fn require_bignum_bytes(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyBytes>> {
     // Tags 2 and 3 enclose a byte string (RFC 8949 section 3.4.3). int.from_bytes() also
     // accepts any iterable of ints, so without this guard a tag 2/3 wrapping an array (or a map,
@@ -191,6 +205,10 @@ fn require_bignum_bytes(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyBytes>>
 /// :param allow_duplicate_keys:
 ///     if :data:`False`, raise a :exc:`CBORDecodeError` when a map key that has already been
 ///     decoded in the same map is encountered
+/// :param strict_hashable_types:
+///     if :data:`True`, raise a :exc:`CBORDecodeError` when a map key or a set element is
+///     anything other than a text string or a byte string (this prevents attackers from crafting
+///     maps or sets with colliding hashes as a denial-of-service attack)
 ///
 /// .. _CBOR: https://cbor.io/
 #[pyclass(module = "cbor2")]
@@ -208,6 +226,8 @@ pub struct CBORDecoder {
     allow_indefinite: bool,
     #[pyo3(get)]
     allow_duplicate_keys: bool,
+    #[pyo3(get)]
+    strict_hashable_types: bool,
 
     read_method: Option<Py<PyAny>>,
     buffer: Option<Py<PyBytes>>,
@@ -229,6 +249,7 @@ impl CBORDecoder {
         max_depth: usize,
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
+        strict_hashable_types: bool,
     ) -> PyResult<Self> {
         let available_bytes = if let Some(buffer) = buffer.as_ref() {
             buffer.len()?
@@ -245,6 +266,7 @@ impl CBORDecoder {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            strict_hashable_types,
             semantic_decoders: semantic_decoders.map(|d| d.clone().unbind()),
             read_method: None,
             buffer: buffer.map(Bound::unbind),
@@ -657,11 +679,7 @@ impl CBORDecoder {
             py: Python<'py>,
             items: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
         ) -> PyResult<Bound<'py, PyAny>> {
-            FROZEN_DICT
-                .get(py)?
-                .call1((items,))?
-                .cast_into()
-                .map_err(|e| PyErr::from(e))
+            PyFrozenDict::new(py, items).map(|dict| dict.into_any())
         }
         #[cfg(not(Py_3_15))]
         fn create_frozen_dict<'py>(
@@ -687,6 +705,7 @@ impl CBORDecoder {
 
         let object_hook = self.object_hook.as_ref().map(|hook| hook.clone_ref(py));
         let allow_duplicate_keys = self.allow_duplicate_keys;
+        let strict_hashable_types = self.strict_hashable_types;
         let length_or_none = self.decode_length_as_usize(py, subtype)?;
 
         // Return immediately if this is an empty dict
@@ -741,6 +760,9 @@ impl CBORDecoder {
                         }
                         Ok(ContinueFrame(true))
                     } else {
+                        if strict_hashable_types {
+                            check_hashable_type(&item, "map key")?;
+                        }
                         key = Some(item);
                         Ok(ContinueFrame(false))
                     }
@@ -769,6 +791,9 @@ impl CBORDecoder {
                         items.push((key, item));
                         Ok(ContinueFrame(true))
                     } else {
+                        if strict_hashable_types {
+                            check_hashable_type(&item, "map key")?;
+                        }
                         key = Some(item);
                         Ok(ContinueFrame(false))
                     }
@@ -816,6 +841,9 @@ impl CBORDecoder {
                         }
                         Ok(ContinueFrame(true))
                     } else {
+                        if strict_hashable_types {
+                            check_hashable_type(&item, "map key")?;
+                        }
                         key = Some(item);
                         Ok(ContinueFrame(false))
                     }
@@ -844,6 +872,9 @@ impl CBORDecoder {
                         dict.set_item(&key, item)?;
                         Ok(ContinueFrame(true))
                     } else {
+                        if strict_hashable_types {
+                            check_hashable_type(&item, "map key")?;
+                        }
                         key = Some(item);
                         Ok(ContinueFrame(false))
                     }
@@ -1420,7 +1451,18 @@ impl CBORDecoder {
             Some(PySet::empty(py)?.into_any())
         };
         let container = set_or_none.clone();
+        let strict_hashable_types = self.strict_hashable_types;
         let callback = move |item: Bound<'py, PyAny>, _immutable: bool| {
+            if strict_hashable_types {
+                // Require an array here, as set.update() would otherwise iterate over whatever
+                // it's given (like the keys of a map), bypassing the element type check
+                let elements = item
+                    .cast::<PyTuple>()
+                    .map_err(|_| CBORDecodeError::new_err("set contents must be an array"))?;
+                for element in elements.iter() {
+                    check_hashable_type(&element, "set element")?;
+                }
+            }
             let container: Bound<'py, PyAny> = if let Some(set) = set_or_none.take() {
                 set.call_method1(intern!(py, "update"), (item,))?;
                 set.into_any()
@@ -1454,6 +1496,7 @@ impl CBORDecoder {
         max_depth = 400,
         allow_indefinite = true,
         allow_duplicate_keys = true,
+        strict_hashable_types = false,
     ))]
     pub fn new(
         py: Python<'_>,
@@ -1466,6 +1509,7 @@ impl CBORDecoder {
         max_depth: usize,
         allow_indefinite: bool,
         allow_duplicate_keys: bool,
+        strict_hashable_types: bool,
     ) -> PyResult<Self> {
         Self::new_internal(
             py,
@@ -1479,6 +1523,7 @@ impl CBORDecoder {
             max_depth,
             allow_indefinite,
             allow_duplicate_keys,
+            strict_hashable_types,
         )
     }
 

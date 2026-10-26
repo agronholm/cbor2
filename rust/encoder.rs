@@ -3,8 +3,8 @@ use crate::types::{
 };
 use crate::utils::PyImportable;
 use bigdecimal::BigDecimal;
+use bigdecimal::num_bigint::BigInt;
 use half::f16;
-use num_bigint::BigInt;
 use pyo3::exceptions::{PyLookupError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
