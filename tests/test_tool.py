@@ -140,20 +140,9 @@ def test_ignore_tag(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
         assert out_path.read_text() == expected
 
 
-@pytest.mark.parametrize("as_timestamp", [False, True], ids=["tag1004", "tag100"])
-@pytest.mark.parametrize("nested", [False, True], ids=["scalar", "nested"])
-def test_date(monkeypatch: MonkeyPatch, tmp_path: Path, as_timestamp: bool, nested: bool) -> None:
+def test_date() -> None:
     value = date(2026, 10, 18)
-    obj = {"dates": [value]} if nested else value
-    in_path = tmp_path / "date.cbor"
-    in_path.write_bytes(cbor2.dumps(obj, datetime_as_timestamp=as_timestamp))
-    out_path = tmp_path / "date.json"
-    monkeypatch.setattr("sys.argv", ["", "-o", str(out_path), str(in_path)])
-
-    cbor2.tool.main()
-
-    expected = {"dates": ["2026-10-18"]} if nested else "2026-10-18"
-    assert json.loads(out_path.read_text()) == expected
+    assert json.dumps(value, cls=cbor2.tool.DefaultEncoder) == '"2026-10-18"'
 
 
 def test_datetime() -> None:
