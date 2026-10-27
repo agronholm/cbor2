@@ -863,6 +863,15 @@ def test_datetime_secfrac_overflow() -> None:
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 999999, tzinfo=timezone.utc)
 
 
+def test_datetime_secfrac_non_ascii_digits() -> None:
+    # Only ASCII digits make up the fractional seconds; a multi-byte character that
+    # char::is_numeric() accepts used to put the microsecond truncation on a byte index inside
+    # that character on Python 3.10
+    with pytest.raises(CBORDecodeError):
+        # Fractional seconds part contains Roman numerals
+        loads(b"\xc0\x78\x1c2020-01-01T00:00:00.1\xe2\x85\xa8\xe2\x85\xa8Z")
+
+
 def test_datetime_invalid_string() -> None:
     with pytest.raises(CBORDecodeError) as excinfo:
         loads(unhexlify("c06b303030302d3132332d3031"))
