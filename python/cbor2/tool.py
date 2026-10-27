@@ -14,7 +14,7 @@ import sys
 import uuid
 from collections.abc import Callable, Collection, Iterable, Iterator
 from contextlib import ExitStack
-from datetime import datetime
+from datetime import date, datetime
 from functools import partial
 from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeAlias, TypeVar
 
@@ -35,6 +35,7 @@ default_encoders: dict[type, Callable[[Any], Any]] = {
     frozendict: lambda x: str(dict(x)),
     CBORSimpleValue: lambda x: f"cbor_simple:{x.value:d}",
     type(undefined): lambda x: "cbor:undef",
+    date: lambda x: x.isoformat(),
     datetime: lambda x: x.isoformat(),
     fractions.Fraction: str,
     uuid.UUID: lambda x: x.urn,

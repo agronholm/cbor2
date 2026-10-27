@@ -21,6 +21,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   than ``max_depth``, which could crash the interpreter with a segmentation fault when such an
   object was hashed (as a map key or set member)
   (`GHSA-55vx-2phh-7grr <https://github.com/agronholm/cbor2/security/advisories/GHSA-55vx-2phh-7grr>`_)
+- Fixed mission conversion of date values (tags 100 and 1004) to JSON as ISO formatted strings
+  (`#358 <https://github.com/agronholm/cbor2/pull/358>`_; PR by @jadenfix)
 - Fixed a ``PanicException`` on Python 3.10 when decoding a string-form datetime (tag 0) whose
   fractional seconds part contains a multi-byte Unicode numeric character, as the microsecond
   padding treated those as digits and then truncated the part on a byte index inside one of them
