@@ -300,7 +300,7 @@ class TestStrictHashableTypes:
         # Without the array requirement, set.update() would iterate over the map keys or the
         # characters of the string, bypassing the element type check
         with pytest.raises(
-            CBORDecodeError, match="error decoding set: set contents must be an array"
+            CBORDecodeError, match="error decoding set: input value must be an array"
         ):
             loads(unhexlify(payload), strict_hashable_types=True, immutable=immutable)
 
@@ -1490,6 +1490,15 @@ def test_set() -> None:
     value = loads(payload)
     assert type(value) is set
     assert value == {"a", "b", "c"}
+
+
+@pytest.mark.parametrize("immutable", [False, True], ids=["mutable", "immutable"])
+def test_set_non_array(immutable: bool) -> None:
+    # tag 258 enclosing the text string "abc" instead of an array
+    with pytest.raises(
+        CBORDecodeError, match="error decoding set: input value must be an array, not <class "
+    ):
+        loads(unhexlify("d9010263616263"), immutable=immutable)
 
 
 @pytest.mark.parametrize(

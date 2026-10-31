@@ -30,6 +30,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   fractional seconds part contains a multi-byte Unicode numeric character, as the microsecond
   padding treated those as digits and then truncated the part on a byte index inside one of them
   (`#354 <https://github.com/agronholm/cbor2/pull/354>`_; PR by @sahvx655-wq)
+- Fixed the decoder accepting a set (tag 258) whose payload is not an array, folding a text
+  string, byte string or map into a set of its characters, bytes or keys instead of rejecting it
+  (`#352 <https://github.com/agronholm/cbor2/pull/352>`_; PR by @sahvx655-wq)
 
 **6.1.5** (2026-10-01)
 

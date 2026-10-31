@@ -145,6 +145,13 @@ fn require_tuple<'py>(value: Bound<'py, PyAny>, length: usize) -> PyResult<Bound
     Ok(array)
 }
 
+fn require_array(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyTuple>> {
+    let value_type = value.get_type();
+    value.cast_into().map_err(|_| {
+        CBORDecodeError::new_err(format!("input value must be an array, not {value_type}"))
+    })
+}
+
 fn check_hashable_type(value: &Bound<'_, PyAny>, description: &str) -> PyResult<()> {
     // Only str and bytes have randomized hashes, so any other type (including subclasses with a
     // custom __hash__) could be used to force hash collisions
@@ -1455,22 +1462,17 @@ impl CBORDecoder {
         let container = set_or_none.clone();
         let strict_hashable_types = self.strict_hashable_types;
         let callback = move |item: Bound<'py, PyAny>, _immutable: bool| {
+            let members = require_array(item)?;
             if strict_hashable_types {
-                // Require an array here, as set.update() would otherwise iterate over whatever
-                // it's given (like the keys of a map), bypassing the element type check
-                let elements = item
-                    .cast::<PyTuple>()
-                    .map_err(|_| CBORDecodeError::new_err("set contents must be an array"))?;
-                for element in elements.iter() {
+                for element in members.iter() {
                     check_hashable_type(&element, "set element")?;
                 }
             }
             let container: Bound<'py, PyAny> = if let Some(set) = set_or_none.take() {
-                set.call_method1(intern!(py, "update"), (item,))?;
+                set.call_method1(intern!(py, "update"), (&members,))?;
                 set.into_any()
             } else {
-                let tuple = item.cast_into::<PyTuple>()?;
-                PyFrozenSet::new(py, tuple)?.into_any()
+                PyFrozenSet::new(py, members)?.into_any()
             };
             Ok(CompleteFrame(container))
         };
