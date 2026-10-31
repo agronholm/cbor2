@@ -13,6 +13,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   (`GHSA-p6xp-9h6j-r278 <https://github.com/agronholm/cbor2/security/advisories/GHSA-p6xp-9h6j-r278>`_)
 - Documented decoding concatenated CBOR objects with EOF checks between objects
   (`#30 <https://github.com/agronholm/cbor2/issues/30>`_; PR by @arindamsikder)
+- Fixed ``CBOREncoder.encode_to_bytes()`` sharing the string reference namespace of the
+  enclosing encode operation when called from a default hook
+  (`#356 <https://github.com/agronholm/cbor2/pull/356>`_; PR by @17krishna8)
 - Fixed the encoder writing the ``repr()`` of a :class:`bytes` regular expression pattern
   (tag 35) instead of the pattern itself, so the regular expression decoded back as the text
   pattern ``b'...'`` and no longer matched the same input
@@ -27,6 +30,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   fractional seconds part contains a multi-byte Unicode numeric character, as the microsecond
   padding treated those as digits and then truncated the part on a byte index inside one of them
   (`#354 <https://github.com/agronholm/cbor2/pull/354>`_; PR by @sahvx655-wq)
+- Fixed the decoder accepting a set (tag 258) whose payload is not an array, folding a text
+  string, byte string or map into a set of its characters, bytes or keys instead of rejecting it
+  (`#352 <https://github.com/agronholm/cbor2/pull/352>`_; PR by @sahvx655-wq)
 - Fixed the decoder accepting a non-integer exponent or mantissa in a decimal fraction (tag 4) or
   a bigfloat (tag 5); a mantissa that was a float or a numeric string had its own exponent
   discarded, so ``CBORTag(4, [0, "1.5"])`` decoded to ``Decimal("15")`` instead of being rejected
