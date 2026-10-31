@@ -210,6 +210,122 @@ class TestAllowDuplicateKeys:
             loads(unhexlify("a20501e502"), allow_duplicate_keys=False, immutable=immutable)
 
 
+class TestStrictHashableTypes:
+    def test_default(self) -> None:
+        decoder = CBORDecoder(BytesIO())
+        assert not decoder.strict_hashable_types
+
+    def test_true(self) -> None:
+        decoder = CBORDecoder(BytesIO(), strict_hashable_types=True)
+        assert decoder.strict_hashable_types
+
+    @pytest.mark.parametrize(
+        "payload, expected",
+        [
+            pytest.param("a10102", {1: 2}, id="map"),
+            pytest.param("d9010281f5", {True}, id="set"),
+        ],
+    )
+    def test_default_allows_any_type(self, payload: str, expected: object) -> None:
+        assert loads(unhexlify(payload)) == expected
+
+    @pytest.mark.parametrize(
+        "payload, expected",
+        [
+            pytest.param("a2616101416202", {"a": 1, b"b": 2}, id="definite_map"),
+            pytest.param("bf616101416202ff", {"a": 1, b"b": 2}, id="indefinite_map"),
+            pytest.param("a17f6161ff01", {"a": 1}, id="indefinite_string_key"),
+            pytest.param("a1d81c616101", {"a": 1}, id="shareable_string_key"),
+            pytest.param("d901028261614161", {"a", b"a"}, id="definite_set"),
+            pytest.param("d901029f61614161ff", {"a", b"a"}, id="indefinite_set"),
+            pytest.param("d9010280", set(), id="empty_set"),
+        ],
+    )
+    @pytest.mark.parametrize("immutable", [False, True])
+    def test_allows_strings(self, payload: str, expected: object, immutable: bool) -> None:
+        assert (
+            loads(unhexlify(payload), strict_hashable_types=True, immutable=immutable) == expected
+        )
+
+    @pytest.mark.parametrize(
+        "payload, typename",
+        [
+            pytest.param("a10102", "int", id="int"),
+            pytest.param("a12001", "int", id="negint"),
+            pytest.param("a1f93c0001", "float", id="float"),
+            pytest.param("a1f501", "bool", id="bool"),
+            pytest.param("a1f601", "NoneType", id="null"),
+            pytest.param("a1820102f6", "tuple", id="array"),
+            pytest.param("a1c11a514b67b001", "datetime", id="datetime"),
+            pytest.param("bf0102ff", "int", id="indefinite"),
+        ],
+    )
+    @pytest.mark.parametrize("immutable", [False, True])
+    def test_rejects_map_key(self, payload: str, typename: str, immutable: bool) -> None:
+        with pytest.raises(
+            CBORDecodeError,
+            match=f"error decoding map: map key must be a text string or byte string, not "
+            f"{typename}",
+        ):
+            loads(unhexlify(payload), strict_hashable_types=True, immutable=immutable)
+
+    @pytest.mark.parametrize(
+        "payload, typename",
+        [
+            pytest.param("d9010282616101", "int", id="int"),
+            pytest.param("d9010281f93c00", "float", id="float"),
+            pytest.param("d9010281f6", "NoneType", id="null"),
+            pytest.param("d90102818101", "tuple", id="array"),
+            pytest.param("d901029f6161f5ff", "bool", id="indefinite"),
+        ],
+    )
+    @pytest.mark.parametrize("immutable", [False, True])
+    def test_rejects_set_element(self, payload: str, typename: str, immutable: bool) -> None:
+        with pytest.raises(
+            CBORDecodeError,
+            match=f"error decoding set: set element must be a text string or byte string, not "
+            f"{typename}",
+        ):
+            loads(unhexlify(payload), strict_hashable_types=True, immutable=immutable)
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param("d90102a1616101", id="map"),
+            pytest.param("d90102626162", id="string"),
+        ],
+    )
+    @pytest.mark.parametrize("immutable", [False, True])
+    def test_rejects_non_array_set(self, payload: str, immutable: bool) -> None:
+        # Without the array requirement, set.update() would iterate over the map keys or the
+        # characters of the string, bypassing the element type check
+        with pytest.raises(
+            CBORDecodeError, match="error decoding set: input value must be an array"
+        ):
+            loads(unhexlify(payload), strict_hashable_types=True, immutable=immutable)
+
+    @pytest.mark.parametrize(
+        "payload, description",
+        [
+            pytest.param("a1d91770616101", "map key", id="map"),
+            pytest.param("d9010281d917706161", "set element", id="set"),
+        ],
+    )
+    def test_rejects_str_subclass(self, payload: str, description: str) -> None:
+        class MyStr(str):
+            pass
+
+        def tag_hook(tag: CBORTag, immutable: bool) -> object:
+            return MyStr(tag.value)
+
+        # {6000("a"): 1} and set([6000("a")])
+        with pytest.raises(
+            CBORDecodeError,
+            match=f"{description} must be a text string or byte string, not MyStr",
+        ):
+            loads(unhexlify(payload), strict_hashable_types=True, tag_hook=tag_hook)
+
+
 def test_readonly_attributes() -> None:
     decoder = CBORDecoder(BytesIO())
     assert decoder.read_size == 4096
@@ -253,6 +369,36 @@ class TestMaximumDepth:
             CBORDecodeError, match=r"maximum container nesting depth \(9\) exceeded"
         ):
             loads(b"\x81" * 10 + b"\x80", max_depth=9)
+
+    @staticmethod
+    def chained_shareables(count: int) -> bytes:
+        # [28([0]), 28([29(0)]), 28([29(1)]), ...] where each shareable wraps the previous one,
+        # creating an object graph as deep as the number of items with only a few frames
+        payload = b"\x9f\xd8\x1c\x81\x00"
+        for i in range(count - 1):
+            payload += b"\xd8\x1c\x81\xd8\x1d" + dumps(i)
+
+        return payload + b"\xff"
+
+    def test_shared_references_within_limit(self) -> None:
+        decoded = loads(self.chained_shareables(9), max_depth=10)
+        assert decoded[1][0] is decoded[0]
+        assert decoded[8][0] is decoded[7]
+
+    def test_shared_references_exceed_limit(self) -> None:
+        with pytest.raises(
+            CBORDecodeError, match=r"maximum container nesting depth \(10\) exceeded"
+        ):
+            loads(self.chained_shareables(10), max_depth=10)
+
+    def test_shared_references_in_map_key(self) -> None:
+        # Hashing a deep enough tuple used as a map key would overflow the C stack
+        payload = b"\xa1" + self.chained_shareables(DECODER_MAX_DEPTH) + b"\x00"
+        with pytest.raises(
+            CBORDecodeError,
+            match=f"maximum container nesting depth \\({DECODER_MAX_DEPTH}\\) exceeded",
+        ):
+            loads(payload)
 
 
 def test_stream_position_after_decode() -> None:
@@ -717,6 +863,15 @@ def test_datetime_secfrac_overflow() -> None:
     assert decoded == datetime(2018, 8, 2, 7, 0, 59, 999999, tzinfo=timezone.utc)
 
 
+def test_datetime_secfrac_non_ascii_digits() -> None:
+    # Only ASCII digits make up the fractional seconds; a multi-byte character that
+    # char::is_numeric() accepts used to put the microsecond truncation on a byte index inside
+    # that character on Python 3.10
+    with pytest.raises(CBORDecodeError):
+        # Fractional seconds part contains Roman numerals
+        loads(b"\xc0\x78\x1c2020-01-01T00:00:00.1\xe2\x85\xa8\xe2\x85\xa8Z")
+
+
 def test_datetime_invalid_string() -> None:
     with pytest.raises(CBORDecodeError) as excinfo:
         loads(unhexlify("c06b303030302d3132332d3031"))
@@ -1066,8 +1221,8 @@ class TestSharedReference:
         # b = ((a, a), a)
         # data = dumps(set(b))
         decoded = loads(unhexlify("d90102d81c82d81c82d81c83010203d81d02d81d02"))
-        a = [item for item in decoded if len(item) == 3][0]
-        b = [item for item in decoded if len(item) == 2][0]
+        a = next(item for item in decoded if len(item) == 3)
+        b = next(item for item in decoded if len(item) == 2)
         assert decoded == {(a, a), a}
         assert b[0] is a
         assert b[1] is a
