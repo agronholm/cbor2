@@ -13,11 +13,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   (`GHSA-p6xp-9h6j-r278 <https://github.com/agronholm/cbor2/security/advisories/GHSA-p6xp-9h6j-r278>`_)
 - Documented decoding concatenated CBOR objects with EOF checks between objects
   (`#30 <https://github.com/agronholm/cbor2/issues/30>`_; PR by @arindamsikder)
-- Fixed string references in the output of :meth:`CBOREncoder.encode_to_bytes()
-  <cbor2.CBOREncoder.encode_to_bytes>` resolving against (and registering strings in) the
-  string reference namespace of the enclosing encode operation, when called from a ``default``
-  hook while ``string_referencing=True``: the returned bytes then failed to decode as a
-  standalone item, and outer string references silently resolved to the wrong values
+- Fixed ``CBOREncoder.encode_to_bytes()`` sharing the string reference namespace of the
+  enclosing encode operation when called from a default hook
   (`#356 <https://github.com/agronholm/cbor2/pull/356>`_; PR by @17krishna8)
 - Fixed the encoder writing the ``repr()`` of a :class:`bytes` regular expression pattern
   (tag 35) instead of the pattern itself, so the regular expression decoded back as the text

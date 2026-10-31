@@ -693,11 +693,7 @@ impl CBOREncoder {
         let mut buffer: Vec<u8> = Vec::new();
         swap(&mut this.write_method, &mut write_method);
         swap(&mut this.buffer, &mut buffer);
-        // The nested encoding must not resolve string references against, or add
-        // strings to, the outer string reference namespace: the returned bytes
-        // have to form a standalone CBOR item, and strings encoded within must
-        // not shift the indices of the outer namespace. Give the nested encoding
-        // a namespace of its own instead (and restore the outer one afterwards).
+        // The nested encoding must start a new string namespace
         let old_string_namespacing = this.string_namespacing;
         let outer_references = if this.string_referencing {
             this.string_namespacing = true;
