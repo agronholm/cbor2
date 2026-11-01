@@ -170,8 +170,9 @@ fn require_integer<'py>(value: Bound<'py, PyAny>, name: &str) -> PyResult<Bound<
     // Decimal() also accepts floats and numeric strings, and decode_fraction keeps only the sign
     // and the digits of the Decimal it builds from the mantissa, so without this guard a
     // non-integer mantissa is silently rescaled by a power of ten instead of being rejected.
+    // Exact check, since bool is a subclass of int
     let value_type = value.get_type();
-    value.cast_into().map_err(|_| {
+    value.cast_into_exact().map_err(|_| {
         CBORDecodeError::new_err(format!("{name} must be an integer, not {value_type}"))
     })
 }
