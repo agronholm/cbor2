@@ -5,7 +5,7 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
-**UNRELEASED**
+**6.2.0** (2026-11-01)
 
 - Added Pyodide (``pyemscripten``) wheels for Python 3.14
   (`#351 <https://github.com/agronholm/cbor2/issues/351>`_)
