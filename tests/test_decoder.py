@@ -345,6 +345,7 @@ def test_read() -> None:
             decoder.read(10)
 
 
+@pytest.mark.skipif(sys.platform == "emscripten", reason="Sockets are not available on Emscripten")
 def test_non_seekable_fp() -> None:
     sock1, sock2 = socketpair()
     with sock1, sock2:
@@ -913,7 +914,10 @@ def test_datetime_date_out_of_range() -> None:
         loads(unhexlify("a6c11b00002401001b000000000000ff00"))
 
     if platform.system() == "Windows":
-        cause_exc_class: type[Exception] = OSError
+        cause_exc_class: type[Exception] | tuple[type[Exception], ...] = OSError
+    elif sys.platform == "emscripten":
+        # Pyodide 314 raises ValueError, while Pyodide 315 raises OSError
+        cause_exc_class = (ValueError, OSError)
     elif sys.maxsize == 2147483647:
         cause_exc_class = OverflowError
     else:

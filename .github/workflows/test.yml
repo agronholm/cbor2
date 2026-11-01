@@ -90,6 +90,21 @@ jobs:
             python -m pytest --color=yes -v
           '
 
+  test-pyodide:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - name: Install the Rust Emscripten target
+      run: rustup target add wasm32-unknown-emscripten
+    - name: Build and test wheels
+      uses: pypa/cibuildwheel@v4.2
+      env:
+        CIBW_PLATFORM: pyodide
+        # Pyodide 0.29 (Python 3.13) requires a nightly Rust toolchain
+        CIBW_SKIP: "cp313-*"
+        CIBW_TEST_GROUPS: "test"
+        CIBW_TEST_COMMAND: "python -m pytest {project}/tests"
+
   coveralls:
     name: Finish Coveralls
     needs: test
