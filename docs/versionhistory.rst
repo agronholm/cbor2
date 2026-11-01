@@ -7,7 +7,7 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
-- Added Pyodide (``pyemscripten``) wheels for Python 3.14 and later
+- Added Pyodide (``pyemscripten``) wheels for Python 3.14
   (`#351 <https://github.com/agronholm/cbor2/issues/351>`_)
 - Added the ``strict_hashable_types`` parameter to :class:`CBORDecoder`, :func:`load` and
   :func:`loads` which, when enabled, restricts map keys and set elements to text strings and byte

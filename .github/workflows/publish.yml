@@ -54,8 +54,9 @@ jobs:
       uses: pypa/cibuildwheel@v4.2
       env:
         CIBW_PLATFORM: pyodide
-        # Pyodide 0.29 (Python 3.13) requires a nightly Rust toolchain
-        CIBW_SKIP: "cp313-*"
+        # Pyodide 0.29 (Python 3.13) requires a nightly Rust toolchain, and Pyodide 315
+        # (Python 3.15) is still a pre-release
+        CIBW_SKIP: "cp313-* cp315-*"
         CIBW_TEST_GROUPS: "test"
         CIBW_TEST_COMMAND: "python -m pytest {project}/tests"
     - uses: actions/upload-artifact@v7
