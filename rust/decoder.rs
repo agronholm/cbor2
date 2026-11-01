@@ -165,6 +165,14 @@ fn check_hashable_type(value: &Bound<'_, PyAny>, description: &str) -> PyResult<
     }
 }
 
+fn require_integer<'py>(value: Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyInt>> {
+    // Exact check, since bool is a subclass of int
+    let value_type = value.get_type();
+    value.cast_into_exact().map_err(|_| {
+        CBORDecodeError::new_err(format!("{name} must be an integer, not {value_type}"))
+    })
+}
+
 fn require_bignum_bytes(value: Bound<'_, PyAny>) -> PyResult<Bound<'_, PyBytes>> {
     // Tags 2 and 3 enclose a byte string (RFC 8949 section 3.4.3). int.from_bytes() also
     // accepts any iterable of ints, so without this guard a tag 2/3 wrapping an array (or a map,
@@ -1172,14 +1180,15 @@ impl CBORDecoder {
         let tuple = require_tuple(value, 2)?;
         let decimal_class = DECIMAL_TYPE.get(py)?;
         {
-            let exp = tuple.get_item(0)?;
+            let exp = require_integer(tuple.get_item(0)?, "exponent")?;
+            let mantissa = require_integer(tuple.get_item(1)?, "mantissa")?;
             let sig_tuple = decimal_class
-                .call1((tuple.get_item(1)?,))?
+                .call1((mantissa,))?
                 .call_method0(intern!(py, "as_tuple"))?
                 .cast_into::<PyTuple>()?;
             let sign = sig_tuple.get_item(0)?;
             let digits = sig_tuple.get_item(1)?;
-            let args_tuple = PyTuple::new(py, [sign, digits, exp])?;
+            let args_tuple = PyTuple::new(py, [sign, digits, exp.into_any()])?;
             decimal_class.call1((args_tuple,)).map(CompleteFrame)
         }
     }
@@ -1190,8 +1199,8 @@ impl CBORDecoder {
         let tuple = require_tuple(value, 2)?;
         let decimal_class = DECIMAL_TYPE.get(py)?;
         {
-            let exp = decimal_class.call1((tuple.get_item(0)?,))?;
-            let sig = decimal_class.call1((tuple.get_item(1)?,))?;
+            let exp = decimal_class.call1((require_integer(tuple.get_item(0)?, "exponent")?,))?;
+            let sig = decimal_class.call1((require_integer(tuple.get_item(1)?, "mantissa")?,))?;
             let exp = PyInt::new(py, 2).pow(exp, py.None())?;
             sig.mul(exp).map(CompleteFrame)
         }

@@ -979,6 +979,39 @@ def test_bigfloat() -> None:
 
 
 @pytest.mark.parametrize(
+    "payload, typename, field",
+    [
+        pytest.param(
+            "c48200fb3ff8000000000000",
+            "decimal fraction",
+            "mantissa",
+            id="fraction_mantissa_float",
+        ),
+        pytest.param(
+            "c482fb3ff800000000000001",
+            "decimal fraction",
+            "exponent",
+            id="fraction_exponent_float",
+        ),
+        pytest.param("c482f501", "decimal fraction", "exponent", id="fraction_exponent_bool"),
+        pytest.param(
+            "c58200fb3ff8000000000000", "bigfloat", "mantissa", id="bigfloat_mantissa_float"
+        ),
+        pytest.param(
+            "c582fb3ff800000000000001", "bigfloat", "exponent", id="bigfloat_exponent_float"
+        ),
+    ],
+)
+def test_decimal_payload_non_integer(payload: str, typename: str, field: str) -> None:
+    # Regression test for #350
+    with pytest.raises(
+        CBORDecodeError,
+        match=f"error decoding {typename}: {field} must be an integer, not <class ",
+    ):
+        loads(unhexlify(payload))
+
+
+@pytest.mark.parametrize(
     "payload, expected",
     [
         ("d9a7f882f90000f90000", 0.0j),

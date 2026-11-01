@@ -33,6 +33,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Fixed the decoder accepting a set (tag 258) whose payload is not an array, folding a text
   string, byte string or map into a set of its characters, bytes or keys instead of rejecting it
   (`#352 <https://github.com/agronholm/cbor2/pull/352>`_; PR by @sahvx655-wq)
+- Fixed the decoder accepting a non-integer exponent or mantissa in a decimal fraction (tag 4) or
+  a bigfloat (tag 5)
+  (`#350 <https://github.com/agronholm/cbor2/pull/350>`_; PR by @sahvx655-wq)
 
 **6.1.5** (2026-10-01)
 
