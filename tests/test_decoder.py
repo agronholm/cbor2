@@ -345,6 +345,7 @@ def test_read() -> None:
             decoder.read(10)
 
 
+@pytest.mark.skipif(sys.platform == "emscripten", reason="Sockets are not available on Emscripten")
 def test_non_seekable_fp() -> None:
     sock1, sock2 = socketpair()
     with sock1, sock2:
@@ -914,7 +915,7 @@ def test_datetime_date_out_of_range() -> None:
 
     if platform.system() == "Windows":
         cause_exc_class: type[Exception] = OSError
-    elif sys.maxsize == 2147483647:
+    elif sys.maxsize == 2147483647 and sys.platform != "emscripten":
         cause_exc_class = OverflowError
     else:
         cause_exc_class = ValueError

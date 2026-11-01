@@ -43,6 +43,26 @@ jobs:
         name: wheels-${{ matrix.os }}
         path: wheelhouse/*.whl
 
+  pyodide-wheels:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+    - uses: actions/checkout@v7
+    - name: Install the Rust Emscripten target
+      run: rustup target add wasm32-unknown-emscripten
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v4.2
+      env:
+        CIBW_PLATFORM: pyodide
+        # Pyodide 0.29 (Python 3.13) requires a nightly Rust toolchain
+        CIBW_SKIP: "cp313-*"
+        CIBW_TEST_GROUPS: "test"
+        CIBW_TEST_COMMAND: "python -m pytest {project}/tests"
+    - uses: actions/upload-artifact@v7
+      with:
+        name: wheels-pyodide
+        path: wheelhouse/*.whl
+
   sdist:
     runs-on: ubuntu-latest
     environment: release
@@ -64,6 +84,7 @@ jobs:
   publish:
     needs:
       - binary-wheels
+      - pyodide-wheels
       - sdist
     runs-on: ubuntu-latest
     environment: release
@@ -82,6 +103,7 @@ jobs:
     name: Create a GitHub release
     needs:
       - binary-wheels
+      - pyodide-wheels
       - sdist
     runs-on: ubuntu-latest
     permissions:
