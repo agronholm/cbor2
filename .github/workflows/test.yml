@@ -61,12 +61,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
+    # seccomp=unconfined works around Docker 29.4.2 breaking networking in i386 containers:
+    # https://github.com/actions/runner-images/issues/14790
     - name: Build and test in 32-bit container
       run: |
         HOST_UID="$(id -u)"
         HOST_GID="$(id -g)"
         docker run \
           --platform linux/i386 \
+          --security-opt seccomp=unconfined \
           --user "${HOST_UID}:${HOST_GID}" \
           -v "${{ github.workspace }}:/workspace" \
           -w /workspace \
@@ -75,6 +78,7 @@ jobs:
           -e TZ=America/New_York \
           python:3.14 \
           bash -c '
+            set -eo pipefail
             export CARGO_HOME=/tmp/cargo
             export RUSTUP_HOME=/tmp/rustup
             mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
