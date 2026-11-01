@@ -67,6 +67,7 @@ jobs:
         HOST_GID="$(id -g)"
         docker run \
           --platform linux/i386 \
+          --network host \
           --user "${HOST_UID}:${HOST_GID}" \
           -v "${{ github.workspace }}:/workspace" \
           -w /workspace \
@@ -75,6 +76,7 @@ jobs:
           -e TZ=America/New_York \
           python:3.14 \
           bash -c '
+            set -eo pipefail
             export CARGO_HOME=/tmp/cargo
             export RUSTUP_HOME=/tmp/rustup
             mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
