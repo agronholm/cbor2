@@ -166,10 +166,6 @@ fn check_hashable_type(value: &Bound<'_, PyAny>, description: &str) -> PyResult<
 }
 
 fn require_integer<'py>(value: Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyInt>> {
-    // Tags 4 and 5 enclose a two-element array of integers (RFC 8949 sections 3.4.4 and 3.4.2).
-    // Decimal() also accepts floats and numeric strings, and decode_fraction keeps only the sign
-    // and the digits of the Decimal it builds from the mantissa, so without this guard a
-    // non-integer mantissa is silently rescaled by a power of ten instead of being rejected.
     // Exact check, since bool is a subclass of int
     let value_type = value.get_type();
     value.cast_into_exact().map_err(|_| {
