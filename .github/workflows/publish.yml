@@ -51,7 +51,7 @@ jobs:
     - name: Install the Rust Emscripten target
       run: rustup target add wasm32-unknown-emscripten
     - name: Build wheels
-      uses: pypa/cibuildwheel@v4.2
+      uses: pypa/cibuildwheel@v4.3
       env:
         CIBW_PLATFORM: pyodide
         # Pyodide 0.29 (Python 3.13) requires a nightly Rust toolchain, and Pyodide 315
