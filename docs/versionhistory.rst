@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**Unreleased**
+
+- Corrected the semantic-decoder example for immutable sets
+  (`#360 <https://github.com/agronholm/cbor2/issues/360>`_)
+
 **6.2.0.post2** (2026-11-02)
 
 - Build Pyodide (``pyemscripten``) wheels for Python 3.14

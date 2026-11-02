@@ -108,21 +108,15 @@ instance::
 Dealing with immutable containers
 +++++++++++++++++++++++++++++++++
 
-In rare cases, you may need to decode the next item from the stream as immutable.
-In practice, this means:
+The decoder can be asked to use immutable containers. In practice, this means:
 
 * Arrays are decoded as :class:`tuple` instead of :class:`list`
 * Maps are decoded as :class:`frozendict` instead of :class:`dict`
-* Sets are decoded as :class:`set` instead of :class:`frozenset`
+* Sets are decoded as :class:`frozenset` instead of :class:`set`
 
-There are two ways your custom decoder callbacks may want to interact with the decoder's
-``immutable`` flag:
-
-#. Use it to decide what data types to instantiate (e.g. :class:`tuple` vs :class:`list`)
-#. Decode an enclosed item as immutable with ``decoder.decode(immutable=True)``
-
-Here's a simplified example that uses the ``immutable`` flag to decode the semantic tag 258 as
-either a :class:`set` or a :class:`frozenset`, depending on the value of the flag::
+A semantic decoder is called with the decoded payload and this ``immutable`` flag.
+Use the flag to choose the container type. Here tag 258 becomes a :class:`set` or a
+:class:`frozenset`::
 
     import cbor2
 
