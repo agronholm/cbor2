@@ -121,16 +121,13 @@ There are two ways your custom decoder callbacks may want to interact with the d
 #. Use it to decide what data types to instantiate (e.g. :class:`tuple` vs :class:`list`)
 #. Decode an enclosed item as immutable with ``decoder.decode(immutable=True)``
 
-Here's a simplified example that uses this flag to decode the semantic tag 258 as either a
-:class:`set` or a :class:`frozenset`, depending on the value of the flag::
+Here's a simplified example that uses the ``immutable`` flag to decode the semantic tag 258 as
+either a :class:`set` or a :class:`frozenset`, depending on the value of the flag::
 
     import cbor2
 
-    def decode_set(decoder: cbor2.CBORDecoder) -> set | frozenset:
-        # Ignore value sharing and indefinite containers (length == None)
-        # for the sake of simplicity
-        items = decoder.decode(immutable=True)  # all set items must be hashable
-        return frozenset(items) if decoder.immutable else set(items)
+    def decode_set(items: tuple | list, immutable: bool) -> set | frozenset:
+        return frozenset(items) if immutable else set(items)
 
     # Encode/decode a regular set
     value = {"aa", "bb"}
