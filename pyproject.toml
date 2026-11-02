@@ -15,6 +15,7 @@ license = "MIT"
 keywords = ["serialization", "cbor"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
+    "Environment :: WebAssembly :: Emscripten",
     "Intended Audience :: Developers",
     "Typing :: Typed",
     "Programming Language :: Python :: Free Threading :: 2 - Beta",

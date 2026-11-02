@@ -5,6 +5,15 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**6.2.0.post2** (2026-11-02)
+
+- Build Pyodide (``pyemscripten``) wheels for Python 3.14
+  (`#351 <https://github.com/agronholm/cbor2/issues/351>`_)
+
+**6.2.0.post1** (2026-11-01)
+
+- No changes
+
 **6.2.0** (2026-11-01)
 
 - Added the ``strict_hashable_types`` parameter to :class:`CBORDecoder`, :func:`load` and
