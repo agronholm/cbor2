@@ -27,6 +27,7 @@ from hypothesis import given
 from cbor2 import (
     CBOREncodeError,
     CBOREncoder,
+    CBOREncodeValueError,
     CBORSimpleValue,
     CBORTag,
     dump,
@@ -347,13 +348,11 @@ def test_date_as_datetime() -> None:
 
 def test_naive_datetime() -> None:
     """Test that naive datetimes are gracefully rejected when no timezone has been set."""
-    with pytest.raises(CBOREncodeError) as exc:
+    with pytest.raises(
+        CBOREncodeError,
+        match=r"naive datetime encountered and no default timezone has been set",
+    ):
         dumps(datetime(2013, 3, 21))
-        exc.match(
-            "naive datetime datetime.datetime(2013, 3, 21) encountered "
-            "and no default timezone has been set"
-        )
-        assert isinstance(exc, ValueError)
 
 
 @pytest.mark.parametrize(
@@ -460,10 +459,8 @@ def test_cyclic_array_nosharing() -> None:
     """Test that serializing a cyclic structure w/o value sharing will blow up gracefully."""
     a: list[list[Any]] = []
     a.append(a)
-    with pytest.raises(CBOREncodeError) as exc:
+    with pytest.raises(CBOREncodeValueError, match=r"cyclic data structure detected"):
         dumps(a)
-        exc.match("cyclic data structure detected but value sharing is disabled")
-        assert isinstance(exc, ValueError)
 
 
 def test_cyclic_map() -> None:
@@ -478,10 +475,8 @@ def test_cyclic_map_nosharing() -> None:
     """Test that serializing a cyclic structure w/o value sharing will fail gracefully."""
     a: dict[int, dict[int, Any]] = {}
     a[0] = a
-    with pytest.raises(CBOREncodeError) as exc:
+    with pytest.raises(CBOREncodeValueError, match=r"cyclic data structure detected"):
         dumps(a)
-        exc.match("cyclic data structure detected but value sharing is disabled")
-        assert isinstance(exc, ValueError)
 
 
 @pytest.mark.parametrize(
@@ -499,10 +494,8 @@ def test_not_cyclic_same_object(value_sharing: bool, expected: str) -> None:
 
 
 def test_unsupported_type() -> None:
-    with pytest.raises(CBOREncodeError) as exc:
+    with pytest.raises(CBOREncodeError, match=r"cannot encode type <class 'function'>"):
         dumps(lambda: None)
-        exc.match("cannot serialize type function")
-        assert isinstance(exc, TypeError)
 
 
 def test_default() -> None:

@@ -442,10 +442,8 @@ def test_integer(payload: str, expected: int) -> None:
 
 
 def test_invalid_integer_subtype() -> None:
-    with pytest.raises(CBORDecodeError) as exc:
+    with pytest.raises(CBORDecodeError, match=r"unknown unsigned integer subtype 0x1c"):
         loads(b"\x1c")
-        assert str(exc.value).endswith("unknown unsigned integer subtype 0x1c")
-        assert isinstance(exc, ValueError)
 
 
 @pytest.mark.parametrize(
@@ -1383,10 +1381,11 @@ def test_premature_end_of_stream() -> None:
     Test that the decoder detects a situation where read() returned fewer than expected bytes.
 
     """
-    with pytest.raises(CBORDecodeError) as exc:
+    with pytest.raises(
+        CBORDecodeEOF,
+        match=r"premature end of stream \(expected to read at least 1 bytes, got 0 instead\)",
+    ):
         loads(unhexlify("437879"))
-        exc.match(r"premature end of stream \(expected to read 3 bytes, got 2 instead\)")
-        assert isinstance(exc, EOFError)
 
 
 def test_tag_hook() -> None:
