@@ -1,13 +1,70 @@
 use crate::utils::PyImportable;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::{PyException, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::ffi;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::types::{PyInt, PyNotImplemented};
 use pyo3::{
     Bound, IntoPyObjectExt, Py, PyAny, PyResult, Python, create_exception, pyclass, pymethods,
 };
+use std::cell::RefCell;
+use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+
+thread_local! {
+    /// Identities of the CBORTags currently being hashed or compared. Used to detect
+    /// self-referential tags and raise a catchable ``RuntimeError`` instead of
+    /// overflowing the C stack (issue #202, GHSA-6rgc-8hxm-rj7p).
+    static RUNNING_TAGS: RefCell<HashSet<*mut ffi::PyObject>> =
+        RefCell::new(HashSet::new());
+
+    /// Identities of the CBORTags currently being printed. Reentering one of these
+    /// renders ``...`` like CPython containers do, so ``repr()`` of a self-referential
+    /// tag terminates.
+    static PRINTED_TAGS: RefCell<HashSet<*mut ffi::PyObject>> =
+        RefCell::new(HashSet::new());
+}
+
+/// Marks a CBORTag as being processed for the duration of the enclosing operation and
+/// removes the mark on drop. Refuses to mark it twice, raising a ``RuntimeError``
+/// describing the tag as not ``verb``.
+struct TagGuard {
+    obj: *mut ffi::PyObject,
+    printed: bool,
+}
+
+impl TagGuard {
+    fn new(obj: *mut ffi::PyObject, verb: &str) -> PyResult<Self> {
+        let (inserted, printed) = match verb {
+            "printable" => (
+                PRINTED_TAGS.with(|tags| tags.borrow_mut().insert(obj)),
+                true,
+            ),
+            _ => (
+                RUNNING_TAGS.with(|tags| tags.borrow_mut().insert(obj)),
+                false,
+            ),
+        };
+        if !inserted {
+            return Err(PyRuntimeError::new_err(format!(
+                "This CBORTag is not {verb} because it contains a reference to itself"
+            )));
+        }
+        Ok(Self { obj, printed })
+    }
+}
+
+impl Drop for TagGuard {
+    fn drop(&mut self) {
+        if self.printed {
+            PRINTED_TAGS.with(|tags| tags.borrow_mut().remove(&self.obj));
+        } else {
+            RUNNING_TAGS.with(|tags| tags.borrow_mut().remove(&self.obj));
+        }
+    }
+}
 
 #[cfg(not(Py_3_15))]
 use pyo3::types::{
@@ -94,18 +151,28 @@ impl CBORTag {
     }
 
     fn __richcmp__<'py>(
-        &self,
+        slf: Bound<'py, Self>,
         py: Python<'py>,
         other: &Bound<'py, PyAny>,
         op: CompareOp,
     ) -> PyResult<Bound<'py, PyAny>> {
+        // Mirrors the CPython container fast path, and short-circuits a
+        // self-referential tag compared to itself
+        if slf.as_ptr() == other.as_ptr() {
+            return op.matches(Ordering::Equal).into_bound_py_any(py);
+        }
+
         if let Ok(other) = other.cast::<CBORTag>() {
+            let _guard = TagGuard::new(slf.as_ptr(), "comparable")?;
+            let self_ref = slf.try_borrow()?;
             let other_tag = other.borrow().tag;
-            if self.tag != other_tag {
-                return op.matches(self.tag.cmp(&other_tag)).into_bound_py_any(py);
+            if self_ref.tag != other_tag {
+                return op
+                    .matches(self_ref.tag.cmp(&other_tag))
+                    .into_bound_py_any(py);
             }
             let borrowed_other = other.borrow();
-            let bound_self = self.value.bind(py);
+            let bound_self = self_ref.value.bind(py);
             let bound_other = borrowed_other.value.bind(py);
             let compare_result = match op {
                 CompareOp::Eq => bound_self.eq(bound_other),
@@ -122,10 +189,12 @@ impl CBORTag {
         }
     }
 
-    fn __hash__(&self, py: Python<'_>) -> PyResult<u64> {
+    fn __hash__(slf: Bound<'_, Self>, py: Python<'_>) -> PyResult<u64> {
+        let _guard = TagGuard::new(slf.as_ptr(), "hashable")?;
+        let self_ref = slf.try_borrow()?;
         let mut hasher = DefaultHasher::new();
-        hasher.write_u64(self.tag);
-        match self.value.call_method0(py, "__hash__") {
+        hasher.write_u64(self_ref.tag);
+        match self_ref.value.call_method0(py, "__hash__") {
             Ok(value_hash) => {
                 hasher.write_isize(value_hash.extract(py)?);
                 Ok(hasher.finish())
@@ -140,11 +209,17 @@ impl CBORTag {
         }
     }
 
-    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+    fn __repr__(slf: Bound<'_, Self>, py: Python<'_>) -> PyResult<String> {
+        let _guard = match TagGuard::new(slf.as_ptr(), "printable") {
+            Ok(guard) => guard,
+            // Mirrors the ``...`` CPython containers render for a repr in progress
+            Err(_) => return Ok("...".to_string()),
+        };
+        let self_ref = slf.try_borrow()?;
         Ok(format!(
             "CBORTag({}, {})",
-            self.tag,
-            self.value.bind(py).repr()?
+            self_ref.tag,
+            self_ref.value.bind(py).repr()?
         ))
     }
 }

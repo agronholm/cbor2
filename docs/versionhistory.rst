@@ -5,6 +5,14 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed a segmentation fault on Python 3.12-3.13 when hashing, comparing or printing a
+  self-referential :class:`CBORTag` decoded from untrusted CBOR data, such as when used
+  as a map key or set element; a catchable ``RuntimeError`` (wrapped in a
+  ``CBORDecodeError`` during decoding) is now raised instead
+  (`GHSA-6rgc-8hxm-rj7p <https://github.com/agronholm/cbor2/security/advisories/GHSA-6rgc-8hxm-rj7p>`_)
+
 **6.2.0.post2** (2026-11-02)
 
 - Build Pyodide (``pyemscripten``) wheels for Python 3.14

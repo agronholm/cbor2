@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from cbor2 import CBORSimpleValue, CBORTag, undefined
+from cbor2 import CBORSimpleValue, CBORTag, loads, undefined
 
 if sys.hexversion < 51314855:
     from cbor2 import frozendict
@@ -62,7 +62,35 @@ class TestCBORTag:
         some_list: list[CBORTag] = []
         tag = CBORTag(1, some_list)
         some_list.append(tag)
-        assert repr(tag) == "CBORTag(1, [CBORTag(1, [...])])"
+        assert repr(tag) == "CBORTag(1, [...])"
+
+    def test_self_referential_hash(self) -> None:
+        # Payload for 28(999(29(0))), whose value turns out to be the tag itself.
+        # Without the hash guard this crashes the interpreter on Python 3.12-3.13
+        # (GHSA-6rgc-8hxm-rj7p)
+        tag = loads(b"\xd8\x1c\xd9\x03\xe7\xd8\x1d\x00")
+        assert tag.value is tag
+        with pytest.raises(RuntimeError, match="not hashable") as excinfo:
+            hash(tag)
+
+        assert "contains a reference to itself" in str(excinfo.value.__cause__)
+
+    def test_self_referential_eq(self) -> None:
+        # Without the comparison guard, comparing cyclic tags crashes the
+        # interpreter on some builds (observed as a segfault on Python 3.12)
+        tag = loads(b"\xd8\x1c\xd9\x03\xe7\xd8\x1d\x00")
+        # Identity fast path (intentional self-comparison)
+        assert tag == tag  # noqa: PLR0124
+        # Comparisons that terminate on the shared reference are allowed
+        assert tag == CBORTag(999, tag)
+        with pytest.raises(RuntimeError, match="contains a reference to itself"):
+            tag == CBORTag(999, CBORTag(999, tag))
+
+    def test_self_referential_repr(self) -> None:
+        # Without the repr guard, printing cyclic tags crashes the interpreter on
+        # some builds (observed as a segfault on Python 3.12)
+        tag = loads(b"\xd8\x1c\xd9\x03\xe7\xd8\x1d\x00")
+        assert repr(tag) == "CBORTag(999, ...)"
 
     def test_non_hashable(self) -> None:
         with pytest.raises(RuntimeError, match="This CBORTag is not hashable"):
