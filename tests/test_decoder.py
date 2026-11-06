@@ -401,6 +401,27 @@ class TestMaximumDepth:
         ):
             loads(payload)
 
+    def test_self_referential_tag_as_map_key(self) -> None:
+        # 28(999(29(0))) with the outer tag as a map key: hashing the key recurses
+        # into itself (GHSA-6rgc-8hxm-rj7p)
+        payload = unhexlify("a1d81cd903e7d81d0001")
+        with pytest.raises(CBORDecodeError, match="error decoding map") as excinfo:
+            loads(payload)
+
+        cause = excinfo.value.__cause__
+        assert isinstance(cause, RuntimeError)
+        assert "contains a reference to itself" in str(cause.__cause__)
+
+    def test_self_referential_tag_as_set_element(self) -> None:
+        # The same payload as a set element: hashing the element recurses into itself
+        payload = unhexlify("d9010281d81cd903e7d81d00")
+        with pytest.raises(CBORDecodeError, match="error decoding set") as excinfo:
+            loads(payload)
+
+        cause = excinfo.value.__cause__
+        assert isinstance(cause, RuntimeError)
+        assert "contains a reference to itself" in str(cause.__cause__)
+
 
 def test_stream_position_after_decode() -> None:
     """Test that the stream position is exactly at the end of the decoded CBOR value."""
@@ -442,10 +463,8 @@ def test_integer(payload: str, expected: int) -> None:
 
 
 def test_invalid_integer_subtype() -> None:
-    with pytest.raises(CBORDecodeError) as exc:
+    with pytest.raises(CBORDecodeError, match=r"unknown unsigned integer subtype 0x1c"):
         loads(b"\x1c")
-        assert str(exc.value).endswith("unknown unsigned integer subtype 0x1c")
-        assert isinstance(exc, ValueError)
 
 
 @pytest.mark.parametrize(
@@ -1383,10 +1402,11 @@ def test_premature_end_of_stream() -> None:
     Test that the decoder detects a situation where read() returned fewer than expected bytes.
 
     """
-    with pytest.raises(CBORDecodeError) as exc:
+    with pytest.raises(
+        CBORDecodeEOF,
+        match=r"premature end of stream \(expected to read at least 1 bytes, got 0 instead\)",
+    ):
         loads(unhexlify("437879"))
-        exc.match(r"premature end of stream \(expected to read 3 bytes, got 2 instead\)")
-        assert isinstance(exc, EOFError)
 
 
 def test_tag_hook() -> None:
