@@ -12,6 +12,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
   as a map key or set element; a catchable ``RuntimeError`` (wrapped in a
   ``CBORDecodeError`` during decoding) is now raised instead
   (`GHSA-6rgc-8hxm-rj7p <https://github.com/agronholm/cbor2/security/advisories/GHSA-6rgc-8hxm-rj7p>`_)
+- Corrected the semantic-decoder example for immutable sets
+  (`#360 <https://github.com/agronholm/cbor2/issues/360>`_)
 
 **6.2.0.post2** (2026-11-02)
 
