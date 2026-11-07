@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Added the ``--format=json`` CLI option to encode JSON files or standard input as binary CBOR
+  (`#222 <https://github.com/agronholm/cbor2/issues/222>`_; PR by @Aschenbath)
+
 **6.2.1** (2026-11-07)
 
 - Fixed a segmentation fault on Python 3.12-3.13 when hashing, comparing or printing a

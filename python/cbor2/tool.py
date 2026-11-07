@@ -18,7 +18,17 @@ from datetime import date, datetime
 from functools import partial
 from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeAlias, TypeVar
 
-from . import CBORDecodeEOF, CBORDecoder, CBORSimpleValue, CBORTag, load, loads, undefined
+from . import (
+    CBORDecodeEOF,
+    CBORDecoder,
+    CBOREncodeError,
+    CBORSimpleValue,
+    CBORTag,
+    dump,
+    load,
+    loads,
+    undefined,
+)
 
 if sys.hexversion < 51314855:
     from ._cbor2 import frozendict
@@ -127,11 +137,25 @@ def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict
     return rval
 
 
+def _encode_json(infiles: list[str], outfile: str) -> None:
+    with open(1 if outfile == "-" else outfile, "wb", closefd=outfile != "-") as outfp:
+        for path in infiles:
+            with ExitStack() as stack:
+                if path == "-":
+                    infile: BinaryIO = sys.stdin.buffer
+                else:
+                    infile = stack.enter_context(open(path, "rb"))
+
+                try:
+                    dump(json.load(infile), outfp)
+                except (ValueError, CBOREncodeError) as exc:
+                    raise SystemExit(f"{path}: {exc}") from None
+
+
 def main() -> None:
     prog = "python -m cbor2.tool"
     description = (
-        "A simple command line interface for cbor2 module "
-        "to validate and pretty-print CBOR objects."
+        "A simple command line interface for cbor2 module to convert between CBOR and JSON."
     )
     parser = argparse.ArgumentParser(prog=prog, description=description)
     parser.add_argument("-o", "--outfile", type=str, help="output file", default="-")
@@ -139,7 +163,13 @@ def main() -> None:
         "infiles",
         nargs="*",
         default=["-"],
-        help="Collection of CBOR files to process or - for stdin",
+        help="Collection of input files to process or - for stdin",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("cbor", "json"),
+        default="cbor",
+        help="input format: cbor produces diagnostic JSON; json produces binary CBOR",
     )
     parser.add_argument(
         "-k",
@@ -177,6 +207,21 @@ def main() -> None:
         help="Comma separated list of tags to ignore and only return the value",
     )
     options = parser.parse_args()
+
+    if options.format == "json":
+        if (
+            options.decode
+            or options.pretty
+            or options.sort_keys
+            or options.sequence
+            or options.tag_ignore
+        ):
+            parser.error(
+                "--format=json cannot be combined with --decode, --pretty, "
+                "--sort-keys, --sequence or --tag-ignore"
+            )
+        _encode_json(options.infiles, options.outfile)
+        return
 
     if options.outfile == "-":
         outfile = 1
