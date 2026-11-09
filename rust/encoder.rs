@@ -270,11 +270,11 @@ impl CBOREncoder {
         Self::disable_string_namespacing(slf, || Self::encode_shared(slf, obj, f))
     }
 
-    fn write_internal(&mut self, py: Python<'_>, mut data: Vec<u8>) -> PyResult<()> {
+    fn write_internal(&mut self, py: Python<'_>, data: &[u8]) -> PyResult<()> {
         if data.len() > MAX_BUFFER_SIZE {
             self.flush(py)?;
         }
-        self.buffer.append(&mut data);
+        self.buffer.extend_from_slice(data);
         self.maybe_flush(py)
     }
 
@@ -483,7 +483,7 @@ impl CBOREncoder {
             write.bind(py).call1((&buf,))?.extract()
         } else {
             let buf_len = buf.len();
-            self.write_internal(py, buf)?;
+            self.write_internal(py, &buf)?;
             Ok(buf_len)
         }
     }
@@ -760,19 +760,19 @@ impl CBOREncoder {
                 ..24 => self.write_byte(py, major_tag | len as u8),
                 24..256 => {
                     self.write_byte(py, major_tag | 24)?;
-                    self.write_internal(py, (len as u8).to_be_bytes().to_vec())
+                    self.write_internal(py, &(len as u8).to_be_bytes())
                 }
                 256..65536 => {
                     self.write_byte(py, major_tag | 25)?;
-                    self.write_internal(py, (len as u16).to_be_bytes().to_vec())
+                    self.write_internal(py, &(len as u16).to_be_bytes())
                 }
                 65536..=4294967295 => {
                     self.write_byte(py, major_tag | 26)?;
-                    self.write_internal(py, (len as u32).to_be_bytes().to_vec())
+                    self.write_internal(py, &(len as u32).to_be_bytes())
                 }
                 _ => {
                     self.write_byte(py, major_tag | 27)?;
-                    self.write_internal(py, len.to_be_bytes().to_vec())
+                    self.write_internal(py, &len.to_be_bytes())
                 }
             },
             None => {
@@ -795,7 +795,7 @@ impl CBOREncoder {
         let mut this = slf.borrow_mut();
         let encoded = obj.to_str()?.as_bytes();
         this.encode_length(py, 3, Some(encoded.len() as u64))?;
-        this.write_internal(py, encoded.to_vec())
+        this.write_internal(py, encoded)
     }
 
     fn encode_bytes(slf: &Bound<'_, Self>, obj: &Bound<'_, PyBytes>) -> PyResult<()> {
@@ -811,7 +811,7 @@ impl CBOREncoder {
         let mut this = slf.borrow_mut();
         let bytes = obj.as_bytes();
         this.encode_length(py, 2, Some(bytes.len() as u64))?;
-        this.write_internal(py, bytes.to_vec())
+        this.write_internal(py, bytes)
     }
 
     fn encode_bytearray(slf: &Bound<'_, Self>, obj: &Bound<'_, PyByteArray>) -> PyResult<()> {
@@ -827,7 +827,7 @@ impl CBOREncoder {
 
         let mut this = slf.borrow_mut();
         this.encode_length(py, 2, Some(bytes.len() as u64))?;
-        this.write_internal(py, bytes)
+        this.write_internal(py, &bytes)
     }
 
     fn encode_array(slf: &Bound<'_, Self>, obj: &Bound<'_, PySequence>) -> PyResult<()> {
@@ -1106,12 +1106,12 @@ impl CBOREncoder {
     fn encode_decimal(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         if obj.call_method0("is_nan")?.is_truthy()? {
             slf.borrow_mut()
-                .write_internal(slf.py(), vec![0xf9, 0x7e, 0x00])
+                .write_internal(slf.py(), &[0xf9, 0x7e, 0x00])
         } else if obj.call_method0("is_infinite")?.is_truthy()? {
             let signed = obj.call_method0("is_signed")?.is_truthy()?;
             let middle = if signed { 0xfc } else { 0x7c };
             slf.borrow_mut()
-                .write_internal(slf.py(), vec![0xf9, middle, 0x00])
+                .write_internal(slf.py(), &[0xf9, middle, 0x00])
         } else {
             let py = slf.py();
             let decimal: BigDecimal = obj.extract()?;
@@ -1202,7 +1202,7 @@ impl CBOREncoder {
         if value < 24 {
             slf.borrow_mut().write_byte(py, 0xe0 | value)
         } else {
-            slf.borrow_mut().write_internal(py, vec![0xf8, value])
+            slf.borrow_mut().write_internal(py, &[0xf8, value])
         }
     }
 
@@ -1210,11 +1210,10 @@ impl CBOREncoder {
         let py = slf.py();
         let value = obj.extract::<f64>()?;
         if value.is_nan() {
-            slf.borrow_mut().write_internal(py, vec![0xf9, 0x7e, 0x00])
+            slf.borrow_mut().write_internal(py, &[0xf9, 0x7e, 0x00])
         } else if value.is_infinite() {
             let middle = if value.is_sign_positive() { 0x7c } else { 0xfc };
-            slf.borrow_mut()
-                .write_internal(py, vec![0xf9, middle, 0x00])
+            slf.borrow_mut().write_internal(py, &[0xf9, middle, 0x00])
         } else {
             if slf.borrow().canonical {
                 // Find the shortest form that did not lose precision with the cast
@@ -1223,18 +1222,15 @@ impl CBOREncoder {
                     let value_16 = f16::from_f32(value_32);
                     return if value_16.to_f32() == value_32 {
                         slf.borrow_mut().write_byte(py, 0xf9)?;
-                        slf.borrow_mut()
-                            .write_internal(py, value_16.to_be_bytes().to_vec())
+                        slf.borrow_mut().write_internal(py, &value_16.to_be_bytes())
                     } else {
                         slf.borrow_mut().write_byte(py, 0xfa)?;
-                        slf.borrow_mut()
-                            .write_internal(py, value_32.to_be_bytes().to_vec())
+                        slf.borrow_mut().write_internal(py, &value_32.to_be_bytes())
                     };
                 }
             }
             slf.borrow_mut().write_byte(py, 0xfb)?;
-            slf.borrow_mut()
-                .write_internal(py, value.to_be_bytes().to_vec())
+            slf.borrow_mut().write_internal(py, &value.to_be_bytes())
         }
     }
 
