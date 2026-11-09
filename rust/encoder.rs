@@ -868,6 +868,21 @@ impl CBOREncoder {
                 },
             )?;
 
+            if !slf.borrow().canonical {
+                if let Ok(dict) = obj.cast::<PyDict>() {
+                    // Fast path for plain dicts: iterate the dict natively without
+                    // materializing .items()
+                    for (key, value) in dict.iter() {
+                        Self::encode_value(slf, &key)?;
+                        Self::encode_value(slf, &value)?;
+                    }
+                    if indefinite_containers {
+                        Self::encode_break(slf)?
+                    }
+                    return Ok(());
+                }
+            }
+
             let mut iterator = obj.call_method0("items")?.try_iter()?;
             if slf.borrow().canonical {
                 // Reorder keys according to Canonical CBOR specification where they're sorted
