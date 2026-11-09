@@ -899,7 +899,12 @@ impl CBOREncoder {
 
     fn encode_int(slf: &Bound<'_, Self>, obj: &Bound<'_, PyInt>) -> PyResult<()> {
         let py = slf.py();
-        if obj.ge(18446744073709551616_i128)? {
+        if let Ok(value) = obj.extract::<u64>() {
+            slf.borrow_mut().encode_length(py, 0, Some(value))
+        } else if let Ok(value) = obj.extract::<i64>() {
+            // Negative integers within 64-bit range; encodes -value - 1
+            slf.borrow_mut().encode_length(py, 1, Some((!value) as u64))
+        } else if obj.ge(18446744073709551616_i128)? {
             let (_, payload) = obj.extract::<BigInt>()?.to_bytes_be();
             let py_payload = PyBytes::new(py, &payload);
             Self::encode_semantic(slf, 2, py_payload.as_any())
