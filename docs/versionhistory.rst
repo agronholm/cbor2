@@ -5,6 +5,10 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Improved encoder performance significantly
+
 **6.2.1** (2026-11-07)
 
 - Fixed a segmentation fault on Python 3.12-3.13 when hashing, comparing or printing a
