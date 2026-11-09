@@ -20,7 +20,6 @@ type EncoderFn = fn(&Bound<CBOREncoder>, &Bound<PyAny>) -> PyResult<()>;
 type EncoderLookupVec = Vec<(Py<PyType>, EncoderFn)>;
 
 static DATETIME_COMBINE_FUNC: PyImportable = PyImportable::new("datetime", "datetime.combine");
-static ID_FUNC: PyImportable = PyImportable::new("builtins", "id");
 static TZINFO_TYPE: PyImportable = PyImportable::new("datetime", "tzinfo");
 static SORTED_FUNC: PyImportable = PyImportable::new("builtins", "sorted");
 static ZERO_TIME: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -186,7 +185,7 @@ impl CBOREncoder {
     ) -> PyResult<()> {
         let py = slf.py();
         let value_sharing = slf.borrow().value_sharing;
-        let value_id = ID_FUNC.get(py)?.call1((obj,))?.extract::<usize>()?;
+        let value_id = obj.as_ptr() as usize;
 
         let mut this = slf.borrow_mut();
         let option = this.shared_containers.get(&value_id);
