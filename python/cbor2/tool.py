@@ -220,6 +220,7 @@ def main() -> None:
                 "--format=json cannot be combined with --decode, --pretty, "
                 "--sort-keys, --sequence or --tag-ignore"
             )
+
         _encode_json(options.infiles, options.outfile)
         return
 
