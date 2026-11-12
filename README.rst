@@ -129,7 +129,6 @@ encoded as strings; this does not reverse the lossy diagnostic conversion.
 
 The ``--decode``, ``--pretty``, ``--sort-keys``, ``--sequence`` and ``--tag-ignore``
 options apply only to CBOR input and cannot be combined with ``--format=json``.
-The default input format remains ``cbor`` (also selectable with ``--format=cbor``).
 
 .. _jq: https://stedolan.github.io/jq/
 
