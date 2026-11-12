@@ -35,9 +35,10 @@ Features
 * `String references`_ compact encoding with repeated strings replaced with indices
 * Extensible `tagged value handling`_ using ``tag_hook`` and ``object_hook`` on decode and
   ``default`` on encode.
-* Command-line diagnostic tool, converting CBOR file or stream to JSON ``python -m cbor2.tool``
-  (This is a lossy conversion, for diagnostics only)
-* Command-line conversion from JSON to binary CBOR with ``--format=json``
+* Command-line diagnostic tool (``python -m cbor2.tool`` or just ``cbor2``)
+
+  * Can convert a CBOR file or stream to JSON (lossy conversion, for diagnostics only)
+  * Can convert a JSON to binary CBOR (with ``--format=json``)
 * Thorough test suite (Tested on big- and little-endian architectures)
 
 .. _CBOR tags: https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
