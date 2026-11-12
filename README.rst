@@ -35,8 +35,10 @@ Features
 * `String references`_ compact encoding with repeated strings replaced with indices
 * Extensible `tagged value handling`_ using ``tag_hook`` and ``object_hook`` on decode and
   ``default`` on encode.
-* Command-line diagnostic tool, converting CBOR file or stream to JSON ``python -m cbor2.tool``
-  (This is a lossy conversion, for diagnostics only)
+* Command-line diagnostic tool (``python -m cbor2.tool`` or just ``cbor2``)
+
+  * Can convert a CBOR file or stream to JSON (lossy conversion, for diagnostics only)
+  * Can convert a JSON to binary CBOR (with ``--format=json``)
 * Thorough test suite (Tested on big- and little-endian architectures)
 
 .. _CBOR tags: https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
@@ -112,6 +114,21 @@ CBOR data items concatenated into a sequence can be decoded also::
 Multiple files can also be sent to a single output file::
 
     $ cbor2 -o all_files.json file1.cbor file2.cbor ... fileN.cbor
+
+To encode a JSON document as binary CBOR, select the JSON input format::
+
+    $ cbor2 --format=json -o output.cbor input.json
+    $ echo '{"hello": "world"}' | python -m cbor2.tool --format=json > output.cbor
+
+Each input file (or standard input, ``-``) must contain one complete JSON value,
+which may be an object, array or scalar. Multiple input files produce concatenated
+CBOR items in the given order. Output is raw binary, with no added separators or
+newlines. JSON is read with Python's ``json`` module, then encoded using the normal
+``cbor2.dump`` defaults. Diagnostic strings representing CBOR-specific types are
+encoded as strings; this does not reverse the lossy diagnostic conversion.
+
+The ``--decode``, ``--pretty``, ``--sort-keys``, ``--sequence`` and ``--tag-ignore``
+options apply only to CBOR input and cannot be combined with ``--format=json``.
 
 .. _jq: https://stedolan.github.io/jq/
 

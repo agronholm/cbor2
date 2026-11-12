@@ -1,5 +1,7 @@
 import binascii
 import json
+import subprocess
+import sys
 from datetime import date, datetime, timezone
 from io import BytesIO, TextIOWrapper
 from pathlib import Path
@@ -52,9 +54,10 @@ def test_nonrecursive_ref() -> None:
     assert result == expected
 
 
-def test_stdin(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("format_args", [[], ["--format=cbor"]])
+def test_stdin(monkeypatch: MonkeyPatch, tmp_path: Path, format_args: list[str]) -> None:
     path = tmp_path / "outfile"
-    argv = ["-o", str(path)]
+    argv = ["-o", str(path), *format_args]
     inbuf = TextIOWrapper(BytesIO(binascii.unhexlify("02")))
     with monkeypatch.context() as m:
         m.setattr("sys.argv", [""] + argv)
@@ -148,3 +151,82 @@ def test_date() -> None:
 def test_datetime() -> None:
     value = datetime(2026, 10, 18, 12, 30, tzinfo=timezone.utc)
     assert json.dumps(value, cls=cbor2.tool.DefaultEncoder) == '"2026-10-18T12:30:00+00:00"'
+
+
+@pytest.mark.parametrize(
+    "document, expected",
+    [
+        (
+            '{"message": "caf\u00e9", "values": [1, true, null]}',
+            b"\xa2\x67message\x65caf\xc3\xa9\x66values\x83\x01\xf5\xf6",
+        ),
+        ('"hello"', b"\x65hello"),
+        ("0", b"\x00"),
+        ("false", b"\xf4"),
+        ("null", b"\xf6"),
+        ("[]", b"\x80"),
+        ("[10, 13, 26]", b"\x83\x0a\x0d\x18\x1a"),
+    ],
+)
+@pytest.mark.skipif(
+    sys.platform == "emscripten", reason="Subprocesses are unavailable on Emscripten"
+)
+def test_json_stdin(document: str, expected: bytes) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "cbor2.tool", "--format=json"],
+        input=document.encode("utf-8"),
+        capture_output=True,
+        check=True,
+    )
+    assert result.stdout == expected
+    assert result.stderr == b""
+
+
+def test_json_files(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    output = tmp_path / "output.cbor"
+    first.write_text('{"a": 10}', encoding="utf-8")
+    second.write_text('[13, "\u4e2d\u6587"]', encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.argv", ["cbor2", "--format=json", "-o", str(output), str(first), str(second)]
+    )
+    cbor2.tool.main()
+    assert output.read_bytes() == b"\xa1\x61a\x0a\x82\x0d\x66\xe4\xb8\xad\xe6\x96\x87"
+
+
+def test_json_stdin_file(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    output = tmp_path / "output.cbor"
+    stdin = TextIOWrapper(BytesIO(b"[10, 13]"))
+    monkeypatch.setattr("sys.argv", ["cbor2", "--format=json", "-o", str(output), "-"])
+    monkeypatch.setattr("sys.stdin", stdin)
+    cbor2.tool.main()
+    assert output.read_bytes() == b"\x82\x0a\x0d"
+    assert not stdin.closed
+
+
+@pytest.mark.parametrize("document", [b"{", b"{} {}", b"", b'"\xff"', b'"\\ud800"'])
+def test_json_invalid(document: bytes, monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    output = tmp_path / "output.cbor"
+    stdin = TextIOWrapper(BytesIO(document))
+    monkeypatch.setattr("sys.argv", ["cbor2", "--format=json", "-o", str(output)])
+    monkeypatch.setattr("sys.stdin", stdin)
+    with pytest.raises(SystemExit, match="^-: "):
+        cbor2.tool.main()
+
+    assert output.read_bytes() == b""
+    assert not stdin.closed
+
+
+@pytest.mark.parametrize(
+    "option", ["--decode", "--pretty", "--sort-keys", "--sequence", "--tag-ignore=24"]
+)
+def test_json_incompatible_options(option: str, monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    output = tmp_path / "output.cbor"
+    output.write_bytes(b"existing output")
+    monkeypatch.setattr("sys.argv", ["cbor2", "--format=json", option, "-o", str(output)])
+    with pytest.raises(SystemExit) as exc:
+        cbor2.tool.main()
+
+    assert exc.value.code == 2
+    assert output.read_bytes() == b"existing output"

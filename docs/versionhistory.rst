@@ -7,6 +7,8 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Added the ``--format=json`` CLI option to encode JSON files or standard input as binary CBOR
+  (`#222 <https://github.com/agronholm/cbor2/issues/222>`_; PR by @Aschenbath)
 - Improved encoder performance significantly
 
 **6.2.1** (2026-11-07)
