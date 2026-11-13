@@ -1,3 +1,4 @@
+import os
 import re
 import sys
 from binascii import unhexlify
@@ -495,6 +496,10 @@ def test_cyclic_tag_nosharing() -> None:
         dumps(obj)
 
 
+@pytest.mark.skipif(
+    sys.implementation.name == "pypy" and "CI" in os.environ,
+    reason="stack overflow on CI's coverage-instrumented PyPy build",
+)
 def test_deeply_nested_tags() -> None:
     """Test that encoding tags nested deeper than the maximum depth raises an error instead of
     overflowing the C stack."""
@@ -506,10 +511,14 @@ def test_deeply_nested_tags() -> None:
         dumps(obj)
 
 
+@pytest.mark.skipif(
+    sys.implementation.name == "pypy" and "CI" in os.environ,
+    reason="stack overflow on CI's coverage-instrumented PyPy build",
+)
 def test_maximum_nested_tags() -> None:
     """Test that the deepest tag nesting the decoder accepts can also be encoded."""
-    obj = loads(unhexlify("d9ff00" * 400 + "00"))
-    assert loads(dumps(obj)) == obj
+    expected = unhexlify("d9ff00" * 400 + "00")
+    assert dumps(loads(expected)) == expected
 
 
 @pytest.mark.parametrize(
