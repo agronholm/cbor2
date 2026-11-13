@@ -17,6 +17,7 @@ from ipaddress import (
     IPv6Network,
 )
 from pathlib import Path
+from struct import unpack
 from typing import Any
 from uuid import UUID
 
@@ -633,7 +634,10 @@ def test_ordered_map(value: object, expected: str) -> None:
             (IPv4Address("10.0.0.1"), CBORTag(52, b"\x0a\x00\x00\x01")),
             id="ip-address-tag",
         ),
-        pytest.param((float("nan"), float("nan")), id="canonical-nan"),
+        pytest.param(
+            (float("nan"), unpack(">d", unhexlify("7ff8000000000001"))[0]),
+            id="canonical-nan",
+        ),
     ],
 )
 @pytest.mark.parametrize("indefinite_containers", [False, True])
