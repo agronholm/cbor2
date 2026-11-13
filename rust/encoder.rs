@@ -592,6 +592,599 @@ impl CBOREncoder {
                             py.import("ipaddress")?
                                 .getattr("IPv4Network")?
                                 .cast_into()?
+    CBOREncodeError, CBOREncodeValueError, CBORSimpleValue, CBORTag, UndefinedType,
+};
+use crate::utils::PyImportable;
+use bigdecimal::BigDecimal;
+use bigdecimal::num_bigint::BigInt;
+use half::f16;
+use pyo3::exceptions::{PyLookupError, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::prelude::*;
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{
+    PyBool, PyByteArray, PyBytes, PyCFunction, PyComplex, PyDict, PyFloat, PyFrozenSet, PyInt,
+    PyList, PyMapping, PyNone, PySequence, PySet, PyString, PyTuple, PyType,
+};
+use pyo3::{IntoPyObjectExt, Py, PyAny, intern, pyclass};
+use std::collections::HashMap;
+use std::mem::{swap, take};
+
+type EncoderFn = fn(&Bound<CBOREncoder>, &Bound<PyAny>) -> PyResult<()>;
+type EncoderLookupVec = Vec<(Py<PyType>, EncoderFn)>;
+
+static DATETIME_COMBINE_FUNC: PyImportable = PyImportable::new("datetime", "datetime.combine");
+static TZINFO_TYPE: PyImportable = PyImportable::new("datetime", "tzinfo");
+static SORTED_FUNC: PyImportable = PyImportable::new("builtins", "sorted");
+static ZERO_TIME: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static STDLIB_ENCODERS: PyOnceLock<EncoderLookupVec> = PyOnceLock::new();
+
+/// Wrap the given encoder function to gracefully handle cyclic data
+/// structures.
+///
+/// If value sharing is enabled, this marks the given value shared in the
+/// datastream on the first call. If the value has already been passed to this
+/// method, a reference marker is instead written to the data stream and the
+/// wrapped function is not called.
+///
+/// If value sharing is disabled, only infinite recursion protection is done.
+#[pyfunction]
+#[pyo3(signature = (wraps, /))]
+pub fn shareable_encoder<'py>(
+    py: Python<'py>,
+    wraps: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyCFunction>> {
+    // `wraps` is the original Python function
+    let wraps = wraps.clone().unbind();
+    PyCFunction::new_closure(
+        py,
+        None, // no module
+        None, // no qualified name override
+        move |args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>| -> PyResult<()> {
+            let py = args.py();
+            let encoder = args.get_item(0)?.cast_into::<CBOREncoder>()?;
+            let value = args.get_item(1)?;
+            CBOREncoder::encode_shared(&encoder, &value, || {
+                wraps.call1(py, (&encoder, &value)).map(|_| ())
+            })
+        },
+    )
+}
+
+/// The CBOREncoder class implements a fully featured CBOR encoder with several extensions for
+/// handling shared references, big integers, rational numbers, and so on. Typically, the class is
+/// not used directly, but the dump() and dumps() functions are called to indirectly construct and
+/// use the class.
+///
+/// When the class is constructed manually, the main entry points are :meth:`encode` and
+/// :meth:`encode_to_bytes`.
+///
+/// :param fp:
+///     the file to write to (any file-like object opened for writing in binary mode)
+/// :param datetime_as_timestamp:
+///     set to :data:`True` to serialize datetimes as UNIX timestamps (this makes datetimes
+///     more concise on the wire, but loses the timezone information)
+/// :param timezone:
+///     the default timezone to use for serializing naive datetimes; if this is not
+///     specified naive datetimes will throw a :exc:`ValueError` when encoding is
+///     attempted
+/// :param value_sharing:
+///     set to :data:`True` to allow more efficient serializing of repeated values
+///     and, more importantly, cyclic data structures, at the cost of extra
+///     line overhead
+/// :param encoders:
+///     An optional mapping for overriding the encoding for select Python types.
+///     Each key in this mapping should be a Python type object, and the value a callable
+///     that takes two arguments: the encoder object and the object to encode.
+/// :param default:
+///     a callable that is called by the encoder with two arguments (the encoder
+///     instance and the value being encoded) when no suitable encoder has been found,
+///     and should use the methods on the encoder to encode any objects it wants to add
+///     to the data stream
+/// :param canonical:
+///     when :data:`True`, use "canonical" CBOR representation; this typically involves
+///     sorting maps, sets, etc. into a pre-determined order ensuring that
+///     serializations are comparable without decoding. Maps with keys that have identical
+///     canonical encodings raise :exc:`CBOREncodeValueError`.
+/// :param date_as_datetime:
+///     set to :data:`True` to serialize date objects as datetimes (CBOR tag 0), which was
+///     the default behavior in previous releases (cbor2 <= 4.1.2).
+/// :param string_referencing:
+///     set to :data:`True` to allow more efficient serializing of repeated string values
+/// :param indefinite_containers:
+///     encode containers as indefinite (use stop code instead of specifying length)
+#[pyclass(module = "cbor2")]
+pub struct CBOREncoder {
+    fp: Option<Py<PyAny>>,
+
+    #[pyo3(get)]
+    datetime_as_timestamp: bool,
+
+    timezone: Option<Py<PyAny>>,
+
+    #[pyo3(get)]
+    value_sharing: bool,
+
+    default: Option<Py<PyAny>>,
+
+    #[pyo3(get)]
+    canonical: bool,
+
+    #[pyo3(get)]
+    date_as_datetime: bool,
+
+    #[pyo3(get)]
+    string_referencing: bool,
+
+    #[pyo3(get)]
+    string_namespacing: bool,
+
+    #[pyo3(get)]
+    indefinite_containers: bool,
+
+    encoders: Option<Py<PyMapping>>,
+    write_method: Option<Py<PyAny>>,
+    pub buffer: Vec<u8>,
+    shared_containers: HashMap<usize, (Py<PyAny>, Option<Py<PyInt>>)>,
+    string_references: HashMap<String, usize>,
+    bytes_references: HashMap<Vec<u8>, usize>,
+    encode_depth: usize,
+}
+
+const MAX_BUFFER_SIZE: usize = 4096;
+
+impl CBOREncoder {
+    pub fn new_internal(
+        fp: Option<&Bound<'_, PyAny>>,
+        datetime_as_timestamp: bool,
+        timezone: Option<&Bound<'_, PyAny>>,
+        value_sharing: bool,
+        encoders: Option<&Bound<'_, PyMapping>>,
+        default: Option<&Bound<'_, PyAny>>,
+        canonical: bool,
+        date_as_datetime: bool,
+        string_referencing: bool,
+        indefinite_containers: bool,
+    ) -> PyResult<Self> {
+        let mut instance = Self {
+            fp: None,
+            datetime_as_timestamp,
+            timezone: None,
+            value_sharing,
+            default: None,
+            canonical,
+            date_as_datetime,
+            string_referencing,
+            string_namespacing: string_referencing,
+            indefinite_containers,
+            encoders: encoders.map(|e| e.clone().unbind()),
+            write_method: None,
+            buffer: Vec::new(),
+            shared_containers: HashMap::new(),
+            string_references: HashMap::new(),
+            bytes_references: HashMap::new(),
+            encode_depth: 0,
+        };
+        if let Some(fp) = fp {
+            instance.set_fp(fp)?;
+        }
+        instance.set_timezone(timezone)?;
+        instance.set_default(default)?;
+        Ok(instance)
+    }
+
+    fn encode_shared(
+        slf: &Bound<'_, Self>,
+        obj: &Bound<'_, PyAny>,
+        f: impl FnOnce() -> PyResult<()>,
+    ) -> PyResult<()> {
+        let py = slf.py();
+        let value_sharing = slf.borrow().value_sharing;
+        let value_id = obj.as_ptr() as usize;
+
+        let mut this = slf.borrow_mut();
+        let option = this.shared_containers.get(&value_id);
+        match option {
+            None => {
+                if value_sharing {
+                    // Mark the container as shareable
+                    let next_index = PyInt::new(py, this.shared_containers.len()).unbind();
+                    this.shared_containers.insert(
+                        value_id,
+                        (obj.clone().unbind(), Some(next_index.clone_ref(py))),
+                    );
+                    this.encode_length(py, 6, Some(28))?;
+                    drop(this);
+                    f().map(|_| ())
+                } else {
+                    this.shared_containers
+                        .insert(value_id, (obj.clone().unbind(), None));
+                    drop(this);
+                    let result = f();
+                    slf.borrow_mut().shared_containers.remove(&value_id);
+                    result.map(|_| ())
+                }
+            }
+            Some((_, None)) => Err(CBOREncodeValueError::new_err(
+                "cyclic data structure detected",
+            )),
+            Some((_, Some(index))) => {
+                // Generate a reference to the previous index instead of
+                // encoding this again
+                let value = index.clone_ref(py);
+                this.encode_length(py, 6, Some(29))?;
+                drop(this);
+                Self::encode_int(slf, value.bind(py))
+            }
+        }
+    }
+
+    /// Call the given function with value sharing disabled in the encoder.
+    fn disable_value_sharing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
+        let mut this = slf.borrow_mut();
+        let old_value_sharing = this.value_sharing;
+        this.value_sharing = false;
+        drop(this);
+        let result = f();
+        slf.borrow_mut().value_sharing = old_value_sharing;
+        result
+    }
+
+    /// Call the given function with string namespacing disabled in the encoder.
+    fn disable_string_namespacing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
+        let mut this = slf.borrow_mut();
+        let old_string_namespacing = this.string_namespacing;
+        this.string_namespacing = false;
+        drop(this);
+        let result = f();
+        slf.borrow_mut().string_namespacing = old_string_namespacing;
+        result
+    }
+
+    /// Call the given function with string referencing disabled in the encoder.
+    fn disable_string_referencing<T>(slf: &Bound<'_, Self>, f: impl FnOnce() -> T) -> T {
+        let mut this = slf.borrow_mut();
+        let old_string_referencing = this.string_referencing;
+        this.string_referencing = false;
+        drop(this);
+        let result = f();
+        slf.borrow_mut().string_referencing = old_string_referencing;
+        result
+    }
+
+    fn encode_container(
+        slf: &Bound<'_, Self>,
+        obj: &Bound<'_, PyAny>,
+        f: impl FnOnce() -> PyResult<()>,
+    ) -> PyResult<()> {
+        if slf.borrow().string_namespacing {
+            // Create a new string reference domain
+            slf.borrow_mut().encode_length(slf.py(), 6, Some(256))?;
+        }
+
+        Self::disable_string_namespacing(slf, || Self::encode_shared(slf, obj, f))
+    }
+
+    fn write_internal(&mut self, py: Python<'_>, data: &[u8]) -> PyResult<()> {
+        if data.len() > MAX_BUFFER_SIZE {
+            self.flush(py)?;
+        }
+        self.buffer.extend_from_slice(data);
+        self.maybe_flush(py)
+    }
+
+    fn write_byte(&mut self, py: Python<'_>, data: u8) -> PyResult<()> {
+        self.buffer.push(data);
+        self.maybe_flush(py)
+    }
+
+    fn flush(&mut self, py: Python<'_>) -> PyResult<()> {
+        if let Some(write_method) = &self.write_method {
+            write_method.call1(py, (&*self.buffer,))?;
+            self.buffer.clear();
+        }
+        Ok(())
+    }
+
+    fn maybe_flush(&mut self, py: Python<'_>) -> PyResult<()> {
+        if self.encode_depth == 0 || (self.fp.is_some() && self.buffer.len() >= MAX_BUFFER_SIZE) {
+            self.flush(py)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn maybe_stringref(slf: &Bound<'_, Self>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let py = slf.py();
+        let mut this = slf.borrow_mut();
+        let (index, is_string, length) = if let Ok(py_string) = value.cast::<PyString>() {
+            let string: String = py_string.extract()?;
+            (
+                this.string_references.get(&string).copied(),
+                true,
+                string.len(),
+            )
+        } else {
+            let bytes: Vec<u8> = value.cast::<PyBytes>()?.extract()?;
+            (
+                this.bytes_references.get(&bytes).copied(),
+                false,
+                bytes.len(),
+            )
+        };
+        match index {
+            Some(index) => {
+                drop(this);
+                Self::encode_semantic(slf, 25, PyInt::new(py, index).as_any())?;
+                Ok(true)
+            }
+            None => {
+                let next_index = this.string_references.len() + this.bytes_references.len();
+                let is_referenced = match next_index {
+                    ..24 => length >= 3,
+                    24..256 => length >= 4,
+                    256..65536 => length >= 5,
+                    65536..=4294967295 => length >= 7,
+                    _ => length >= 11,
+                };
+
+                if is_referenced {
+                    if is_string {
+                        this.string_references.insert(value.extract()?, next_index);
+                    } else {
+                        this.bytes_references.insert(value.extract()?, next_index);
+                    }
+                }
+
+                Ok(false)
+            }
+        }
+    }
+}
+
+#[pymethods]
+impl CBOREncoder {
+    #[new]
+    #[pyo3(signature = (
+        fp,
+        *,
+        datetime_as_timestamp = false,
+        timezone = None,
+        value_sharing = false,
+        encoders = None,
+        default = None,
+        canonical = false,
+        date_as_datetime = false,
+        string_referencing = false,
+        indefinite_containers = false
+    ))]
+    pub fn new(
+        fp: &Bound<'_, PyAny>,
+        datetime_as_timestamp: bool,
+        timezone: Option<&Bound<'_, PyAny>>,
+        value_sharing: bool,
+        encoders: Option<&Bound<'_, PyMapping>>,
+        default: Option<&Bound<'_, PyAny>>,
+        canonical: bool,
+        date_as_datetime: bool,
+        string_referencing: bool,
+        indefinite_containers: bool,
+    ) -> PyResult<Self> {
+        CBOREncoder::new_internal(
+            Some(fp),
+            datetime_as_timestamp,
+            timezone,
+            value_sharing,
+            encoders,
+            default,
+            canonical,
+            date_as_datetime,
+            string_referencing,
+            indefinite_containers,
+        )
+    }
+
+    #[getter]
+    fn fp(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.fp.as_ref().map(|fp| fp.clone_ref(py))
+    }
+
+    #[setter]
+    fn set_fp(&mut self, fp: &Bound<'_, PyAny>) -> PyResult<()> {
+        let result = fp.call_method0("writable");
+        if let Ok(writable) = &result
+            && writable.is_truthy()?
+        {
+            // Before replacing the file pointer, flush any pending writes and clear state
+            if let Some(existing_fp) = &self.fp
+                && !fp.is(existing_fp)
+            {
+                self.flush(fp.py())?;
+                self.shared_containers.clear();
+                self.string_references.clear();
+                self.bytes_references.clear();
+            }
+
+            self.write_method = Some(fp.getattr("write")?.unbind());
+            self.fp = Some(fp.clone().unbind());
+            Ok(())
+        } else {
+            let exc = PyValueError::new_err("fp must be a writable file-like object");
+            exc.set_cause(fp.py(), result.err());
+            Err(exc)
+        }
+    }
+
+    #[getter]
+    fn timezone(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.timezone
+            .as_ref()
+            .map(|timezone| timezone.clone_ref(py))
+    }
+
+    #[setter]
+    fn set_timezone(&mut self, timezone: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        if let Some(timezone) = timezone {
+            let py = timezone.py();
+            if !timezone.is_instance(&TZINFO_TYPE.get(py)?)? {
+                return Err(PyErr::new::<PyTypeError, _>(
+                    "timezone must be a tzinfo object",
+                ));
+            }
+
+            self.timezone = Some(timezone.clone().unbind());
+        } else {
+            self.timezone = None;
+        }
+        Ok(())
+    }
+
+    #[getter]
+    fn default(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        self.default.as_ref().map(|default| default.clone_ref(py))
+    }
+
+    #[setter]
+    fn set_default(&mut self, default: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
+        if let Some(default) = default {
+            if !default.is_callable() {
+                return Err(PyErr::new::<PyTypeError, _>("default must be callable"));
+            }
+
+            self.default = Some(default.clone().unbind());
+        } else {
+            self.default = None;
+        }
+        Ok(())
+    }
+
+    /// Write bytes to the data stream.
+    ///
+    /// :param buf: the bytes to write
+    /// :returns: the number of bytes written
+    ///
+    /// .. note:: During the encoding of an object, this method may write the given bytes to the
+    ///    internal buffer without flushing to the actual output stream. When called outside the
+    ///    encoding process, it is equivalent to ``encoder.fp.write(...)``.
+    #[pyo3(signature = (buf, /))]
+    fn write<'py>(&mut self, py: Python<'py>, buf: Vec<u8>) -> PyResult<usize> {
+        if self.encode_depth == 0 {
+            if self.write_method.is_none() {
+                return Err(PyRuntimeError::new_err("fp not set"));
+            }
+
+            assert_eq!(self.buffer.len(), 0, "The buffer should have been empty");
+            let write = self.write_method.as_ref().unwrap();
+            write.bind(py).call1((&buf,))?.extract()
+        } else {
+            let buf_len = buf.len();
+            self.write_internal(py, &buf)?;
+            Ok(buf_len)
+        }
+    }
+
+    fn encode_value(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
+        // Look up the Python type object of the object to be encoded
+        let py = slf.py();
+        let this = slf.borrow();
+
+        if let Some(encoders) = &this.encoders {
+            match encoders.bind(py).get_item(obj.get_type()) {
+                Ok(encoder) => {
+                    drop(this);
+                    return encoder.call1((slf, obj)).map(|_| ());
+                }
+                Err(e) if e.is_instance_of::<PyLookupError>(py) => {}
+                Err(e) => return Err(e),
+            }
+        }
+
+        // Look up the type in the encoders dict, and if no encoder callback was found, check for
+        // special types. If all else fails, fall back to the default encoder callback, if one was
+        // provided. Otherwise, raise CBOREncoderError.
+        drop(this);
+        if let Ok(obj) = obj.cast::<PyBytes>() {
+            Self::encode_bytes(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyString>() {
+            Self::encode_string(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyBool>() {
+            Self::encode_bool(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyInt>() {
+            Self::encode_int(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyFloat>() {
+            Self::encode_float(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyComplex>() {
+            Self::encode_complex(slf, obj)
+        } else if let Ok(obj) = obj.cast::<PyByteArray>() {
+            Self::encode_bytearray(slf, obj)
+        } else if obj.is_none() {
+            Self::encode_none(slf)
+        } else if obj.is_exact_instance_of::<UndefinedType>() {
+            Self::encode_undefined(slf)
+        } else if let Ok(map) = obj.cast::<PyMapping>() {
+            Self::encode_map(slf, map)
+        } else if let Ok(sequence) = obj.cast::<PySequence>() {
+            Self::encode_array(slf, sequence)
+        } else if let Ok(sequence) = obj.cast::<PySet>() {
+            Self::encode_set(slf, sequence)
+        } else if let Ok(sequence) = obj.cast::<PyFrozenSet>() {
+            Self::encode_frozenset(slf, sequence)
+        } else if let Ok(simple_value) = obj.cast::<CBORSimpleValue>() {
+            Self::encode_simple_value(slf, simple_value)
+        } else if let Ok(tag) = obj.cast::<CBORTag>() {
+            let tag = tag.borrow();
+            Self::encode_semantic(slf, tag.tag, tag.value.bind(py))
+        } else {
+            let obj_type = obj.get_type();
+            let stdlib_encoders =
+                STDLIB_ENCODERS.get_or_try_init(py, || -> PyResult<EncoderLookupVec> {
+                    Ok(vec![
+                        (
+                            py.import("datetime")?
+                                .getattr("datetime")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_datetime,
+                        ),
+                        (
+                            py.import("datetime")?
+                                .getattr("date")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_date,
+                        ),
+                        (
+                            py.import("decimal")?
+                                .getattr("Decimal")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_decimal,
+                        ),
+                        (
+                            py.import("fractions")?
+                                .getattr("Fraction")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_rational,
+                        ),
+                        (
+                            py.import("uuid")?.getattr("UUID")?.cast_into()?.unbind(),
+                            CBOREncoder::encode_uuid,
+                        ),
+                        (
+                            py.import("re")?.getattr("Pattern")?.cast_into()?.unbind(),
+                            CBOREncoder::encode_regexp,
+                        ),
+                        (
+                            py.import("ipaddress")?
+                                .getattr("IPv4Address")?
+                                .cast_into()?
+                                .unbind(),
+                            CBOREncoder::encode_ipv4_address,
+                        ),
+                        (
+                            py.import("ipaddress")?
+                                .getattr("IPv4Network")?
+                                .cast_into()?
                                 .unbind(),
                             CBOREncoder::encode_ipv4_network,
                         ),
@@ -1275,4 +1868,4 @@ impl CBOREncoder {
         let tuple = PyTuple::new(slf.py(), [obj.real(), obj.imag()])?;
         Self::encode_semantic(slf, 43000, tuple.as_any())
     }
-                }
+}
