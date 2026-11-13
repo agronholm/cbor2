@@ -90,7 +90,8 @@ pub fn shareable_encoder<'py>(
 /// :param canonical:
 ///     when :data:`True`, use "canonical" CBOR representation; this typically involves
 ///     sorting maps, sets, etc. into a pre-determined order ensuring that
-///     serializations are comparable without decoding
+///     serializations are comparable without decoding. Maps with keys that have identical
+///     canonical encodings raise :exc:`CBOREncodeValueError`.
 /// :param date_as_datetime:
 ///     set to :data:`True` to serialize date objects as datetimes (CBOR tag 0), which was
 ///     the default behavior in previous releases (cbor2 <= 4.1.2).
@@ -887,12 +888,28 @@ impl CBOREncoder {
             if slf.borrow().canonical {
                 // Reorder keys according to Canonical CBOR specification where they're sorted
                 // by the length of the CBOR encoded value first, and only then by the lexical order
-                let kwargs = PyDict::new(py);
-                kwargs.set_item("key", slf.getattr("encode_sortable_item")?)?;
-                iterator = SORTED_FUNC
-                    .get(py)?
-                    .call((iterator,), Some(&kwargs))?
-                    .try_iter()?;
+                let mut items = Vec::with_capacity(obj.len()?);
+                for item in iterator {
+                    let item = item?;
+                    let (length, encoded) =
+                        Self::encode_sortable_item(slf, item.cast::<PyTuple>()?)?;
+                    items.push((length, encoded.cast_into::<PyBytes>()?, item));
+                }
+                items.sort_by(|(length_a, encoded_a, _), (length_b, encoded_b, _)| {
+                    length_a
+                        .cmp(length_b)
+                        .then_with(|| encoded_a.as_bytes().cmp(encoded_b.as_bytes()))
+                });
+                if items
+                    .windows(2)
+                    .any(|pair| pair[0].1.as_bytes() == pair[1].1.as_bytes())
+                {
+                    return Err(CBOREncodeValueError::new_err(
+                        "duplicate map key in canonical encoding",
+                    ));
+                }
+                iterator =
+                    PyList::new(py, items.into_iter().map(|(_, _, item)| item))?.try_iter()?;
             }
             for item in iterator {
                 let (key, value): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;

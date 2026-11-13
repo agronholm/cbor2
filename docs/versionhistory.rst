@@ -7,6 +7,10 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
 **UNRELEASED**
 
+- Fixed canonical map encoding silently emitting duplicate serialized keys for distinct Python
+  keys; :class:`CBOREncodeValueError` is now raised instead
+  (`#365 <https://github.com/agronholm/cbor2/issues/365>`_; PR by @OnlineBunker)
+
 - Added the ``--format=json`` CLI option to encode JSON files or standard input as binary CBOR
   (`#222 <https://github.com/agronholm/cbor2/issues/222>`_; PR by @Aschenbath)
 - Improved encoder performance significantly

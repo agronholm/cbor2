@@ -17,6 +17,7 @@ from ipaddress import (
     IPv6Network,
 )
 from pathlib import Path
+from struct import unpack
 from typing import Any
 from uuid import UUID
 
@@ -621,6 +622,89 @@ def test_dump_to_file(tmp_path: Path) -> None:
 )
 def test_ordered_map(value: object, expected: str) -> None:
     assert dumps(value, canonical=True) == unhexlify(expected)
+
+
+@pytest.mark.parametrize(
+    "keys",
+    [
+        pytest.param((CBORSimpleValue(20), False), id="simple-bool"),
+        pytest.param((CBORSimpleValue(22), None), id="simple-null"),
+        pytest.param((UUID(int=1), CBORTag(37, UUID(int=1).bytes)), id="uuid-tag"),
+        pytest.param(
+            (IPv4Address("10.0.0.1"), CBORTag(52, b"\x0a\x00\x00\x01")),
+            id="ip-address-tag",
+        ),
+        pytest.param(
+            (float("nan"), unpack(">d", unhexlify("7ff8000000000001"))[0]),
+            id="canonical-nan",
+        ),
+    ],
+)
+@pytest.mark.parametrize("indefinite_containers", [False, True])
+@pytest.mark.parametrize("value_sharing", [False, True])
+@pytest.mark.parametrize("string_referencing", [False, True])
+def test_canonical_duplicate_map_keys(
+    keys: tuple[object, object],
+    indefinite_containers: bool,
+    value_sharing: bool,
+    string_referencing: bool,
+) -> None:
+    value = {keys[0]: "first", "other": "middle", keys[1]: "last"}
+    assert len(value) == 3
+    with pytest.raises(CBOREncodeValueError, match="duplicate map key"):
+        dumps(
+            value,
+            canonical=True,
+            indefinite_containers=indefinite_containers,
+            value_sharing=value_sharing,
+            string_referencing=string_referencing,
+        )
+
+
+def test_canonical_duplicate_map_keys_nested() -> None:
+    value = [{CBORSimpleValue(20): 1, False: 2}]
+    with pytest.raises(CBOREncodeValueError, match="duplicate map key"):
+        dumps(value, canonical=True)
+
+
+def test_canonical_map_keys_are_scoped_to_each_map() -> None:
+    value = [{False: 1}, {False: 2}]
+    assert loads(dumps(value, canonical=True)) == value
+
+
+def test_canonical_map_distinct_keys_same_length() -> None:
+    value = {"b": 1, "a": 2, 24: 3, b"x": 4}
+    assert dumps(value, canonical=True) == unhexlify("a4181803417804616102616201")
+
+
+def test_canonical_map_custom_key_encoder_calls() -> None:
+    class Key:
+        pass
+
+    calls: list[object] = []
+
+    def default(encoder: CBOREncoder, value: object) -> None:
+        calls.append(value)
+        encoder.encode("custom")
+
+    key = Key()
+    assert dumps({key: 1}, canonical=True, default=default) == unhexlify("a166637573746f6d01")
+    # Sorting and output each encode the key once; duplicate checking must not add a third call.
+    assert calls == [key, key]
+
+
+def test_noncanonical_duplicate_map_keys_unchanged() -> None:
+    value = {CBORSimpleValue(20): 1, False: 2}
+    assert dumps(value) == unhexlify("a2f401f402")
+
+
+def test_canonical_duplicate_map_keys_encoder_reuse() -> None:
+    with BytesIO() as stream:
+        encoder = CBOREncoder(stream, canonical=True)
+        with pytest.raises(CBOREncodeValueError, match="duplicate map key"):
+            encoder.encode({CBORSimpleValue(20): 1, False: 2})
+        encoder.encode({False: 2})
+        assert stream.getvalue() == unhexlify("a1f402")
 
 
 @pytest.mark.parametrize(
