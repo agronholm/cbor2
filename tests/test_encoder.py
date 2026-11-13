@@ -479,6 +479,39 @@ def test_cyclic_map_nosharing() -> None:
         dumps(a)
 
 
+def test_cyclic_tag() -> None:
+    """Test that a self-referential tag (constructible by the decoder via tags 28 and 29) can be
+    re-encoded with value sharing, reproducing the original stream."""
+    expected = unhexlify("d81cd9ff00d81d00")
+    obj = loads(expected)
+    assert dumps(obj, value_sharing=True) == expected
+
+
+def test_cyclic_tag_nosharing() -> None:
+    """Test that encoding a self-referential tag w/o value sharing fails gracefully instead of
+    crashing the interpreter."""
+    obj = loads(unhexlify("d81cd9ff00d81d00"))
+    with pytest.raises(CBOREncodeValueError, match=r"cyclic data structure detected"):
+        dumps(obj)
+
+
+def test_deeply_nested_tags() -> None:
+    """Test that encoding tags nested deeper than the maximum depth raises an error instead of
+    overflowing the C stack."""
+    obj: Any = None
+    for _ in range(401):
+        obj = CBORTag(6000, obj)
+
+    with pytest.raises(CBOREncodeValueError, match=r"maximum encoding depth \(\d+\) exceeded"):
+        dumps(obj)
+
+
+def test_maximum_nested_tags() -> None:
+    """Test that the deepest tag nesting the decoder accepts can also be encoded."""
+    obj = loads(unhexlify("d9ff00" * 400 + "00"))
+    assert loads(dumps(obj)) == obj
+
+
 @pytest.mark.parametrize(
     "value_sharing, expected",
     [
@@ -522,7 +555,8 @@ def test_default_cyclic() -> None:
         state = encoder.encode_to_bytes(value.value)
         encoder.encode(CBORTag(3000, state))
 
-    expected = unhexlify("D81CD90BB849D81CD90BB843D81D00")
+    # Tags are now registered as shareable too, so each encoded tag gains a tag 28 marker
+    expected = unhexlify("d81cd81cd90bb84bd81cd81cd90bb843d81d00")
     obj = DummyType()
     obj2 = DummyType(obj)
     obj.value = obj2

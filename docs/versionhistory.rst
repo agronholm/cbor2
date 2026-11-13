@@ -10,6 +10,9 @@ This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 - Added the ``--format=json`` CLI option to encode JSON files or standard input as binary CBOR
   (`#222 <https://github.com/agronholm/cbor2/issues/222>`_; PR by @Aschenbath)
 - Improved encoder performance significantly
+- Fixed a segmentation fault when encoding :class:`CBORTag` that are either self-referential or
+  deeply nested
+  (`GHSA-ffh5-vwcq-7ccw <https://github.com/agronholm/cbor2/security/advisories/GHSA-ffh5-vwcq-7ccw>`_)
 
 **6.2.1** (2026-11-07)
 

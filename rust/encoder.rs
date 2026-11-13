@@ -138,6 +138,11 @@ pub struct CBOREncoder {
 
 const MAX_BUFFER_SIZE: usize = 4096;
 
+/// Maximum allowed nesting depth of semantic tags in the encoder, mirroring the default
+/// ``max_depth`` of the decoder. This prevents a stack overflow (and an interpreter crash)
+/// when encoding self-referential tags constructed by the decoder via tags 28 and 29.
+const MAX_ENCODE_DEPTH: usize = 400;
+
 impl CBOREncoder {
     pub fn new_internal(
         fp: Option<&Bound<'_, PyAny>>,
@@ -537,8 +542,17 @@ impl CBOREncoder {
         } else if let Ok(simple_value) = obj.cast::<CBORSimpleValue>() {
             Self::encode_simple_value(slf, simple_value)
         } else if let Ok(tag) = obj.cast::<CBORTag>() {
+            // Register tags in the shared containers registry so that self-referential tags,
+            // which the decoder can construct via tags 28 and 29, are emitted as shared
+            // references when value sharing is enabled, and detected as cyclic when it is
+            // disabled
+            let py = obj.py();
             let tag = tag.borrow();
-            Self::encode_semantic(slf, tag.tag, tag.value.bind(py))
+            let (tag_num, tag_value) = (tag.tag, tag.value.clone_ref(py));
+            drop(tag);
+            Self::encode_shared(slf, obj, || {
+                Self::encode_semantic(slf, tag_num, tag_value.bind(py))
+            })
         } else {
             let obj_type = obj.get_type();
             let stdlib_encoders =
@@ -653,7 +667,16 @@ impl CBOREncoder {
     /// :param obj: the object to encode
     #[pyo3(signature = (obj, /))]
     pub fn encode(slf: &Bound<'_, Self>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
-        slf.borrow_mut().encode_depth += 1;
+        {
+            let mut this = slf.borrow_mut();
+            if this.encode_depth > MAX_ENCODE_DEPTH {
+                return Err(CBOREncodeValueError::new_err(format!(
+                    "maximum encoding depth ({}) exceeded",
+                    MAX_ENCODE_DEPTH
+                )));
+            }
+            this.encode_depth += 1;
+        }
 
         let result = Self::encode_value(slf, obj);
 
