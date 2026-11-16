@@ -1,0 +1,472 @@
+[
+  {
+    "hex": "18",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "19",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "1a",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "1b",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "1901",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "1a0102",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "1b01020304050607",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "38",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "58",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "78",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "98",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "9a01ff00",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "b8",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "d8",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "f8",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "f900",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "fa0000",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "fb000000",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-head"
+  },
+  {
+    "hex": "41",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-string"
+  },
+  {
+    "hex": "61",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-string"
+  },
+  {
+    "hex": "5affffffff00",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-string"
+  },
+  {
+    "hex": "5bffffffffffffffff010203",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-string"
+  },
+  {
+    "hex": "7affffffff00",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-string"
+  },
+  {
+    "hex": "7b7fffffffffffffff010203",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-string"
+  },
+  {
+    "hex": "81",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-container"
+  },
+  {
+    "hex": "818181818181818181",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-container"
+  },
+  {
+    "hex": "8200",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-container"
+  },
+  {
+    "hex": "a1",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-container"
+  },
+  {
+    "hex": "a20102",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-container"
+  },
+  {
+    "hex": "a100",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-container"
+  },
+  {
+    "hex": "a2000000",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-container"
+  },
+  {
+    "hex": "c0",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-tag"
+  },
+  {
+    "hex": "5f4100",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-string"
+  },
+  {
+    "hex": "7f6100",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-string"
+  },
+  {
+    "hex": "9f",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-container"
+  },
+  {
+    "hex": "9f0102",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-container"
+  },
+  {
+    "hex": "bf",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-container"
+  },
+  {
+    "hex": "bf01020102",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-container"
+  },
+  {
+    "hex": "819f",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-container"
+  },
+  {
+    "hex": "9f8000",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-container"
+  },
+  {
+    "hex": "9f9f9f9f9fffffffff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-container"
+  },
+  {
+    "hex": "9f819f819f9fffffff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "too-little-indefinite-container"
+  },
+  {
+    "hex": "1c",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "1d",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "1e",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "3c",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "3d",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "3e",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "5c",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "5d",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "5e",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "7c",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "7d",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "7e",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "9c",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "9d",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "9e",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "bc",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "bd",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "be",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "dc",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "dd",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "de",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "fc",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "fd",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "fe",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-additional-information"
+  },
+  {
+    "hex": "f800",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-simple-value"
+  },
+  {
+    "hex": "f801",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-simple-value"
+  },
+  {
+    "hex": "f818",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-simple-value"
+  },
+  {
+    "hex": "f81f",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "reserved-simple-value"
+  },
+  {
+    "hex": "5f00ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "wrong-chunk-type"
+  },
+  {
+    "hex": "5f21ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "wrong-chunk-type"
+  },
+  {
+    "hex": "5f6100ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "wrong-chunk-type"
+  },
+  {
+    "hex": "5f80ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "wrong-chunk-type"
+  },
+  {
+    "hex": "5fa0ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "wrong-chunk-type"
+  },
+  {
+    "hex": "5fc000ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "wrong-chunk-type"
+  },
+  {
+    "hex": "5fe0ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "wrong-chunk-type"
+  },
+  {
+    "hex": "7f4100ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "wrong-chunk-type"
+  },
+  {
+    "hex": "5f5f4100ffff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "indefinite-chunk"
+  },
+  {
+    "hex": "7f7f6100ffff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "indefinite-chunk"
+  },
+  {
+    "hex": "ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "unexpected-break"
+  },
+  {
+    "hex": "81ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "unexpected-break"
+  },
+  {
+    "hex": "8200ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "unexpected-break"
+  },
+  {
+    "hex": "a1ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "unexpected-break"
+  },
+  {
+    "hex": "a1ff00",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "unexpected-break"
+  },
+  {
+    "hex": "a100ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "unexpected-break"
+  },
+  {
+    "hex": "a20000ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "unexpected-break"
+  },
+  {
+    "hex": "9f81ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "unexpected-break"
+  },
+  {
+    "hex": "9f829f819f9fffffffff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "unexpected-break"
+  },
+  {
+    "hex": "bf00ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "break-as-map-value"
+  },
+  {
+    "hex": "bf000000ff",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "break-as-map-value"
+  },
+  {
+    "hex": "1f",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "invalid-indefinite-major-type"
+  },
+  {
+    "hex": "3f",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "invalid-indefinite-major-type"
+  },
+  {
+    "hex": "df",
+    "section": "RFC 8949 Appendix F.1",
+    "error_kind": "invalid-indefinite-major-type"
+  }
+]
