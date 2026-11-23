@@ -70,6 +70,55 @@ EOF during an object means truncated data and must remain an error. Malformed ob
 raise :exc:`CBORDecodeError`. This is not a recipe for non-blocking input: a temporary lack of
 bytes is not the end of the sequence.
 
+Reading an asyncio stream
+-------------------------
+
+:class:`CBORDecoder` expects a synchronous binary reader; it cannot call the asynchronous
+``read()`` method of :class:`asyncio.StreamReader`. For a sequence of independent CBOR items,
+buffer incoming bytes and retry an incomplete item when more bytes arrive:
+
+.. code-block:: python
+    :name: async-sequence-reader
+
+    import asyncio
+    from io import BytesIO
+    from cbor2 import CBORDecodeEOF, CBORDecoder
+
+    async def decode_async_sequence(reader):
+        pending = b""
+        while True:
+            chunk = await reader.read(65536)
+            if not chunk:
+                if pending:
+                    raise CBORDecodeEOF("stream ended inside a CBOR item")
+                return
+            pending += chunk
+            stream = BytesIO(pending)
+            while stream.tell() < len(pending):
+                start = stream.tell()
+                try:
+                    # Each item (and each retry) starts with fresh decoder state.
+                    value = CBORDecoder(stream).decode()
+                except CBORDecodeEOF:
+                    pending = pending[start:]
+                    break
+                yield value
+            else:
+                pending = b""
+
+For example, with a reader returned by :func:`asyncio.open_connection`, consume items with
+``async for value in decode_async_sequence(reader): ...``. A network read may contain part of
+an item, several items, or both; the recipe preserves incomplete bytes between reads. Values
+such as ``False``, ``0``, and ``None`` are ordinary items, not end-of-stream markers. A malformed
+item raises :exc:`CBORDecodeError`; EOF is accepted only between complete items.
+
+This is a buffering recipe, not an incremental asynchronous decoder. It retains the unfinished
+item in memory and decodes it again after each read, so applications should bound item sizes.
+For large items, length-prefixed framing lets an application await a complete payload and
+decode it once (potentially in a worker thread). Shared-value and string references must be
+contained within each top-level item; references spanning items are not preserved by this
+recipe.
+
 Date/time handling
 ------------------
 
