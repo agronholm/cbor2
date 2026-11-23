@@ -196,6 +196,54 @@ class name and a dictionary of attribute values::
     # prints b'\xd9\xc3P\x82n__main__.Point\xa2ax\x04ay\x05'
     print(cbor2.dumps(Point(4, 5), default=default_encoder))
 
+Embedding a CBOR data item
+----------------------------
+
+Tag 24 wraps a byte string containing one independently encoded CBOR item. This is useful when
+an application needs to decode the outer structure while leaving an embedded payload encoded
+until it is needed. Tag 24 is not decoded automatically by :func:`loads`: its value remains a
+byte string inside a :class:`CBORTag`.
+
+A wrapper class and a registered encoder can choose which values to embed:
+
+.. code-block:: python
+    :name: embedded-cbor-item
+
+    import cbor2
+
+    class Embedded:
+        def __init__(self, value):
+            self.value = value
+
+    def encode_embedded(encoder, value):
+        encoder.encode_semantic(24, cbor2.dumps(value.value))
+
+    payload = cbor2.dumps(
+        {"name": "sample", "data": Embedded([1, {"enabled": True}])},
+        encoders={Embedded: encode_embedded},
+    )
+    outer = cbor2.loads(payload)
+    assert outer["name"] == "sample"
+    assert outer["data"].tag == 24
+    assert isinstance(outer["data"].value, bytes)
+
+    # Decode the embedded value only when the application needs it.
+    inner = cbor2.loads(outer["data"].value)
+    assert inner == [1, {"enabled": True}]
+
+Both calls to :func:`dumps` create independent encoders. Encoding options and custom type
+registries for the embedded value must therefore be supplied to the inner call too, if needed.
+Shared-value and string references cannot refer across the byte-string boundary. Likewise,
+decoding options for the embedded value belong on the inner :func:`loads` call.
+
+If the application always wants to decode these payloads, it can register a callback for tag 24
+with ``semantic_decoders`` and call :func:`loads` on the supplied byte string. In contrast, the
+``cbor2`` diagnostic command already unwraps tag 24 for JSON display; that behavior does not
+change the library's default lazy handling.
+
+Tag 24 describes a single item. Tag 63 describes an embedded CBOR sequence, which requires
+iterating over the enclosed items rather than using a single :func:`loads` call.
+
 Value sharing with custom types
 -------------------------------
 
