@@ -196,6 +196,73 @@ class name and a dictionary of attribute values::
     # prints b'\xd9\xc3P\x82n__main__.Point\xa2ax\x04ay\x05'
     print(cbor2.dumps(Point(4, 5), default=default_encoder))
 
+Nested custom types
+-------------------
+
+Register each custom type in ``encoders`` and each tag in ``semantic_decoders``. The same
+registries apply throughout the object graph: child values are encoded recursively, and child
+tags are decoded before their containing tag's callback runs.
+
+This also works for subclasses of natively supported types such as :class:`tuple`. Use an
+exact-type encoder for these classes, since ``default`` is only called for types the encoder
+cannot already handle. Inside the encoder callback, convert the outer container to a plain
+tuple so it does not call its own callback again; leave the child objects intact so their
+registered encoders can run.
+
+Here is a complete example with a vector containing intervals. The tag numbers are arbitrary
+examples; communicating applications must agree on their meaning.
+
+.. code-block:: python
+    :name: nested-custom-tags
+
+    import cbor2
+
+    class Interval(tuple):
+        def __new__(cls, lower, upper):
+            return super().__new__(cls, (lower, upper))
+
+    class Vector(tuple):
+        def __new__(cls, x, y, z):
+            return super().__new__(cls, (x, y, z))
+
+    def encode_interval(encoder, value):
+        encoder.encode_semantic(1401, tuple(value))
+
+    def encode_vector(encoder, value):
+        encoder.encode_semantic(1402, tuple(value))
+
+    def decode_interval(value, immutable):
+        return Interval(*value)
+
+    def decode_vector(value, immutable):
+        # Nested interval tags have already been converted to Interval instances.
+        return Vector(*value)
+
+    encoders = {Interval: encode_interval, Vector: encode_vector}
+    decoders = {1401: decode_interval, 1402: decode_vector}
+
+    original = Vector(Interval(0.1, 2.3), Interval(4.5, 6.7), Interval(8.9, 10.0))
+    payload = cbor2.dumps(original, encoders=encoders)
+    restored = cbor2.loads(payload, semantic_decoders=decoders)
+    assert restored == original
+    assert isinstance(restored, Vector)
+    assert all(isinstance(item, Interval) for item in restored)
+
+    # The same registries also handle either type on its own.
+    payload = cbor2.dumps(Interval(1, 2), encoders=encoders)
+    assert isinstance(cbor2.loads(payload, semantic_decoders=decoders), Interval)
+    payload = cbor2.dumps(Vector(1, 2, 3), encoders=encoders)
+    assert isinstance(cbor2.loads(payload, semantic_decoders=decoders), Vector)
+
+The tuple subclasses above are immutable and hashable when their elements are, so these decoder
+callbacks can also return them when ``immutable`` is true. A callback producing a mutable
+custom object must instead honor the immutable requirement (for example, for a map key).
+
+Alternatively, a single ``tag_hook`` can dispatch on ``tag.tag`` for both tag numbers and return
+unknown tags unchanged. There is no need to decode the child tags manually or to call
+:func:`loads` on them: their callbacks have already run. Unknown tags are preserved as
+:class:`CBORTag` objects by default, rather than rejected.
+
 Value sharing with custom types
 -------------------------------
 
