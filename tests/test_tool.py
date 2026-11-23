@@ -221,12 +221,72 @@ def test_json_invalid(document: bytes, monkeypatch: MonkeyPatch, tmp_path: Path)
 @pytest.mark.parametrize(
     "option", ["--decode", "--pretty", "--sort-keys", "--sequence", "--tag-ignore=24"]
 )
-def test_json_incompatible_options(option: str, monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("input_format", ["json", "python"])
+def test_encoding_incompatible_options(
+    option: str, input_format: str, monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
     output = tmp_path / "output.cbor"
     output.write_bytes(b"existing output")
-    monkeypatch.setattr("sys.argv", ["cbor2", "--format=json", option, "-o", str(output)])
+    monkeypatch.setattr(
+        "sys.argv", ["cbor2", f"--format={input_format}", option, "-o", str(output)]
+    )
     with pytest.raises(SystemExit) as exc:
         cbor2.tool.main()
 
     assert exc.value.code == 2
     assert output.read_bytes() == b"existing output"
+
+
+@pytest.mark.parametrize(
+    "document,expected",
+    [
+        ("(b'abc', True, None)", b"\x83\x43abc\xf5\xf6"),
+        ("{1: 'one', b'x': 2}", b"\xa2\x01\x63one\x41x\x02"),
+        ("{3}", b"\xd9\x01\x02\x81\x03"),
+        ("'caf\u00e9'", b"\x65caf\xc3\xa9"),
+        ("0", b"\x00"),
+        ("False", b"\xf4"),
+    ],
+)
+@pytest.mark.skipif(
+    sys.platform == "emscripten", reason="Subprocesses are unavailable on Emscripten"
+)
+def test_python_stdin(document: str, expected: bytes) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "cbor2.tool", "--format=python"],
+        input=document.encode("utf-8"),
+        capture_output=True,
+        check=True,
+    )
+    assert result.stdout == expected
+    assert result.stderr == b""
+
+
+def test_python_files_and_stdin(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    first = tmp_path / "first.txt"
+    output = tmp_path / "output.cbor"
+    first.write_text("{'a': 10}", encoding="utf-8")
+    stdin = TextIOWrapper(BytesIO(b"(13, None)"))
+    monkeypatch.setattr(
+        "sys.argv", ["cbor2", "--format=python", "-o", str(output), str(first), "-"]
+    )
+    monkeypatch.setattr("sys.stdin", stdin)
+    cbor2.tool.main()
+    assert output.read_bytes() == b"\xa1\x61a\x0a\x82\x0d\xf6"
+    assert not stdin.closed
+
+
+@pytest.mark.parametrize(
+    "document",
+    [b"{", b"1 2", b"", b"'\xff'", b"unknown_name", b"print('executed')", b"..."],
+)
+def test_python_invalid(document: bytes, monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    output = tmp_path / "output.cbor"
+    stdin = TextIOWrapper(BytesIO(document))
+    monkeypatch.setattr("sys.argv", ["cbor2", "--format=python", "-o", str(output)])
+    monkeypatch.setattr("sys.stdin", stdin)
+    with pytest.raises(SystemExit, match="^-: "):
+        cbor2.tool.main()
+
+    assert output.read_bytes() == b""
+    assert not stdin.closed

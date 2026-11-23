@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Added ``--format=python`` to encode Python literal files or standard input as binary CBOR
+  (`#103 <https://github.com/agronholm/cbor2/issues/103>`_; PR by @Aschenbath)
+
 **6.3.0** (2026-11-13)
 
 - Added the ``--format=json`` CLI option to encode JSON files or standard input as binary CBOR
