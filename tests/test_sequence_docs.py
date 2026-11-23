@@ -1,5 +1,6 @@
+import asyncio
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from io import BufferedIOBase, BufferedReader, BytesIO, UnsupportedOperation
 from pathlib import Path
 from textwrap import dedent
@@ -85,3 +86,52 @@ def test_sequence_memory_example(capsys: pytest.CaptureFixture[str]) -> None:
     run_example("sequence-reader", namespace)
     run_example("sequence-memory", namespace)
     assert capsys.readouterr().out == "[1, 'hello', None]\n"
+
+
+def read_async_example(payload: bytes, chunk_size: int) -> list[object]:
+    namespace: dict[str, object] = {}
+    run_example("async-sequence-reader", namespace)
+    decode_async_sequence = cast(
+        Callable[[asyncio.StreamReader], AsyncIterator[object]],
+        namespace["decode_async_sequence"],
+    )
+
+    async def read() -> list[object]:
+        reader = asyncio.StreamReader()
+
+        async def feed() -> None:
+            for offset in range(0, len(payload), chunk_size):
+                reader.feed_data(payload[offset : offset + chunk_size])
+                await asyncio.sleep(0)
+            reader.feed_eof()
+
+        feeder = asyncio.create_task(feed())
+        try:
+            return [value async for value in decode_async_sequence(reader)]
+        finally:
+            await feeder
+
+    return asyncio.run(read())
+
+
+@pytest.mark.parametrize("chunk_size", [1, 7, 65536])
+@pytest.mark.parametrize(
+    "values",
+    [[], [None, False, 0], [1, {"text": "caf\u00e9"}, [2, 3]], [b"x" * 300, "tail"]],
+    ids=["empty", "falsey", "nested", "large"],
+)
+def test_async_sequence_recipe(chunk_size: int, values: list[object]) -> None:
+    assert read_async_example(b"".join(dumps(value) for value in values), chunk_size) == values
+
+
+@pytest.mark.parametrize("chunk_size", [1, 65536])
+@pytest.mark.parametrize(
+    "tail,error",
+    [(b"\x62a", CBORDecodeEOF), (b"\x1c", CBORDecodeError)],
+    ids=["truncated", "malformed"],
+)
+def test_async_sequence_recipe_rejects_corrupt_tail(
+    chunk_size: int, tail: bytes, error: type[Exception]
+) -> None:
+    with pytest.raises(error):
+        read_async_example(dumps(False) + tail, chunk_size)
