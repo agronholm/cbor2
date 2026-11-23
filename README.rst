@@ -38,7 +38,7 @@ Features
 * Command-line diagnostic tool (``python -m cbor2.tool`` or just ``cbor2``)
 
   * Can convert a CBOR file or stream to JSON (lossy conversion, for diagnostics only)
-  * Can convert a JSON to binary CBOR (with ``--format=json``)
+  * Can convert JSON or Python literals to binary CBOR (with ``--format=json`` or ``--format=python``)
 * Thorough test suite (Tested on big- and little-endian architectures)
 
 .. _CBOR tags: https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
@@ -128,7 +128,20 @@ newlines. JSON is read with Python's ``json`` module, then encoded using the nor
 encoded as strings; this does not reverse the lossy diagnostic conversion.
 
 The ``--decode``, ``--pretty``, ``--sort-keys``, ``--sequence`` and ``--tag-ignore``
-options apply only to CBOR input and cannot be combined with ``--format=json``.
+options apply only to CBOR input and cannot be combined with ``--format=json`` or
+``--format=python``.
+
+Python literals can also be encoded, including bytes, tuples, sets, and non-string map keys::
+
+    $ cbor2 --format=python -o output.cbor input.txt
+    $ echo "(b'abc', True, None)" | python -m cbor2.tool --format=python > output.cbor
+
+Each UTF-8 input file (or standard input) must contain one complete Python literal.
+Multiple input files produce a concatenated CBOR sequence, just as with JSON input.
+The tool uses ``ast.literal_eval``, so names, function calls, and arbitrary Python code are
+not evaluated. This parser is intended for small diagnostic inputs: deeply nested or very
+large literals can still exhaust memory or the interpreter stack. A literal must also be a
+type supported by the CBOR encoder.
 
 .. _jq: https://stedolan.github.io/jq/
 

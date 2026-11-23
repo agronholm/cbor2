@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 import decimal
 import fractions
@@ -31,7 +32,7 @@ from . import (
 )
 
 if sys.hexversion < 51314855:
-    from ._cbor2 import frozendict
+    from . import frozendict
 
 if TYPE_CHECKING:
     from . import ObjectHook, TagHook
@@ -137,7 +138,7 @@ def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict
     return rval
 
 
-def _encode_json(infiles: list[str], outfile: str) -> None:
+def _encode_text(infiles: list[str], outfile: str, input_format: str) -> None:
     with open(1 if outfile == "-" else outfile, "wb", closefd=outfile != "-") as outfp:
         for path in infiles:
             with ExitStack() as stack:
@@ -147,16 +148,18 @@ def _encode_json(infiles: list[str], outfile: str) -> None:
                     infile = stack.enter_context(open(path, "rb"))
 
                 try:
-                    dump(json.load(infile), outfp)
-                except (ValueError, CBOREncodeError) as exc:
+                    if input_format == "python":
+                        value = ast.literal_eval(infile.read().decode("utf-8"))
+                    else:
+                        value = json.load(infile)
+                    dump(value, outfp)
+                except (ValueError, SyntaxError, CBOREncodeError) as exc:
                     raise SystemExit(f"{path}: {exc}") from None
 
 
 def main() -> None:
     prog = "python -m cbor2.tool"
-    description = (
-        "A simple command line interface for cbor2 module to convert between CBOR and JSON."
-    )
+    description = "Convert CBOR to diagnostic JSON, or JSON and Python literals to CBOR."
     parser = argparse.ArgumentParser(prog=prog, description=description)
     parser.add_argument("-o", "--outfile", type=str, help="output file", default="-")
     parser.add_argument(
@@ -167,9 +170,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--format",
-        choices=("cbor", "json"),
+        choices=("cbor", "json", "python"),
         default="cbor",
-        help="input format: cbor produces diagnostic JSON; json produces binary CBOR",
+        help="input format: cbor produces diagnostic JSON; json/python produce binary CBOR",
     )
     parser.add_argument(
         "-k",
@@ -208,7 +211,7 @@ def main() -> None:
     )
     options = parser.parse_args()
 
-    if options.format == "json":
+    if options.format in ("json", "python"):
         if (
             options.decode
             or options.pretty
@@ -217,11 +220,11 @@ def main() -> None:
             or options.tag_ignore
         ):
             parser.error(
-                "--format=json cannot be combined with --decode, --pretty, "
+                f"--format={options.format} cannot be combined with --decode, --pretty, "
                 "--sort-keys, --sequence or --tag-ignore"
             )
 
-        _encode_json(options.infiles, options.outfile)
+        _encode_text(options.infiles, options.outfile, options.format)
         return
 
     if options.outfile == "-":
