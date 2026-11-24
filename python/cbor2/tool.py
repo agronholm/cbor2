@@ -126,6 +126,11 @@ def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict
             k = f"cbor_simple:{k.value:d}"
         elif isinstance(k, (frozendict, frozenset, tuple)):
             k = str(k)
+        elif k is None or isinstance(k, (int, float)):
+            k = json.dumps(k)
+
+        if k in rval:
+            raise ValueError("Cannot convert map keys with the same JSON representation")
 
         if isinstance(v, dict):
             rval[k] = key_to_str(v, dict_ids)
