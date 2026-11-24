@@ -152,6 +152,26 @@ def _encode_json(infiles: list[str], outfile: str) -> None:
                     raise SystemExit(f"{path}: {exc}") from None
 
 
+def _parse_tag_list(value: str) -> set[int]:
+    tags = set()
+    for entry in value.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+
+        try:
+            tag = int(entry)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"invalid CBOR tag number: {entry!r}") from None
+
+        if not 0 <= tag < 2**64:
+            raise argparse.ArgumentTypeError(f"CBOR tag number out of range: {entry!r}")
+
+        tags.add(tag)
+
+    return tags
+
+
 def main() -> None:
     prog = "python -m cbor2.tool"
     description = (
@@ -202,8 +222,8 @@ def main() -> None:
     parser.add_argument(
         "-i",
         "--tag-ignore",
-        type=str,
-        default="",
+        type=_parse_tag_list,
+        default=set(),
         help="Comma separated list of tags to ignore and only return the value",
     )
     options = parser.parse_args()
@@ -231,9 +251,7 @@ def main() -> None:
         outfile = options.outfile
         closefd = True
 
-    ignore_s = options.tag_ignore.split(",")
-    droptags = {int(n) for n in ignore_s if (len(n) and n[0].isdigit())}
-    my_hook = partial(tag_hook, ignore_tags=droptags)
+    my_hook = partial(tag_hook, ignore_tags=options.tag_ignore)
 
     with open(
         outfile, mode="w", encoding="utf-8", errors="backslashreplace", closefd=closefd
