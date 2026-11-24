@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeAlias, TypeVar
 
 from . import (
     CBORDecodeEOF,
+    CBORDecodeError,
     CBORDecoder,
     CBOREncodeError,
     CBORSimpleValue,
@@ -264,7 +265,7 @@ def main() -> None:
                             ensure_ascii=False,
                         )
                         outfp.write("\n")
-                except (ValueError, EOFError) as e:  # pragma: no cover
+                except (CBORDecodeError, ValueError, EOFError) as e:  # pragma: no cover
                     raise SystemExit(e)
 
 
