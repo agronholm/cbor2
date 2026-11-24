@@ -64,7 +64,7 @@ def tag_hook(tag: CBORTag, immutable: bool, ignore_tags: Collection[int] = ()) -
         return tag.value
 
     if tag.tag == 24:
-        return loads(tag.value)
+        return loads(tag.value, tag_hook=partial(tag_hook, ignore_tags=ignore_tags))
     elif immutable:
         return f"CBORtag:{tag.tag}:{tag.value}"
 
