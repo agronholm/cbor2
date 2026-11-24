@@ -12,14 +12,13 @@ import json
 import re
 import sys
 import uuid
-from collections.abc import Callable, Collection, Iterable, Iterator
+from collections.abc import Callable, Collection, Generator, Iterable
 from contextlib import ExitStack
 from datetime import date, datetime
 from functools import partial
-from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal, TypeAlias, TypeVar, cast
 
 from . import (
-    CBORDecodeEOF,
     CBORDecoder,
     CBOREncodeError,
     CBORSimpleValue,
@@ -86,13 +85,25 @@ def iterdecode(
     tag_hook: TagHook | None = None,
     object_hook: ObjectHook | None = None,
     str_errors: Literal["strict", "error", "replace"] = "strict",
-) -> Iterator[Any]:
-    decoder = CBORDecoder(f, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors)
+) -> Generator[Any, None, None]:
+    buffered = (
+        f
+        if isinstance(f, io.BufferedReader)
+        else io.BufferedReader(cast(io.RawIOBase | io.BufferedIOBase, f))
+    )
     try:
-        while True:
+        decoder = CBORDecoder(
+            buffered, tag_hook=tag_hook, object_hook=object_hook, str_errors=str_errors
+        )
+        while buffered.peek(1):
             yield decoder.decode()
-    except CBORDecodeEOF:
-        return
+    finally:
+        if buffered is not f:
+            try:
+                if buffered.seekable():
+                    f.seek(buffered.tell())
+            finally:
+                buffered.detach()
 
 
 def key_to_str(d: T, dict_ids: set[int] | None = None) -> str | list[Any] | dict[str, Any] | T:
