@@ -5,6 +5,11 @@ Version history
 
 This library adheres to `Semantic Versioning 2.0 <http://semver.org/>`_.
 
+**UNRELEASED**
+
+- Fixed the decoder accepting a non-integer numerator or denominator in a rational number (tag 30)
+  (`#379 <https://github.com/agronholm/cbor2/pull/379>`_; PR by @amirulian)
+
 **6.3.0** (2026-11-13)
 
 - Added the ``--format=json`` CLI option to encode JSON files or standard input as binary CBOR

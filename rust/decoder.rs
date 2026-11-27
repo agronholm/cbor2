@@ -1222,7 +1222,12 @@ impl CBORDecoder {
         // Semantic tag 30
         let py = value.py();
         let tuple = require_tuple(value, 2)?;
-        FRACTION_TYPE.get(py)?.call1(tuple).map(CompleteFrame)
+        let numerator = require_integer(tuple.get_item(0)?, "numerator")?;
+        let denominator = require_integer(tuple.get_item(1)?, "denominator")?;
+        FRACTION_TYPE
+            .get(py)?
+            .call1((numerator, denominator))
+            .map(CompleteFrame)
     }
 
     fn decode_regexp(value: Bound<PyAny>, _immutable: bool) -> PyResult<DecoderResult> {

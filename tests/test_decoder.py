@@ -1093,6 +1093,21 @@ def test_rational_zero_denominator() -> None:
     assert isinstance(exc.value.__cause__, ZeroDivisionError)
 
 
+@pytest.mark.parametrize(
+    "payload, field",
+    [
+        pytest.param("d81e82f502", "numerator", id="numerator_bool"),
+        pytest.param("d81e8201f5", "denominator", id="denominator_bool"),
+    ],
+)
+def test_rational_payload_non_integer(payload: str, field: str) -> None:
+    with pytest.raises(
+        CBORDecodeError,
+        match=f"error decoding rational: {field} must be an integer, not <class ",
+    ):
+        loads(unhexlify(payload))
+
+
 def test_regex() -> None:
     decoded = loads(unhexlify("d8236d68656c6c6f2028776f726c6429"))
     expr = re.compile("hello (world)")
